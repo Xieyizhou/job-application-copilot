@@ -1,0 +1,31 @@
+default_fetch_limit_per_source: 20
+max_fetch_limit_per_source: 20
+
+default_recommendation_limit: 12
+max_recommendation_limit: 30
+min_recommendation_limit: 5
+
+preferred_sources:
+  - adzuna
+  - jooble
+
+preferred_queries:
+  - machine learning intern
+  - data analyst entry level
+  - software engineer graduate
+
+preferred_locations:
+  - Singapore
+  - London
+  - Remote
+
+regions:
+  singapore:
+    adzuna_country: sg
+    jooble_location: Singapore
+  uk:
+    adzuna_country: gb
+    jooble_location: United Kingdom
+  london:
+    adzuna_country: gb
+    jooble_location: London

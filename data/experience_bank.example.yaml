@@ -1,0 +1,45 @@
+profile:
+  name: Your Name
+  positioning: Short positioning statement for your target roles.
+  source_of_truth: data/resume/resume_source.md
+  use_fixed_resume_manually: true
+  do_not_invent:
+    - experience
+    - skills
+    - metrics
+    - tools
+    - visa status
+    - work authorization
+    - degree level
+
+experiences:
+  - id: example_project
+    name: Example Machine Learning Project
+    category: project
+    tags:
+      - machine_learning
+      - python
+      - model_evaluation
+    evidence:
+      - Built a small machine learning pipeline using factual details from the resume source.
+      - Evaluated model performance with appropriate metrics.
+    safe_phrases:
+      - My example project gave me hands-on experience with Python, model evaluation, and careful interpretation of results.
+    avoid_claims:
+      - Do not claim production deployment unless it is in the resume source.
+
+theme_keywords:
+  machine_learning:
+    - machine learning
+    - model
+    - training
+    - prediction
+  python_data:
+    - python
+    - pandas
+    - numpy
+    - data analysis
+  communication:
+    - communication
+    - collaboration
+    - documentation

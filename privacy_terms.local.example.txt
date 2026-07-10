@@ -1,0 +1,15 @@
+# Optional local privacy audit terms
+#
+# Copy this file to privacy_terms.local.txt and replace these placeholders with
+# private values that should never appear in the public repository:
+#
+# cp privacy_terms.local.example.txt privacy_terms.local.txt
+#
+# Keep one term per line. Empty lines and lines starting with # are ignored.
+
+your full name
+your email address
+your LinkedIn username
+your phone number
+private employer names
+local machine username
