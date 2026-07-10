@@ -2,6 +2,8 @@
 
 **Privacy-first local workflow tool for job discovery and application preparation**
 
+[![CI](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml)
+
 Job Application Copilot is a Streamlit application for collecting job listings,
 reviewing candidate-role fit, preparing tailored documents, and tracking manual
 applications. It uses deterministic keyword matching and rule-based templates;
