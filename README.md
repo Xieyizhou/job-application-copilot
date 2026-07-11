@@ -3,6 +3,7 @@
 **Privacy-first, local-first workflow for job discovery and application preparation**
 
 [![CI](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Job Application Copilot is a Streamlit application for collecting job listings,
 reviewing candidate-role fit, preparing tailored application documents, and
@@ -373,6 +374,8 @@ available in:
 
 [`docs/USAGE.md`](docs/USAGE.md)
 
+...
+
 ## License
 
-Add a license before redistributing or accepting external contributions.
+This project is licensed under the [MIT License](LICENSE).
