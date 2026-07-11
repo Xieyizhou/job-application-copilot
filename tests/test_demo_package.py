@@ -7,6 +7,7 @@ import sys
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from docx import Document
 from streamlit.testing.v1 import AppTest
@@ -107,6 +108,72 @@ class DemoPackageTests(unittest.TestCase):
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)
+
+    @patch.object(dashboard, "demo_mode_enabled", return_value=True)
+    def test_demo_review_filter_and_sort_options_are_total(self, _demo_mode: object) -> None:
+        jobs = dashboard.load_screened_jobs()
+        self.assertTrue(jobs)
+        tracker_rows: list[dict[str, object]] = []
+
+        for inbox_view in [
+            "Recommended",
+            "Needs Review",
+            "Package Ready",
+            "Not Tracked",
+            "Ignored",
+            "All Jobs",
+        ]:
+            matches = [
+                job
+                for job in jobs
+                if dashboard.review_inbox_view_matches(
+                    job,
+                    inbox_view,
+                    dashboard.tracker_status_for_job(job, tracker_rows),
+                    dashboard.package_status_for_job(job, tracker_rows),
+                )
+            ]
+            self.assertIsInstance(matches, list)
+
+        for sort_by in [
+            "Score high to low",
+            "Newest first",
+            "Recommendation",
+            "Company A-Z",
+            "Package status",
+            "Tracker status",
+        ]:
+            self.assertEqual(len(dashboard.sorted_review_jobs(jobs, sort_by)), len(jobs))
+
+        region_options = dashboard.build_region_options(jobs)
+        for option in region_options.values():
+            matches = [job for job in jobs if dashboard.job_matches_region_option(job, option)]
+            self.assertIsInstance(matches, list)
+
+        sources = dashboard.dynamic_source_options(jobs)
+        recommendations = ["all", "Apply", "Maybe Apply", "Skip or Low Priority"]
+        confidences = ["all", *dashboard.CONFIDENCE_RANK]
+        for source in sources:
+            for recommendation in recommendations:
+                for confidence in confidences:
+                    matches = [
+                        job
+                        for job in jobs
+                        if (source == "all" or dashboard.source_display_name(str(job["source"])) == source)
+                        and (recommendation == "all" or job["recommendation"] == recommendation)
+                        and (confidence == "all" or job["confidence"] == confidence)
+                    ]
+                    self.assertIsInstance(matches, list)
+
+        first_job, second_job = jobs[:2]
+        self.assertIs(
+            dashboard.resolve_review_job_selection(jobs, "stale label", "data/demo/jobs/missing.md"),
+            first_job,
+        )
+        self.assertIs(
+            dashboard.resolve_review_job_selection(jobs, second_job["label"], str(first_job["path"])),
+            second_job,
+        )
 
     def test_missing_demo_docx_is_unavailable_without_generation(self) -> None:
         self.assertEqual(

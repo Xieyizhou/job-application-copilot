@@ -16,11 +16,11 @@ fi
 # Activate virtual environment
 source .venv/bin/activate
 
-# Check dashboard file
-if [ ! -f "src/dashboard.py" ]; then
-  echo "Error: src/dashboard.py not found."
+# Check dashboard launcher
+if [ ! -f "run_dashboard.py" ]; then
+  echo "Error: run_dashboard.py not found."
   exit 1
 fi
 
 # Start Streamlit dashboard
-python -m streamlit run src/dashboard.py
+python run_dashboard.py

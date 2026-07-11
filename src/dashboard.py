@@ -596,7 +596,7 @@ def load_recent_region_keys() -> list[str]:
 
 def save_recent_region_key(region_key: str) -> None:
     """Persist a small MRU list for the compact default region dropdown."""
-    if not region_key or region_key == "all":
+    if demo_mode_enabled() or not region_key or region_key == "all":
         return
     UI_STATE_DIR.mkdir(parents=True, exist_ok=True)
     recent_keys = [key for key in load_recent_region_keys() if key != region_key]
@@ -3011,6 +3011,21 @@ def set_review_job_selection(job: dict[str, Any], focus: str = "Overview") -> No
     st.session_state["selected_review_tab"] = focus
 
 
+def resolve_review_job_selection(
+    shortlist: list[dict[str, Any]],
+    selected_label: object,
+    selected_path: object,
+) -> dict[str, Any]:
+    """Return a visible selected job, falling back safely from stale state."""
+    jobs_by_label = {job["label"]: job for job in shortlist}
+    jobs_by_path = {str(job["path"]): job for job in shortlist}
+    if selected_label in jobs_by_label:
+        return jobs_by_label[selected_label]
+    if selected_path in jobs_by_path:
+        return jobs_by_path[selected_path]
+    return shortlist[0]
+
+
 def render_review_action_buttons(job: dict[str, Any], tracker_rows: list[dict[str, Any]], key_prefix: str) -> None:
     """Render selected-job actions in the detail panel."""
     action_package, action_fit, action_track = st.columns([0.44, 0.28, 0.28])
@@ -3175,6 +3190,13 @@ def job_descriptions_tab() -> None:
         st.session_state["review_source_filter"] = "all"
     if st.session_state.get("review_recommendation_filter", "all") not in ["all", "Apply", "Maybe Apply", "Skip or Low Priority"]:
         st.session_state["review_recommendation_filter"] = "all"
+    st.session_state.setdefault("review_search_text", "")
+    st.session_state.setdefault("region_search_query", "")
+    st.session_state.setdefault("job_tab_shortlist_limit", DEFAULT_RECOMMENDATION_LIMIT)
+    st.session_state.setdefault("review_minimum_score", 50)
+    st.session_state.setdefault("review_hide_hard_red_flags", True)
+    st.session_state.setdefault("review_hide_degree_required", True)
+    st.session_state.setdefault("review_hide_current_student_only", True)
 
     inbox_view = st.segmented_control(
         "Job inbox view",
@@ -3197,7 +3219,6 @@ def job_descriptions_tab() -> None:
             "Number of recommendations",
             min_value=MIN_RECOMMENDATION_LIMIT,
             max_value=MAX_RECOMMENDATION_LIMIT,
-            value=st.session_state.get("recommendation_limit", DEFAULT_RECOMMENDATION_LIMIT),
             key="job_tab_shortlist_limit",
             help="How many ranked jobs to display after filtering and duplicate removal.",
         )
@@ -3207,7 +3228,6 @@ def job_descriptions_tab() -> None:
         with filter_row1_left:
             region_search_query = st.text_input(
                 "Search region",
-                value=st.session_state.get("region_search_query", ""),
                 placeholder="Beijing, China, Remote",
                 key="region_search_query",
             )
@@ -3246,26 +3266,28 @@ def job_descriptions_tab() -> None:
                 "Minimum score",
                 min_value=0,
                 max_value=100,
-                value=50,
                 key="review_minimum_score",
             )
         with filter_row3_right:
             st.caption(f"Showing up to {recommendation_limit} recommendations.")
-            st.button("Clear filters", on_click=clear_review_filters, width="stretch")
+            st.button(
+                "Clear filters",
+                key="review_clear_filters",
+                on_click=clear_review_filters,
+                width="stretch",
+            )
 
         flag_left, flag_middle, flag_right = st.columns(3)
         with flag_left:
-            hide_hard_red_flags = st.checkbox("Hide hard red flags", value=True, key="review_hide_hard_red_flags")
+            hide_hard_red_flags = st.checkbox("Hide hard red flags", key="review_hide_hard_red_flags")
         with flag_middle:
             hide_degree_required = st.checkbox(
                 "Hide PhD / Master's required roles",
-                value=True,
                 key="review_hide_degree_required",
             )
         with flag_right:
             hide_current_student_only = st.checkbox(
                 "Hide current-student-only internships",
-                value=True,
                 key="review_hide_current_student_only",
             )
 
@@ -3331,7 +3353,12 @@ def job_descriptions_tab() -> None:
         st.info("No jobs match the current filters.")
         empty_left, empty_middle, empty_right = st.columns(3)
         with empty_left:
-            st.button("Clear filters", on_click=clear_review_filters, width="stretch")
+            st.button(
+                "Clear filters",
+                key="review_empty_clear_filters",
+                on_click=clear_review_filters,
+                width="stretch",
+            )
         with empty_middle:
             st.button("Show All Jobs", on_click=show_all_review_jobs, width="stretch")
         with empty_right:
@@ -3347,19 +3374,12 @@ def job_descriptions_tab() -> None:
         with hint_right:
             st.button("Show All Jobs", on_click=show_all_review_jobs, width="stretch")
 
-    shortlist_labels = [job["label"] for job in shortlist]
     shortlist_paths = [str(job["path"]) for job in shortlist]
-    jobs_by_label = {job["label"]: job for job in shortlist}
-    jobs_by_path = {str(job["path"]): job for job in shortlist}
     selected_label_state = st.session_state.get("selected_review_job_label")
     selected_path_state = st.session_state.get("selected_review_job_path", shortlist_paths[0])
-    if selected_label_state in jobs_by_label:
-        selected_job = jobs_by_label[selected_label_state]
-    elif selected_path_state in jobs_by_path:
-        selected_job = jobs_by_path[selected_path_state]
-    else:
+    selected_job = resolve_review_job_selection(shortlist, selected_label_state, selected_path_state)
+    if str(selected_job["path"]) != selected_path_state and selected_job["label"] != selected_label_state:
         set_review_job_selection(shortlist[0], st.session_state.get("selected_review_tab", "Overview"))
-        selected_job = shortlist[0]
     st.session_state["selected_review_job_path"] = str(selected_job["path"])
     st.session_state["selected_review_job_label"] = selected_job["label"]
     selected_path = selected_job["path"]

@@ -2,12 +2,19 @@
 
 **Privacy-first local workflow tool for job discovery and application preparation**
 
-[![CI](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml)
+[![CI](https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml/badge.svg)](/https://github.com/Xieyizhou/job-application-copilot/actions/workflows/ci.yml)
 
 Job Application Copilot is a Streamlit application for collecting job listings,
 reviewing candidate-role fit, preparing tailored documents, and tracking manual
 applications. It uses deterministic keyword matching and rule-based templates;
 it does not submit applications or automate job platforms.
+
+## Quick Demo
+
+![Demo walkthrough](docs/assets/demo_walkthrough.gif)
+
+This walkthrough uses only the sanitized Demo workspace: Dashboard → Review
+Jobs → open a fictional job → Fit Analysis → Application Package.
 
 ## Highlights
 
@@ -59,11 +66,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-streamlit run src/dashboard.py
+python run_dashboard.py
 ```
 
 The app opens in Demo workspace and does not require API keys. It has been
 tested with Python 3.11.9 on macOS ARM and Python 3.12.13 on Linux.
+
+If local rendering is unstable, use `python run_dashboard.py` rather than
+invoking Streamlit directly. The launcher selects PyArrow's system memory pool
+before Streamlit starts for stable local rendering.
 
 ## Demo and Personal Workspaces
 
