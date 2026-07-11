@@ -7,6 +7,7 @@ applications, scrape websites, or expose API credentials.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import html
 import io
 import json
@@ -35,6 +36,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 12
 MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
+DASHBOARD_SCORING_VERSION = "canonical-v1"
 INTERNAL_PACKAGE_FILES = {
     "analysis.md",
     "cover_letter.md",
@@ -101,9 +103,12 @@ HARD_RED_FLAG_PATTERNS = {
     "5+ years required": ["5+ years", "5 years of experience", "five years of experience"],
 }
 RECOMMENDATION_RANK = {
-    "Apply": 3,
-    "Maybe Apply": 2,
+    "Apply": 5,
+    "Apply / Maybe Apply": 4,
+    "Maybe Apply": 3,
+    "Manual Review": 2,
     "Skip or Low Priority": 1,
+    "Skip / Not Eligible": 0,
 }
 CONFIDENCE_RANK = {
     "High": 3,
@@ -705,6 +710,47 @@ INTERNAL_TITLE_FALLBACKS = {
     "sample_package": "Sample Application Package",
 }
 
+PLACEHOLDER_JOB_TITLES = {
+    "sample job",
+    "test job",
+    "demo job",
+    "unknown role",
+    "untitled job",
+    "not provided",
+    "n/a",
+}
+
+NON_ROLE_HEADINGS = {
+    "job description",
+    "description",
+    "about the role",
+    "requirements",
+    "qualifications",
+    "company",
+    "location",
+}
+
+ROLE_HEADING_TERMS = {
+    "administrator",
+    "analyst",
+    "architect",
+    "associate",
+    "consultant",
+    "coordinator",
+    "developer",
+    "director",
+    "engineer",
+    "fellow",
+    "intern",
+    "lead",
+    "manager",
+    "officer",
+    "owner",
+    "researcher",
+    "scientist",
+    "specialist",
+}
+
 
 def looks_like_internal_slug(value: str) -> bool:
     """Return True for internal file/package slugs that should not be user-facing."""
@@ -714,7 +760,9 @@ def looks_like_internal_slug(value: str) -> bool:
     lower_cleaned = cleaned.lower()
     if lower_cleaned in INTERNAL_TITLE_FALLBACKS:
         return True
-    if "/" in cleaned or "\\" in cleaned or "." in cleaned:
+    if "\\" in cleaned or cleaned.lower().endswith((".md", ".json", ".txt")):
+        return True
+    if cleaned.startswith("/") or cleaned.count("/") > 1:
         return True
     if "_" not in cleaned:
         return False
@@ -724,30 +772,67 @@ def looks_like_internal_slug(value: str) -> bool:
     return bool(set(lower_cleaned.split("_")) & internal_tokens)
 
 
-def display_title_from_value(value: Any, fallback: str = "Sample Job") -> str:
+def is_placeholder_job_title(value: Any) -> bool:
+    """Return True only for exact normalized placeholder job titles."""
+    normalized = " ".join(str(value or "").split()).casefold()
+    return normalized in PLACEHOLDER_JOB_TITLES
+
+
+def display_title_from_value(value: Any, fallback: str = "Missing job title") -> str:
     """Convert a stored title/role value into a safe user-facing label."""
     cleaned = " ".join(str(value or "").split()).strip()
-    if not cleaned:
+    if not cleaned or is_placeholder_job_title(cleaned):
         return fallback
     if looks_like_internal_slug(cleaned):
         return INTERNAL_TITLE_FALLBACKS.get(cleaned.lower(), fallback)
     return cleaned
 
 
-def get_job_display_title(job: dict[str, Any], fallback: str = "Sample Job") -> str:
-    """Prefer user-facing job title fields over internal filenames or slugs."""
+def first_role_heading(markdown_text: str, company: str = "") -> str:
+    """Return the first clear role-like H1 heading from saved Markdown."""
+    normalized_company = " ".join(str(company or "").split()).casefold()
+    for raw_line in markdown_text.splitlines():
+        match = re.match(r"^#\s+(.+?)\s*$", raw_line.strip())
+        if not match:
+            continue
+        heading = " ".join(match.group(1).split()).strip()
+        normalized = heading.casefold().rstrip(":")
+        heading_words = set(re.findall(r"[a-z]+", normalized))
+        if (
+            not heading
+            or is_placeholder_job_title(heading)
+            or normalized in NON_ROLE_HEADINGS
+            or normalized.startswith(("company:", "location:", "source:", "role:"))
+            or (normalized_company and normalized == normalized_company)
+            or looks_like_internal_slug(heading)
+            or not heading_words.intersection(ROLE_HEADING_TERMS)
+        ):
+            return ""
+        return heading
+    return ""
+
+
+def resolve_canonical_job_title(job: dict[str, Any], fallback: str = "Missing job title") -> str:
+    """Resolve one canonical title without letting placeholders block Markdown."""
     for key in ("display_role", "title", "role"):
         candidate = display_title_from_value(job.get(key), fallback="")
-        if candidate and not looks_like_internal_slug(candidate):
+        if candidate and not is_placeholder_job_title(candidate) and not looks_like_internal_slug(candidate):
             return candidate
     preview = str(job.get("preview", "") or job.get("job_description", "") or "")
     if preview:
         parsed_role = read_markdown_field(preview, "Role", "")
         candidate = display_title_from_value(parsed_role, fallback="")
-        if candidate:
+        if candidate and not is_placeholder_job_title(candidate) and not looks_like_internal_slug(candidate):
             return candidate
-    raw_role = str(job.get("role", "") or job.get("title", "") or "").strip().lower()
-    return INTERNAL_TITLE_FALLBACKS.get(raw_role, fallback)
+        heading = first_role_heading(preview, str(job.get("company", "")))
+        if heading:
+            return heading
+    return fallback
+
+
+def get_job_display_title(job: dict[str, Any], fallback: str = "Missing job title") -> str:
+    """Return the canonical user-facing title for a job."""
+    return resolve_canonical_job_title(job, fallback)
 
 
 def dynamic_source_options(jobs: list[dict[str, Any]]) -> list[str]:
@@ -856,13 +941,208 @@ def asks_for_uk_work_authorization(job_text: str) -> bool:
     return any(phrase in normalized for phrase in phrases)
 
 
+def unavailable_dashboard_analysis(reason: str) -> dict[str, Any]:
+    """Return a safe current-analysis result without promoting a legacy score."""
+    return {
+        "score": None,
+        "recommendation": "Manual Review",
+        "score_breakdown": [],
+        "eligibility": {"status": "manual_review", "reasons": []},
+        "confidence": {
+            "level": "low",
+            "active_requirement_count": 0,
+            "candidate_evidence_count": 0,
+            "reasons": [reason],
+        },
+        "candidate_profile": {"career_level": "unknown", "years_experience": None, "highest_degree": "unknown", "evidence": []},
+        "parsed_job": {"required_skills": [], "preferred_skills": [], "experience_level": []},
+        "matched_skills": [],
+        "partial_matches": [],
+        "missing_skills": [],
+        "main_reason": reason,
+        "main_risk": "Review the full job description manually.",
+        "analysis_available": False,
+    }
+
+
+def analyze_job_for_dashboard(
+    job: dict[str, Any],
+    job_text: str,
+    candidate_text: str | None = None,
+    *,
+    use_cache: bool | None = None,
+) -> dict[str, Any]:
+    """Return the canonical full analysis for one loaded dashboard job."""
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    if use_cache is None:
+        use_cache = get_script_run_ctx(suppress_warning=True) is not None
+    if not job_text.strip():
+        return unavailable_dashboard_analysis("Job description is empty or unreadable.")
+    if candidate_text is None:
+        candidate_path = current_workspace().resume_source_path
+        if candidate_path is None or not candidate_path.is_file():
+            return unavailable_dashboard_analysis("Candidate source is missing or unreadable.")
+        candidate_text = read_text_file(candidate_path)
+    if not candidate_text.strip():
+        return unavailable_dashboard_analysis("Candidate source is missing or empty.")
+
+    workspace = current_workspace() if use_cache else None
+    cache_material = "\0".join(
+        [
+            DASHBOARD_SCORING_VERSION,
+            workspace.mode if workspace else "provided",
+            str(workspace.root) if workspace else "provided",
+            str(job.get("canonical_job_key", "") or job.get("path", "")),
+            hashlib.sha256(job_text.encode("utf-8")).hexdigest(),
+            hashlib.sha256(candidate_text.encode("utf-8")).hexdigest(),
+        ]
+    )
+    cache_key = hashlib.sha256(cache_material.encode("utf-8")).hexdigest()
+    cache = st.session_state.setdefault("dashboard_analysis_cache", {}) if use_cache else {}
+    if cache_key in cache:
+        return dict(cache[cache_key])
+
+    try:
+        analysis = dict(analyze_job_structured(job_text, candidate_text))
+    except (OSError, ValueError, TypeError) as error:
+        return unavailable_dashboard_analysis(f"Current analysis could not run: {error}")
+
+    confidence = dict(analysis.get("confidence", {}))
+    if int(confidence.get("active_requirement_count", 0) or 0) == 0:
+        return unavailable_dashboard_analysis("Structured requirements could not be extracted reliably.")
+    analysis["analysis_available"] = True
+    if use_cache:
+        cache[cache_key] = dict(analysis)
+    return analysis
+
+
+def _append_unique(items: list[str], value: str) -> None:
+    if value and value not in items:
+        items.append(value)
+
+
+def summarize_analysis_requirements(analysis: dict[str, Any]) -> dict[str, Any]:
+    """Group recognized terms by requirement type and match strength."""
+    parsed = dict(analysis.get("parsed_job", {}))
+    required_terms = list(parsed.get("required_skills", [])) + list(parsed.get("experience_level", []))
+    preferred_terms = list(parsed.get("preferred_skills", []))
+    required_set = set(required_terms)
+    preferred_set = set(preferred_terms)
+    summary: dict[str, Any] = {
+        "matched_required": [],
+        "matched_preferred": [],
+        "partial_required": [],
+        "partial_preferred": [],
+        "missing_required": [],
+        "missing_preferred": [],
+        "active_requirement_count": 0,
+        "matched_requirement_count": 0,
+    }
+    active_order: list[str] = []
+    matched_count_terms: list[str] = []
+    for category in list(analysis.get("score_breakdown", [])):
+        matched = set(category.get("matched", []))
+        missing = set(category.get("missing", []))
+        partial_map = {
+            str(value).split(" (", 1)[0]: str(value)
+            for value in category.get("partial", [])
+        }
+        for term in category.get("active_terms", []):
+            term = str(term)
+            _append_unique(active_order, term)
+            requirement_type = "preferred" if term in preferred_set and term not in required_set else "required"
+            if term in matched:
+                _append_unique(summary[f"matched_{requirement_type}"], term)
+                _append_unique(matched_count_terms, term)
+            elif term in partial_map:
+                _append_unique(summary[f"partial_{requirement_type}"], partial_map[term])
+                _append_unique(matched_count_terms, term)
+            elif term in missing:
+                _append_unique(summary[f"missing_{requirement_type}"], term)
+    summary["active_requirement_count"] = len(active_order)
+    summary["matched_requirement_count"] = len(matched_count_terms)
+    return summary
+
+
+def confidence_level(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("level", "low")).lower()
+    return str(value or "low").lower()
+
+
+def eligibility_status(job: dict[str, Any]) -> str:
+    eligibility = job.get("eligibility", {})
+    return str(eligibility.get("status", "manual_review") if isinstance(eligibility, dict) else eligibility).lower()
+
+
+def build_fit_presentation(job: dict[str, Any]) -> dict[str, Any]:
+    """Build one presentation model for cards, summaries, and Fit Analysis."""
+    analysis = dict(job.get("analysis_result", {}) or {})
+    available = bool(analysis.get("analysis_available", job.get("analysis_available", False)))
+    confidence = dict(job.get("confidence", {}) or analysis.get("confidence", {}) or {})
+    level = confidence_level(confidence)
+    score = job.get("score")
+    recommendation = str(job.get("recommendation", "Manual Review"))
+    eligibility = dict(job.get("eligibility", {}) or analysis.get("eligibility", {}) or {})
+    terms = summarize_analysis_requirements(analysis)
+    if not available:
+        legacy_score = job.get("legacy_score")
+        legacy_recommendation = str(job.get("legacy_recommendation", "") or "")
+        role_fit = "Not available"
+        card_status = "Manual Review · Low confidence"
+        if legacy_score is not None:
+            card_status = f"Stored legacy score: {legacy_score}/100"
+            if legacy_recommendation:
+                card_status += f" · {legacy_recommendation}"
+    elif level == "low":
+        role_fit = "Insufficient evidence"
+        card_status = "Insufficient evidence · Manual Review · Low confidence"
+    else:
+        role_fit = f"{int(score)}/100"
+        card_status = f"{int(score)}/100 · {recommendation} · {level.title()} confidence"
+    eligibility_state = str(eligibility.get("status", "manual_review"))
+    reasons = eligibility.get("reasons", [])
+    if eligibility_state != "passed" and isinstance(reasons, list) and reasons:
+        first_reason = reasons[0] if isinstance(reasons[0], dict) else {}
+        reason_label = str(first_reason.get("code", "eligibility review")).replace("_", " ").title()
+        card_status += f" · {reason_label}"
+    return {
+        "analysis_available": available,
+        "role_fit": role_fit,
+        "card_status": card_status,
+        "score": score,
+        "recommendation": recommendation,
+        "eligibility": eligibility,
+        "confidence": confidence,
+        "terms": terms,
+        "coverage_score": score if available else None,
+    }
+
+
+def apply_canonical_analysis(job: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+    """Copy current analyzer values onto an in-memory job record."""
+    updated = dict(job)
+    updated["analysis_result"] = analysis
+    updated["analysis_available"] = bool(analysis.get("analysis_available", False))
+    updated["score"] = analysis.get("score") if updated["analysis_available"] else None
+    updated["recommendation"] = str(analysis.get("recommendation", "Manual Review"))
+    updated["eligibility"] = dict(analysis.get("eligibility", {}))
+    updated["confidence"] = dict(analysis.get("confidence", {}))
+    updated["score_breakdown"] = list(analysis.get("score_breakdown", []))
+    return updated
+
+
 def build_dashboard_job_record(path: Path) -> dict[str, Any]:
     """Build one ranked dashboard row from a saved job Markdown file."""
     job_text = read_text_file(path)
     company_fields = verification_from_markdown(path)
     company = str(company_fields.get("company_normalized") or read_markdown_field(job_text, "Company", "Not provided"))
-    role = read_markdown_field(job_text, "Role", path.stem)
-    display_role = get_job_display_title({"role": role, "preview": job_text})
+    stored_role = read_markdown_field(job_text, "Role", path.stem)
+    role = resolve_canonical_job_title(
+        {"company": company, "role": stored_role, "preview": job_text}
+    )
+    display_role = role
     location = normalize_location(read_markdown_field(job_text, "Location", infer_location_from_path(path)))
     high_level_region = infer_high_level_region(location)
     source = read_markdown_field(job_text, "Source", infer_source_from_path(path))
@@ -874,9 +1154,8 @@ def build_dashboard_job_record(path: Path) -> dict[str, Any]:
     canonical_job_key = read_markdown_field(job_text, "Canonical Job Key", "")
     red_flags = detect_dashboard_red_flags(job_text)
     score_text = read_markdown_field(job_text, "Match Score", "")
-    score = int(score_text) if score_text.isdigit() else score_job_for_dashboard(job_text)
-    recommendation = read_markdown_field(job_text, "Recommendation", "") or recommendation_for_score(score, red_flags)
-    confidence = confidence_for_job(job_text, score)
+    legacy_score = int(score_text) if score_text.isdigit() else None
+    legacy_recommendation = read_markdown_field(job_text, "Recommendation", "")
     warnings = warnings_for_job(job_text)
     hard_red_flag = bool(red_flags)
 
@@ -897,9 +1176,15 @@ def build_dashboard_job_record(path: Path) -> dict[str, Any]:
         "normalized_location": location,
         "high_level_region": high_level_region,
         "source": source.lower(),
-        "score": score,
-        "recommendation": recommendation,
-        "confidence": confidence,
+        "score": None,
+        "recommendation": "Manual Review",
+        "confidence": {"level": "low", "active_requirement_count": 0, "candidate_evidence_count": 0, "reasons": []},
+        "eligibility": {"status": "manual_review", "reasons": []},
+        "score_breakdown": [],
+        "analysis_result": {},
+        "analysis_available": False,
+        "legacy_score": legacy_score,
+        "legacy_recommendation": legacy_recommendation,
         "red_flags": red_flags,
         "warnings": warnings,
         "hard_red_flag": hard_red_flag,
@@ -912,7 +1197,7 @@ def build_dashboard_job_record(path: Path) -> dict[str, Any]:
         "is_manual": "manual_jobs" in path.parts,
         "path": path,
         "preview": job_text[:1200],
-        "label": f"{company} | {display_role} | {location} | {score}/100",
+        "label": f"{company} | {display_role} | {location}",
     }
 
 
@@ -954,8 +1239,8 @@ def dashboard_rank_key(job: dict[str, Any]) -> tuple[int, int, int, int]:
     """Sort by recommendation, score, confidence, then fewer red flags."""
     return (
         RECOMMENDATION_RANK.get(job["recommendation"], 0),
-        int(job["score"]),
-        CONFIDENCE_RANK.get(job["confidence"], 0),
+        int(job.get("score") or 0),
+        CONFIDENCE_RANK.get(confidence_level(job.get("confidence")).title(), 0),
         -len(job["red_flags"]),
     )
 
@@ -973,10 +1258,24 @@ def infer_source_from_path(path: Path) -> str:
 
 
 def load_screened_jobs(search_text: str = "") -> list[dict[str, Any]]:
-    """Load and pre-screen all saved job descriptions."""
+    """Load jobs and attach canonical full-analysis results in memory."""
     _ = search_text
     records = [build_dashboard_job_record(path) for path in list_job_description_files()]
     unique_records = deduplicate_dashboard_jobs(records)
+    candidate_path = current_workspace().resume_source_path
+    candidate_text = read_text_file(candidate_path) if candidate_path and candidate_path.is_file() else ""
+    analyzed_records = []
+    for job in unique_records:
+        job_text = read_text_file(Path(job["path"]))
+        analysis = analyze_job_for_dashboard(job, job_text, candidate_text)
+        analyzed = apply_canonical_analysis(job, analysis)
+        presentation = build_fit_presentation(analyzed)
+        analyzed["label"] = (
+            f"{analyzed['company']} | {get_job_display_title(analyzed)} | "
+            f"{analyzed['location']} | {presentation['role_fit']}"
+        )
+        analyzed_records.append(analyzed)
+    unique_records = analyzed_records
     unique_records.sort(key=dashboard_rank_key, reverse=True)
     return unique_records
 
@@ -1130,20 +1429,30 @@ def count_generated_packages() -> int:
     )
 
 
-def save_job_to_tracker(job: dict[str, Any]) -> tuple[int | None, str]:
-    """Save a reviewed job lead to the local tracker without generating documents."""
-    args = SimpleNamespace(
+def tracker_args_for_job(job: dict[str, Any]) -> SimpleNamespace:
+    """Prepare canonical current-analysis values for a new tracker row."""
+    eligibility = eligibility_status(job).replace("_", " ").title()
+    confidence = confidence_level(job.get("confidence")).title()
+    return SimpleNamespace(
         company=str(job.get("company", "")).strip() or "Unknown company",
-        role=str(job.get("role", "")).strip() or "Unknown role",
+        role=resolve_canonical_job_title(job),
         location=str(job.get("normalized_location", "") or job.get("location", "")).strip(),
         job_url=str(job.get("job_url", "")).strip(),
-        match_score=int(job.get("score", 0) or 0),
-        recommendation=str(job.get("recommendation", "")).strip(),
+        match_score=int(job["score"]) if job.get("analysis_available") and job.get("score") is not None else None,
+        recommendation=str(job.get("recommendation", "Manual Review")).strip(),
         status="saved",
         resume_file="",
         cover_letter_file="",
-        notes="Saved from Review Jobs. No application was submitted.",
+        notes=(
+            f"Saved from Review Jobs. Eligibility: {eligibility}. "
+            f"Scoring confidence: {confidence}. No application was submitted."
+        ),
     )
+
+
+def save_job_to_tracker(job: dict[str, Any]) -> tuple[int | None, str]:
+    """Save a reviewed job lead to the local tracker without generating documents."""
+    args = tracker_args_for_job(job)
     workspace = current_workspace()
     workspace.require_writable()
     assert workspace.tracker_database_path is not None
@@ -1154,7 +1463,7 @@ def tracker_row_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]])
     """Find a tracker row for a job using URL first, then company/role/location."""
     job_url = str(job.get("job_url", "") or "").strip().lower()
     company = str(job.get("company", "") or "").strip().lower()
-    role = str(job.get("role", "") or "").strip().lower()
+    role = resolve_canonical_job_title(job).lower()
     location = str(job.get("normalized_location", "") or job.get("location", "") or "").strip().lower()
 
     if job_url:
@@ -1188,13 +1497,25 @@ def package_dir_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]])
         package_dir = resolve_package_dir_from_tracker(row)
         if package_dir:
             return package_dir
-    return latest_package_for_company_role(str(job.get("company", "")), str(job.get("role", "")))
+    return latest_package_for_company_role(str(job.get("company", "")), resolve_canonical_job_title(job))
 
 
 def package_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> str:
     """Return a compact package status for Review Jobs display."""
     if demo_mode_enabled():
-        return "Demo package" if DEMO_PACKAGE_DIR.exists() else "Demo only"
+        report_path = DEMO_PACKAGE_DIR / "analysis.md"
+        if not report_path.is_file():
+            return "Demo only"
+        match = re.search(r"Job description file: `(.+?)`", read_text_file(report_path))
+        if not match:
+            return "Demo only"
+        bundled_job_path = Path(match.group(1))
+        if not bundled_job_path.is_absolute():
+            bundled_job_path = PROJECT_ROOT / bundled_job_path
+        job_path = Path(str(job.get("path", "")))
+        if not job_path.is_absolute():
+            job_path = PROJECT_ROOT / job_path
+        return "Demo package" if bundled_job_path.resolve() == job_path.resolve() else "Demo only"
     return "Package ready" if package_dir_for_job(job, tracker_rows) else "No package"
 
 
@@ -1211,15 +1532,31 @@ def review_inbox_view_matches(
 ) -> bool:
     """Map Review Jobs inbox views to existing job, tracker, and package state."""
     recommendation = str(job.get("recommendation", ""))
-    score = int(job.get("score", 0) or 0)
+    score = int(job.get("score") or 0)
+    confidence = confidence_level(job.get("confidence"))
+    eligibility = eligibility_status(job)
     has_package = package_status in {"Package ready", "Demo package"}
     is_tracked = tracker_status not in {"Not tracked", "Demo only"}
     is_ignored = is_ignored_tracker_status(tracker_status)
 
     if inbox_view == "Recommended":
-        return recommendation in {"Apply", "Maybe Apply"} and score >= 50 and not is_ignored
+        return (
+            bool(job.get("analysis_available"))
+            and eligibility == "passed"
+            and confidence in {"medium", "high"}
+            and recommendation in {"Apply", "Apply / Maybe Apply", "Maybe Apply"}
+            and score >= 50
+            and not is_ignored
+        )
     if inbox_view == "Needs Review":
-        return not is_ignored and (not has_package or not is_tracked)
+        canonical_review_needed = (
+            not bool(job.get("analysis_available"))
+            or eligibility == "manual_review"
+            or confidence == "low"
+            or recommendation == "Manual Review"
+        )
+        operational_review_needed = tracker_status != "Demo only" and (not has_package or not is_tracked)
+        return not is_ignored and (canonical_review_needed or operational_review_needed)
     if inbox_view == "Package Ready":
         return has_package and not is_ignored
     if inbox_view == "Not Tracked":
@@ -1227,6 +1564,33 @@ def review_inbox_view_matches(
     if inbox_view == "Ignored":
         return is_ignored
     return True
+
+
+def default_review_inbox_view(jobs: list[dict[str, Any]], tracker_rows: list[dict[str, Any]], *, demo: bool) -> str:
+    """Choose the initial Review Jobs view without changing filtering rules."""
+    if demo:
+        return "All Jobs"
+    if any(
+        review_inbox_view_matches(
+            job,
+            "Recommended",
+            tracker_status_for_job(job, tracker_rows),
+            package_status_for_job(job, tracker_rows),
+        )
+        for job in jobs
+    ):
+        return "Recommended"
+    if any(
+        review_inbox_view_matches(
+            job,
+            "Needs Review",
+            tracker_status_for_job(job, tracker_rows),
+            package_status_for_job(job, tracker_rows),
+        )
+        for job in jobs
+    ):
+        return "Needs Review"
+    return "All Jobs"
 
 
 def review_job_sort_key(job: dict[str, Any], sort_by: str) -> tuple[Any, ...]:
@@ -1247,6 +1611,27 @@ def review_job_sort_key(job: dict[str, Any], sort_by: str) -> tuple[Any, ...]:
     if sort_by == "Tracker status":
         return (tracker_rank, score, newest)
     return (score, newest, recommendation_rank)
+
+
+def is_strong_match(job: dict[str, Any]) -> bool:
+    """Return True only for a confident, eligible canonical Apply result."""
+    return (
+        bool(job.get("analysis_available"))
+        and eligibility_status(job) == "passed"
+        and confidence_level(job.get("confidence")) in {"medium", "high"}
+        and str(job.get("recommendation", "")) == "Apply"
+        and int(job.get("score") or 0) >= 80
+    )
+
+
+def is_current_recommendation(job: dict[str, Any]) -> bool:
+    """Return True for current eligible recommendations shown on Dashboard."""
+    return (
+        bool(job.get("analysis_available"))
+        and eligibility_status(job) == "passed"
+        and confidence_level(job.get("confidence")) in {"medium", "high"}
+        and str(job.get("recommendation", "")) in {"Apply", "Apply / Maybe Apply", "Maybe Apply"}
+    )
 
 
 def sorted_review_jobs(jobs: list[dict[str, Any]], sort_by: str) -> list[dict[str, Any]]:
@@ -1571,12 +1956,12 @@ def dashboard_tab() -> None:
 
     jobs = load_screened_jobs()
     tracker_rows = [] if demo_mode_enabled() else load_tracker_rows(sort_by="created_at", descending=True)
-    scores = [int(job.get("score", 0) or 0) for job in jobs if job.get("score") is not None]
-    strong_matches = sum(1 for score in scores if score >= 80) if scores else 0
+    analyzed_jobs = [job for job in jobs if job.get("analysis_available")]
+    strong_matches = sum(1 for job in jobs if is_strong_match(job))
 
     metric_cols = st.columns(4)
     metric_cols[0].metric("Saved jobs", len(jobs))
-    metric_cols[1].metric("Strong matches", strong_matches if scores else "Not available")
+    metric_cols[1].metric("Strong matches", strong_matches if analyzed_jobs else "Not available")
     metric_cols[2].metric("Generated packages", count_generated_packages())
     metric_cols[3].metric("Tracked applications", len(tracker_rows))
 
@@ -1589,7 +1974,7 @@ def dashboard_tab() -> None:
     recommended_jobs = [
         job
         for job in jobs
-        if job.get("recommendation") in {"Apply", "Maybe Apply"} and int(job.get("score", 0) or 0) >= 50
+        if is_current_recommendation(job)
     ][:3]
     st.markdown("**Recent recommended jobs**")
     if not recommended_jobs:
@@ -1598,7 +1983,8 @@ def dashboard_tab() -> None:
         with st.container(border=True):
             st.markdown(f"**{job['company']}**")
             st.write(get_job_display_title(job))
-            st.caption(f"{job['normalized_location']} | {job['score']}/100 | {job['recommendation']}")
+            presentation = build_fit_presentation(job)
+            st.caption(f"{job['normalized_location']} | {presentation['card_status']}")
 
 
 def fetch_jobs_tab() -> None:
@@ -1611,21 +1997,21 @@ def fetch_jobs_tab() -> None:
         st.info("Demo workspace is active. Live job fetching is disabled; use Review Jobs to explore sample cards.")
     backend_outputs = []
 
+    query = st.text_input("Target role / query", value="data analyst")
+    region = st.selectbox("Region", REGION_OPTIONS, index=0, key="fetch_region")
+    region_config = REGION_CONFIG[region]
+    adzuna_country = region_config["adzuna_country"]
+    adzuna_location = region_config["adzuna_location"]
+    jooble_location = region_config["jooble_location"]
+
+    if region == "Custom":
+        location_text = st.text_input("Custom Location", key="fetch_custom_location")
+        if SHOW_DEBUG_UI:
+            adzuna_country = st.text_input("Developer: Adzuna country", value=adzuna_country)
+        adzuna_location = location_text
+        jooble_location = location_text
+
     with st.form("fetch_jobs_form"):
-        query = st.text_input("Target role / query", value="data analyst")
-        region = st.selectbox("Region", REGION_OPTIONS, index=0)
-        region_config = REGION_CONFIG[region]
-        adzuna_country = region_config["adzuna_country"]
-        adzuna_location = region_config["adzuna_location"]
-        jooble_location = region_config["jooble_location"]
-
-        if region == "Custom":
-            location_text = st.text_input("Location", value=adzuna_location)
-            if SHOW_DEBUG_UI:
-                adzuna_country = st.text_input("Developer: Adzuna country", value=adzuna_country)
-            adzuna_location = location_text
-            jooble_location = location_text
-
         recommendation_limit = st.slider(
             "Number of recommendations",
             min_value=MIN_RECOMMENDATION_LIMIT,
@@ -2816,30 +3202,11 @@ def load_fit_resume_text() -> str:
 
 
 def structured_fit_analysis(job: dict[str, Any], job_text: str) -> dict[str, Any]:
-    """Build structured fit analysis with safe fallbacks for the UI."""
-    resume_text = load_fit_resume_text()
-    if resume_text.strip():
-        analysis = analyze_job_structured(job_text, resume_text)
-    else:
-        analysis = {
-            "score": job.get("score", 0),
-            "recommendation": job.get("recommendation", "Review"),
-            "main_reason": "Candidate profile is not available, so only saved job metadata can be shown.",
-            "main_risk": "Add a candidate profile to enable keyword comparison.",
-            "matched_strengths": [],
-            "weak_areas": list(job.get("red_flags", [])) or ["Not available yet."],
-            "matched_keywords": [],
-            "missing_keywords": [],
-            "optional_keywords": [],
-            "resume_suggestions": ["Add a candidate profile to enable tailored suggestions."],
-            "jd_evidence": [],
-            "profile_evidence": [],
-            "raw_analysis": "",
-        }
-
-    analysis["score"] = analysis.get("score") or job.get("score", 0)
-    analysis["recommendation"] = analysis.get("recommendation") or job.get("recommendation", "Review")
-    return analysis
+    """Return the same canonical analysis already attached to the loaded job."""
+    existing = job.get("analysis_result")
+    if isinstance(existing, dict) and existing:
+        return dict(existing)
+    return analyze_job_for_dashboard(job, job_text)
 
 
 def sanitize_fit_text(value: Any) -> str:
@@ -2855,34 +3222,52 @@ def sanitize_fit_text(value: Any) -> str:
     return text
 
 
-def render_keyword_list(label: str, keywords: list[Any]) -> None:
+def render_keyword_list(label: str, keywords: list[Any], empty_text: str = "None") -> None:
     """Render keyword chips as short text."""
     cleaned = [sanitize_fit_text(keyword) for keyword in keywords if str(keyword).strip()]
-    st.write(f"{label}: {', '.join(cleaned) if cleaned else 'Not available yet'}")
+    st.write(f"{label}: {', '.join(cleaned) if cleaned else empty_text}")
 
 
 def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
     """Render explainable job fit analysis for the selected job."""
     analysis = structured_fit_analysis(job, job_text)
+    presentation = build_fit_presentation(apply_canonical_analysis(job, analysis))
+    terms = presentation["terms"]
     st.markdown("**Fit Analysis**")
-    overall_score = int(job.get("score", 0) or 0)
-    skill_score = int(analysis.get("score", overall_score) or 0)
-    final_recommendation = str(job.get("recommendation", "Review"))
-    skill_recommendation = str(analysis.get("recommendation", final_recommendation))
-    if skill_score != overall_score:
-        fit_cols = st.columns(3)
-        fit_cols[0].metric("Overall score", f"{overall_score}/100")
-        fit_cols[1].metric("Skill match", f"{skill_score}/100")
-        fit_cols[2].metric("Final recommendation", final_recommendation)
-        st.caption("Skill match only reflects categories mentioned in the job description.")
+    eligibility = dict(analysis.get("eligibility", {}))
+    scoring_confidence = dict(analysis.get("confidence", {}))
+    level = confidence_level(scoring_confidence)
+    score = analysis.get("score")
+    if level == "low" or not analysis.get("analysis_available"):
+        st.write(f"Role Fit: {presentation['role_fit']}")
     else:
-        fit_cols = st.columns(2)
-        fit_cols[0].metric("Overall score", f"{overall_score}/100")
-        fit_cols[1].metric("Final recommendation", final_recommendation)
-    if skill_recommendation != final_recommendation:
-        st.caption(f"Skill-only recommendation: {skill_recommendation}")
-    st.write(f"Main reason: {sanitize_fit_text(analysis.get('main_reason', 'Not available yet'))}")
-    st.write(f"Main risk: {sanitize_fit_text(analysis.get('main_risk', 'Not available yet'))}")
+        st.write(f"Role Fit Score: {int(score)}/100")
+    st.write(f"Eligibility: {str(eligibility.get('status', 'manual_review')).replace('_', ' ').title()}")
+    st.write(f"Scoring Confidence: {level.title()}")
+    st.write(f"Recommendation: {analysis.get('recommendation', 'Manual Review')}")
+    st.write(f"Primary reason: {sanitize_fit_text(analysis.get('main_reason', 'Review manually.'))}")
+    st.write(f"Primary risk: {sanitize_fit_text(analysis.get('main_risk', 'Review the full job description manually.'))}")
+
+    if level == "low":
+        st.write(f"Recognized requirements: {terms['active_requirement_count']}")
+        st.write(
+            f"Matched requirements: {terms['matched_requirement_count']} of "
+            f"{terms['active_requirement_count']}"
+        )
+        if score is not None and terms["active_requirement_count"]:
+            st.caption(f"Coverage among recognized requirements: {int(score)}%")
+
+    st.markdown("**Recognized Requirements**")
+    if not terms["active_requirement_count"]:
+        st.write("Requirements could not be extracted reliably.")
+        st.write("Review the full job description manually.")
+    else:
+        render_keyword_list("Matched required terms", terms["matched_required"], empty_text="None")
+        render_keyword_list("Matched preferred terms", terms["matched_preferred"], empty_text="None")
+        render_keyword_list("Missing required terms", terms["missing_required"], empty_text="No missing required terms among the recognized requirements.")
+        render_keyword_list("Missing preferred terms", terms["missing_preferred"], empty_text="No preferred terms were recognized or missing.")
+        render_keyword_list("Partial required matches", terms["partial_required"], empty_text="None")
+        render_keyword_list("Partial preferred matches", terms["partial_preferred"], empty_text="None")
 
     st.markdown("**Matched Strengths**")
     for item in list(analysis.get("matched_strengths", []))[:6] or ["Not available yet."]:
@@ -2891,11 +3276,6 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
     st.markdown("**Missing or Weak Areas**")
     for item in list(analysis.get("weak_areas", []))[:6] or ["Not available yet."]:
         st.write(f"- {sanitize_fit_text(item)}")
-
-    st.markdown("**Keywords**")
-    render_keyword_list("Matched keywords", list(analysis.get("matched_keywords", [])))
-    render_keyword_list("Missing keywords", list(analysis.get("missing_keywords", [])))
-    render_keyword_list("Optional / nice-to-have keywords", list(analysis.get("optional_keywords", [])))
 
     st.markdown("**Resume Suggestions**")
     for item in list(analysis.get("resume_suggestions", []))[:5] or ["Not available yet."]:
@@ -3091,6 +3471,7 @@ def render_job_result_cards(jobs: list[dict[str, Any]], tracker_rows: list[dict[
         file_key = safe_slug(str(job["path"]))
         tracker_status = tracker_status_for_job(job, tracker_rows)
         package_status = job.get("package_status") or package_status_for_job(job, tracker_rows)
+        fit_presentation = build_fit_presentation(job)
         with st.container(border=True):
             st.markdown(
                 card_html(job["company"], "job-card-company")
@@ -3100,7 +3481,7 @@ def render_job_result_cards(jobs: list[dict[str, Any]], tracker_rows: list[dict[
                     "job-card-meta",
                 )
                 + card_html(
-                    f"{job['score']}/100 · {job['recommendation']} · {tracker_status} · {package_status}",
+                    f"{fit_presentation['card_status']} · {tracker_status} · {package_status}",
                     "job-card-status",
                 ),
                 unsafe_allow_html=True,
@@ -3116,7 +3497,12 @@ def render_job_result_cards(jobs: list[dict[str, Any]], tracker_rows: list[dict[
                     set_review_job_selection(job, "Fit")
                     st.rerun()
             with action_package:
-                if st.button("Package", key=f"view_package_{file_key}_{index}", width="stretch"):
+                if st.button(
+                    "Package",
+                    key=f"view_package_{file_key}_{index}",
+                    width="stretch",
+                    disabled=demo_mode_enabled() and package_status != "Demo package",
+                ):
                     set_review_job_selection(job, "Package")
                     st.rerun()
 
@@ -3125,7 +3511,10 @@ def job_descriptions_tab() -> None:
     """Render the job-description review and package generation workflow."""
     render_page_header("Review Jobs", "Use the job inbox to review fit, prepare packages, and track next steps.")
     if demo_mode_enabled():
-        st.caption("Demo workspace: sanitized sample jobs are read-only; tracker and package writes are disabled.")
+        st.info(
+            "Demo workspace uses fictional, read-only data. "
+            "All Jobs is shown by default so you can compare different scoring outcomes."
+        )
 
     all_jobs = load_screened_jobs()
 
@@ -3138,39 +3527,30 @@ def job_descriptions_tab() -> None:
     fetch_runs = load_fetch_runs()
     fetch_runs_by_id = {str(run.get("fetch_run_id", "")): run for run in fetch_runs}
     tracker_rows = [] if demo_mode_enabled() else load_tracker_rows(sort_by="created_at", descending=True)
-    default_inbox_view = "Recommended"
-    if not any(
-        review_inbox_view_matches(
-            job,
-            "Recommended",
-            tracker_status_for_job(job, tracker_rows),
-            package_status_for_job(job, tracker_rows),
-        )
-        for job in all_jobs
-    ):
-        default_inbox_view = "Needs Review"
-    if default_inbox_view == "Needs Review" and not any(
-        review_inbox_view_matches(
-            job,
-            "Needs Review",
-            tracker_status_for_job(job, tracker_rows),
-            package_status_for_job(job, tracker_rows),
-        )
-        for job in all_jobs
-    ):
-        default_inbox_view = "All Jobs"
+    is_demo = demo_mode_enabled()
+    default_inbox_view = default_review_inbox_view(all_jobs, tracker_rows, demo=is_demo)
+    workspace_state_key = "demo" if is_demo else "personal"
+    workspace_changed = st.session_state.get("review_workspace_mode") != workspace_state_key
+    if workspace_changed:
+        st.session_state["review_workspace_mode"] = workspace_state_key
+        st.session_state["review_inbox_view"] = default_inbox_view
+        if is_demo:
+            st.session_state["review_minimum_score"] = 0
+            st.session_state["review_hide_hard_red_flags"] = False
+            st.session_state["review_hide_degree_required"] = False
+            st.session_state["review_hide_current_student_only"] = False
 
     def clear_review_filters() -> None:
         st.session_state["review_search_text"] = ""
         st.session_state["review_inbox_view"] = default_inbox_view
-        st.session_state["review_sort_by"] = "Score high to low"
+        st.session_state["review_sort_by"] = "Role Fit high to low"
         st.session_state["selected_region_key"] = "all"
         st.session_state["review_source_filter"] = "all"
         st.session_state["review_recommendation_filter"] = "all"
-        st.session_state["review_minimum_score"] = 50
-        st.session_state["review_hide_hard_red_flags"] = True
-        st.session_state["review_hide_degree_required"] = True
-        st.session_state["review_hide_current_student_only"] = True
+        st.session_state["review_minimum_score"] = 0 if is_demo else 50
+        st.session_state["review_hide_hard_red_flags"] = not is_demo
+        st.session_state["review_hide_degree_required"] = not is_demo
+        st.session_state["review_hide_current_student_only"] = not is_demo
 
     def show_all_review_jobs() -> None:
         clear_review_filters()
@@ -3178,17 +3558,26 @@ def job_descriptions_tab() -> None:
         st.session_state["review_minimum_score"] = 0
 
     inbox_view_options = ["Recommended", "Needs Review", "Package Ready", "Not Tracked", "Ignored", "All Jobs"]
-    sort_options = ["Score high to low", "Newest first", "Recommendation", "Company A-Z", "Package status", "Tracker status"]
+    sort_options = ["Role Fit high to low", "Newest first", "Recommendation", "Company A-Z", "Package status", "Tracker status"]
     st.session_state.setdefault("review_inbox_view", default_inbox_view)
     if st.session_state["review_inbox_view"] not in inbox_view_options:
         st.session_state["review_inbox_view"] = default_inbox_view
-    st.session_state.setdefault("review_sort_by", "Score high to low")
+    st.session_state.setdefault("review_sort_by", "Role Fit high to low")
     if st.session_state["review_sort_by"] not in sort_options:
-        st.session_state["review_sort_by"] = "Score high to low"
+        st.session_state["review_sort_by"] = "Role Fit high to low"
     source_options = dynamic_source_options(all_jobs)
     if st.session_state.get("review_source_filter", "all") not in source_options:
         st.session_state["review_source_filter"] = "all"
-    if st.session_state.get("review_recommendation_filter", "all") not in ["all", "Apply", "Maybe Apply", "Skip or Low Priority"]:
+    recommendation_options = [
+        "all",
+        "Apply",
+        "Apply / Maybe Apply",
+        "Maybe Apply",
+        "Manual Review",
+        "Skip or Low Priority",
+        "Skip / Not Eligible",
+    ]
+    if st.session_state.get("review_recommendation_filter", "all") not in recommendation_options:
         st.session_state["review_recommendation_filter"] = "all"
     st.session_state.setdefault("review_search_text", "")
     st.session_state.setdefault("region_search_query", "")
@@ -3256,14 +3645,14 @@ def job_descriptions_tab() -> None:
         with filter_row2_right:
             recommendation_filter = st.selectbox(
                 "Recommendation",
-                ["all", "Apply", "Maybe Apply", "Skip or Low Priority"],
+                recommendation_options,
                 key="review_recommendation_filter",
             )
 
         filter_row3_left, filter_row3_right = st.columns(2)
         with filter_row3_left:
             minimum_score = st.slider(
-                "Minimum score",
+                "Minimum Role Fit score",
                 min_value=0,
                 max_value=100,
                 key="review_minimum_score",
@@ -3304,7 +3693,9 @@ def job_descriptions_tab() -> None:
             continue
         if recommendation_filter != "all" and job["recommendation"] != recommendation_filter:
             continue
-        if job["score"] < minimum_score:
+        if job.get("score") is None and minimum_score > 0:
+            continue
+        if job.get("score") is not None and int(job["score"]) < minimum_score:
             continue
         if hide_hard_red_flags and job["hard_red_flag"]:
             continue
@@ -3327,7 +3718,7 @@ def job_descriptions_tab() -> None:
 
     filtered_jobs = sorted_review_jobs(filtered_jobs, sort_by)
     shortlist = filtered_jobs[:recommendation_limit]
-    filter_summary = f"Score {minimum_score}+"
+    filter_summary = f"Role Fit {minimum_score}+"
     if selected_region_key != "all":
         filter_summary += f" · {region_label(selected_region_option, include_count=False)}"
     if source_filter != "all":
@@ -3335,7 +3726,7 @@ def job_descriptions_tab() -> None:
     if recommendation_filter != "all":
         filter_summary += f" · {recommendation_filter}"
     sort_summary = {
-        "Score high to low": "score",
+        "Role Fit high to low": "Role Fit",
         "Newest first": "newest",
         "Recommendation": "recommendation",
         "Company A-Z": "company",
@@ -3402,7 +3793,7 @@ def job_descriptions_tab() -> None:
                         "Role": get_job_display_title(job),
                         "Location": job["normalized_location"],
                         "Source": source_display_name(str(job["source"])),
-                        "Overall score": job["score"],
+                        "Role Fit": build_fit_presentation(job)["role_fit"],
                         "Recommendation": job["recommendation"],
                         "Tracker": job.get("tracker_status") or tracker_status_for_job(job, tracker_rows),
                         "Package": job.get("package_status") or package_status_for_job(job, tracker_rows),
@@ -3415,6 +3806,7 @@ def job_descriptions_tab() -> None:
 
     with right_col:
         tracker_status = tracker_status_for_job(selected_job, tracker_rows)
+        selected_presentation = build_fit_presentation(selected_job)
         header_left, header_right = st.columns([0.72, 0.28])
         with header_left:
             st.markdown(f"**{selected_job['company']}**")
@@ -3424,7 +3816,13 @@ def job_descriptions_tab() -> None:
                 f"{source_display_name(str(selected_job['source']))}"
             )
         with header_right:
-            st.metric("Overall score", f"{selected_job['score']}/100")
+            if confidence_level(selected_job.get("confidence")) == "low":
+                st.caption("Role Fit")
+                st.write("Insufficient evidence")
+            elif selected_job.get("score") is not None:
+                st.metric("Role Fit Score", f"{selected_job['score']}/100")
+            else:
+                st.caption("Role Fit: Not available")
             st.caption(selected_job["recommendation"])
             st.caption(f"Tracker: {tracker_status}")
             st.caption(f"Package: {selected_job.get('package_status') or package_status_for_job(selected_job, tracker_rows)}")
@@ -3445,8 +3843,11 @@ def job_descriptions_tab() -> None:
             snippet = build_job_snippet(selected_job)
             if snippet:
                 st.caption(snippet)
-            st.write(f"Main reason: {selected_job.get('confidence', 'Medium')} confidence fit with score {selected_job['score']}/100.")
-            main_risk = selected_job["red_flags_text"] if selected_job["red_flags_text"] != "-" else selected_job["warnings_text"]
+            selected_analysis = dict(selected_job.get("analysis_result", {}))
+            st.write(f"Main reason: {selected_analysis.get('main_reason', selected_presentation['card_status'])}")
+            main_risk = str(selected_analysis.get("main_risk", "")) or (
+                selected_job["red_flags_text"] if selected_job["red_flags_text"] != "-" else selected_job["warnings_text"]
+            )
             if main_risk != "-":
                 st.write(f"Main risk: {main_risk}")
             render_review_action_buttons(
@@ -3594,7 +3995,7 @@ def tracker_tab() -> None:
             {
                 "id": row["id"],
                 "status": row["status"],
-                "match_score": row["match_score"],
+                "stored_score": row["match_score"],
                 "company": row["company"],
                 "role": display_title_from_value(row["role"], fallback="Sample Job"),
                 "location": row["location"],
@@ -3622,8 +4023,8 @@ def tracker_tab() -> None:
     st.write(f"Company: {selected_row['company']}")
     st.write(f"Role: {display_title_from_value(selected_row['role'], fallback='Sample Job')}")
     st.write(f"Status: {selected_row['status']}")
-    st.write(f"Overall score: {selected_row['match_score']}")
-    st.write(f"Recommendation: {selected_row['recommendation']}")
+    st.write(f"Stored score: {selected_row['match_score']}")
+    st.write(f"Stored recommendation: {selected_row['recommendation']}")
 
     new_status = st.selectbox("Update status to", status_options, index=status_options.index(selected_row["status"]))
     if st.button("Update Status", key=f"update_{selected_id}"):
@@ -3734,7 +4135,10 @@ def package_viewer_tab() -> None:
         with summary_left:
             st.markdown(f"**{tracker_row['company']}**")
             st.write(display_title_from_value(tracker_row["role"], fallback="Sample Job"))
-            st.caption(f"Status: {tracker_row['status']} | Score: {tracker_row['match_score'] or '-'}")
+            st.caption(
+                f"Status: {tracker_row['status']} | Stored package/tracker score: "
+                f"{tracker_row['match_score'] if tracker_row['match_score'] is not None else '-'}"
+            )
         with summary_right:
             if tracker_row["job_url"]:
                 st.link_button("Open Job URL", tracker_row["job_url"], width="stretch")
@@ -3904,7 +4308,8 @@ def package_viewer_tab() -> None:
     st.markdown("**Preview**")
     render_markdown_file(resume_md_path, "Preview Resume")
     render_markdown_file(cover_letter_md_path, "Preview Cover Letter")
-    render_markdown_file(analysis_path, "Preview Match Report")
+    st.caption("Package reports are stored output from generation time; current live analysis appears in Review Jobs.")
+    render_markdown_file(analysis_path, "Preview Stored Match Report")
     if internal_notes:
         with st.expander("Preview Internal Notes", expanded=False):
             st.markdown(internal_notes)

@@ -36,17 +36,18 @@ class DemoPackageTests(unittest.TestCase):
     def test_demo_docx_files_are_valid_and_neutral(self) -> None:
         expected_text = {
             "tailored_resume.docx": [
-                "Demo Tailored Resume",
-                "This is sanitized demo content. Replace it with a real resume source before",
-                "Candidate with experience in Python data analysis, model evaluation, and clear",
-                "Python, pandas, NumPy",
-                "Technical writing and stakeholder communication",
+                "Demo Candidate",
+                "Bachelor's degree in Data Science, Fictional Technical College",
+                "Data Analysis Intern, Fictional Community Research Lab",
+                "Built a classification pipeline with Python and scikit-learn.",
+                "Evaluated models with cross-validation",
             ],
             "cover_letter.docx": [
                 "Demo Candidate",
-                "Demo Robotics Lab",
-                "demo Machine Learning Intern role because it combines",
-                "This file is sanitized demo content and should not be sent to an employer.",
+                "Northstar Metrics Studio",
+                "fictional Data Analyst role",
+                "fictional community research internship",
+                "This is fictional Demo output and must not be submitted to an employer.",
             ],
         }
         for filename in DOCX_NAMES:

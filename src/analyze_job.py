@@ -18,6 +18,15 @@ from workspace import Workspace, WorkspaceError, demo_workspace, personal_worksp
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+REQUIRED_REQUIREMENT_WEIGHT = 1.0
+PREFERRED_REQUIREMENT_WEIGHT = 0.5
+DIRECT_MATCH_STRENGTH = 1.0
+PARTIAL_MATCH_STRENGTH = 0.6
+NO_MATCH_STRENGTH = 0.0
+
+CAREER_LEVELS = {"student", "new_grad", "junior", "mid", "senior", "unknown"}
+DEGREE_RANK = {"unknown": 0, "bachelor": 1, "master": 2, "phd": 3}
+
 
 # Each keyword has optional aliases so the script can match common variations
 # while still reporting a clean skill name.
@@ -97,6 +106,8 @@ SCORE_CATEGORIES = {
             "intern",
             "junior",
             "recent graduate",
+            "mid-level",
+            "senior-level",
         ],
     },
     "Project relevance": {
@@ -123,47 +134,7 @@ SCORE_CATEGORIES = {
 }
 
 
-PENALTY_RULES = [
-    {
-        "name": "5+ years of experience",
-        "points": 20,
-        "patterns": [
-            r"\b5\+?\s*(?:years|yrs)\b",
-            r"\bfive\+?\s*(?:years|yrs)\b",
-            r"\bat least\s+5\s*(?:years|yrs)\b",
-        ],
-    },
-    {
-        "name": "3+ years of experience",
-        "points": 10,
-        "patterns": [
-            r"\b3\+?\s*(?:years|yrs)\b",
-            r"\bthree\+?\s*(?:years|yrs)\b",
-            r"\bat least\s+3\s*(?:years|yrs)\b",
-        ],
-    },
-    {
-        "name": "Master's degree or PhD required",
-        "points": 15,
-        "patterns": [
-            r"\brequires?\s+(?:a\s+)?(?:master'?s|ms|ph\.?d\.?|doctorate)\b",
-            r"\bmust\s+have\s+(?:a\s+)?(?:master'?s|ms|ph\.?d\.?|doctorate)\b",
-            r"\b(?:master'?s|ms|ph\.?d\.?|doctorate)\s+(?:degree\s+)?required\b",
-            r"\bminimum\s+(?:of\s+)?(?:a\s+)?(?:master'?s|ms|ph\.?d\.?|doctorate)\b",
-        ],
-    },
-    {
-        "name": "Senior, staff, principal, or manager-level role",
-        "points": 20,
-        "patterns": [
-            r"\bsenior\b",
-            r"\bstaff\b",
-            r"\bprincipal\b",
-            r"\bmanager\b",
-            r"\bmanagement\b",
-        ],
-    },
-]
+PENALTY_RULES: list[dict[str, object]] = []
 
 
 RED_FLAG_RULES = [
@@ -192,7 +163,7 @@ UK_HPI_MANUAL_REVIEW_WARNING = (
 )
 UK_ALREADY_AUTHORIZED_WARNING = (
     "Manual review required: this JD appears to require candidates to already or currently "
-    "have the right to work in the UK. Because current authorization is not confirmed, the score is capped at 74."
+    "have the right to work in the UK. Current authorization is not assumed; eligibility is evaluated separately."
 )
 
 
@@ -226,6 +197,8 @@ EXPERIENCE_LEVEL_KEYWORDS = [
     "intern",
     "junior",
     "recent graduate",
+    "mid-level",
+    "senior-level",
 ]
 
 
@@ -275,7 +248,7 @@ EXPERIENCE_THEMES = {
 def normalize_text(text: str) -> str:
     """Lowercase text and pad it with spaces to make word matching simpler."""
     text = text.lower()
-    text = re.sub(r"[^a-z0-9+#.\-]+", " ", text)
+    text = re.sub(r"[^a-z0-9+#\-]+", " ", text)
     return f" {text} "
 
 
@@ -316,6 +289,97 @@ def is_preferred_line(line: str) -> bool:
     return any(contains_alias(normalized_line, phrase) for phrase in PREFERRED_LANGUAGE)
 
 
+def infer_candidate_experience_profile(candidate_text: str) -> dict[str, object]:
+    """Infer a conservative experience profile from explicit candidate text."""
+    normalized = normalize_text(candidate_text)
+    lowered = candidate_text.lower()
+    evidence: list[str] = []
+    career_level = "unknown"
+
+    level_patterns = [
+        ("senior", [r"\bsenior\b", r"\bstaff\b", r"\bprincipal\b"]),
+        ("mid", [r"\bmid[- ]level\b"]),
+        ("junior", [r"\bjunior\b"]),
+        ("new_grad", [r"\brecent graduate\b", r"\bnew graduate\b", r"\bnew grad\b"]),
+        ("student", [r"\bcurrent student\b", r"\bundergraduate\b", r"\bgraduate student\b"]),
+    ]
+    for level, patterns in level_patterns:
+        if any(re.search(pattern, normalized) for pattern in patterns):
+            career_level = level
+            evidence.append(f"Explicit candidate career-level phrase: {level.replace('_', ' ')}.")
+            break
+    if career_level == "unknown" and re.search(r"\b(?:intern|internship)\b", normalized):
+        career_level = "student"
+        evidence.append("Candidate source explicitly mentions an internship or intern role.")
+
+    years_experience: float | None = None
+    years_matches = [
+        float(value)
+        for value in re.findall(
+            r"\b(\d+(?:\.\d+)?)\+?\s*(?:years|yrs)\s+(?:of\s+)?(?:professional\s+|work\s+)?experience\b",
+            lowered,
+        )
+    ]
+    if years_matches:
+        years_experience = max(years_matches)
+        evidence.append(f"Candidate source states {years_experience:g} years of experience.")
+        if career_level == "unknown":
+            career_level = "senior" if years_experience >= 5 else "mid" if years_experience >= 3 else "junior"
+
+    degree_patterns = [
+        ("phd", r"\b(?:ph\s*d|doctorate|doctoral degree)\b"),
+        ("master", r"\b(?:master\s+s|masters|master of|m\s+s)\b"),
+        ("bachelor", r"\b(?:bachelor\s+s|bachelors|bachelor of|b\s+s)\b"),
+    ]
+    highest_degree = "unknown"
+    for degree, pattern in degree_patterns:
+        if re.search(pattern, normalized):
+            highest_degree = degree
+            evidence.append(f"Candidate source explicitly mentions a {degree} degree.")
+            break
+
+    return {
+        "career_level": career_level,
+        "years_experience": years_experience,
+        "highest_degree": highest_degree,
+        "evidence": evidence,
+    }
+
+
+def experience_match_strength(keyword: str, profile: dict[str, object]) -> float:
+    """Compare a requested experience level with explicit candidate evidence."""
+    level = str(profile.get("career_level", "unknown"))
+    if level not in CAREER_LEVELS:
+        level = "unknown"
+    compatibility = {
+        "student": {"intern": 1.0, "entry-level": 0.6},
+        "new_grad": {"new grad": 1.0, "recent graduate": 1.0, "entry-level": 1.0, "intern": 1.0, "junior": 0.6},
+        "junior": {"junior": 1.0, "entry-level": 1.0, "new grad": 0.6, "recent graduate": 0.6, "mid-level": 0.6},
+        "mid": {"mid-level": 1.0, "junior": 0.6, "senior-level": 0.6},
+        "senior": {"senior-level": 1.0, "mid-level": 1.0},
+        "unknown": {},
+    }
+    return compatibility[level].get(keyword, NO_MATCH_STRENGTH)
+
+
+def explicit_job_experience_levels(job_text: str) -> tuple[list[str], list[str]]:
+    """Return required and preferred experience-level scoring terms."""
+    required: list[str] = []
+    preferred: list[str] = []
+    for line in split_job_description_lines(job_text):
+        normalized = normalize_text(line)
+        target = preferred if is_preferred_line(line) else required
+        if re.search(r"\b(?:5\+?|five|at least 5)\s*(?:years|yrs)\b", normalized):
+            add_unique(target, "senior-level")
+        elif re.search(r"\b(?:3\+?|three|at least 3)\s*(?:years|yrs)\b", normalized):
+            add_unique(target, "mid-level")
+        if re.search(r"^(?:role|title)?\s*:?[ ]*(?:senior|staff|principal)\b", line.strip(), re.I):
+            add_unique(target, "senior-level")
+        if re.search(r"^(?:role|title)?\s*:?[ ]*(?:engineering|product|data|machine learning) manager\b", line.strip(), re.I):
+            add_unique(target, "senior-level")
+    return required, preferred
+
+
 def parse_job_description(job_text: str, resume_text: str) -> dict[str, object]:
     """Extract simple demand-aware facts from the job description.
 
@@ -339,7 +403,7 @@ def parse_job_description(job_text: str, resume_text: str) -> dict[str, object]:
 
         for keyword in line_keywords:
             if keyword in EXPERIENCE_LEVEL_KEYWORDS:
-                add_unique(experience_level, keyword)
+                add_unique(preferred_skills if preferred_line else experience_level, keyword)
             elif keyword in domain_terms:
                 add_unique(domain_keywords, keyword)
                 if preferred_line and keyword in required_skills:
@@ -356,14 +420,21 @@ def parse_job_description(job_text: str, resume_text: str) -> dict[str, object]:
         normalized_job,
     ):
         degree_requirements.append("Bachelor's degree mentioned: verify it against the candidate source.")
-    if any(
-        re.search(pattern, normalized_job)
-        for pattern in PENALTY_RULES[2]["patterns"]
+    if re.search(
+        r"\b(?:master\s+s|masters|m\s+s|ph\s*d|doctorate)\s+(?:degree\s+)?required\b|"
+        r"\brequires?\s+(?:a\s+)?(?:master\s+s|masters|m\s+s|ph\s*d|doctorate)\b",
+        normalized_job,
     ):
         degree_requirements.append("Master's degree or PhD required")
         red_flags.append(
             "Graduate degree requirement: verify the required degree against the candidate source."
         )
+
+    required_experience, preferred_experience = explicit_job_experience_levels(job_text)
+    for keyword in required_experience:
+        add_unique(experience_level, keyword)
+    for keyword in preferred_experience:
+        add_unique(preferred_skills, keyword)
 
     return {
         "required_skills": required_skills,
@@ -407,6 +478,7 @@ def choose_relevant_themes(job_keywords: list[str], resume_keywords: list[str]) 
 def calculate_score_breakdown(
     parsed_job: dict[str, object],
     resume_keywords: list[str],
+    candidate_profile: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """Calculate demand-aware weighted category scores.
 
@@ -442,15 +514,25 @@ def calculate_score_breakdown(
                 continue
 
             active_terms.append(keyword)
-            possible_weight += 1.0
+            requirement_weight = (
+                REQUIRED_REQUIREMENT_WEIGHT
+                if demand_type == "required"
+                else PREFERRED_REQUIREMENT_WEIGHT
+            )
+            possible_weight += requirement_weight
 
-            match_strength = match_strength_for_keyword(keyword, resume_keyword_set)
-            earned_weight += match_strength if demand_type == "required" else match_strength * 0.5
+            match_strength = match_strength_for_keyword(keyword, resume_keyword_set, candidate_profile)
+            earned_weight += requirement_weight * match_strength
 
-            if match_strength == 1.0:
+            if match_strength == DIRECT_MATCH_STRENGTH:
                 matched.append(keyword)
-            elif match_strength > 0:
-                partial.append(f"{keyword} ({PARTIAL_RESUME_MATCHES[keyword][1]})")
+            elif match_strength > NO_MATCH_STRENGTH:
+                detail = (
+                    PARTIAL_RESUME_MATCHES[keyword][1]
+                    if keyword in PARTIAL_RESUME_MATCHES
+                    else "Partial match: candidate experience evidence is adjacent to the requested level."
+                )
+                partial.append(f"{keyword} ({detail})")
             else:
                 missing.append(keyword)
 
@@ -504,15 +586,19 @@ def demand_type_for_keyword(
     return None
 
 
-def match_strength_for_keyword(keyword: str, resume_keyword_set: set[str]) -> float:
+def match_strength_for_keyword(
+    keyword: str,
+    resume_keyword_set: set[str],
+    candidate_profile: dict[str, object] | None = None,
+) -> float:
     """Return 1.0 for direct matches, 0.6 for adjacent matches, and 0.0 for gaps."""
     if keyword in EXPERIENCE_LEVEL_KEYWORDS:
-        return 1.0
+        return experience_match_strength(keyword, candidate_profile or {})
     if keyword in resume_keyword_set:
-        return 1.0
+        return DIRECT_MATCH_STRENGTH
     if keyword in PARTIAL_RESUME_MATCHES and PARTIAL_RESUME_MATCHES[keyword][0].intersection(resume_keyword_set):
-        return 0.6
-    return 0.0
+        return PARTIAL_MATCH_STRENGTH
+    return NO_MATCH_STRENGTH
 
 
 def score_note(
@@ -573,6 +659,252 @@ def find_red_flags(job_text: str, resume_text: str) -> list[str]:
             red_flags.append(UK_ALREADY_AUTHORIZED_WARNING)
 
     return red_flags
+
+
+def _eligibility_reason(code: str, message: str, evidence: str) -> dict[str, str]:
+    return {"code": code, "message": message, "evidence": evidence}
+
+
+def _required_experience_years(job_text: str) -> tuple[float | None, str]:
+    """Extract an explicit required minimum, excluding preferred wording."""
+    values: list[tuple[float, str]] = []
+    for line in split_job_description_lines(job_text):
+        if is_preferred_line(line):
+            continue
+        normalized = normalize_text(line)
+        match = re.search(r"\b(\d+(?:\.\d+)?)\+?\s*(?:years|yrs)\b", normalized)
+        if not match:
+            continue
+        is_required = bool(
+            "+" in line
+            or re.search(r"\b(?:required|requires?|must|minimum|at least)\b", normalized)
+        )
+        if is_required:
+            values.append((float(match.group(1)), line[:180]))
+    return max(values, default=(None, ""), key=lambda item: item[0])
+
+
+def _required_degree(job_text: str) -> tuple[str | None, bool, str]:
+    """Extract a required graduate degree and equivalent-experience qualifier."""
+    for line in split_job_description_lines(job_text):
+        if is_preferred_line(line):
+            continue
+        normalized = normalize_text(line)
+        degree = None
+        if re.search(r"\b(?:ph\s*d|doctorate|doctoral degree)\b", normalized):
+            degree = "phd"
+        elif re.search(r"\b(?:master\s+s|masters|master of|m\s+s)\b", normalized):
+            degree = "master"
+        if degree and re.search(r"\b(?:required|requires?|must|minimum)\b", normalized):
+            equivalent = "equivalent" in normalized and "experience" in normalized
+            return degree, equivalent, line[:180]
+    return None, False, ""
+
+
+def _hard_seniority_requirement(job_text: str) -> tuple[bool, str]:
+    """Detect title/requirement seniority without matching incidental wording."""
+    for raw_line in split_job_description_lines(job_text):
+        line = raw_line.strip("#*: -")
+        if re.search(r"^(?:role|title)\s*:\s*", line, re.I):
+            line = line.split(":", 1)[1].strip()
+        if re.search(r"^(?:senior|staff|principal)\s+[A-Za-z]", line, re.I):
+            return True, raw_line[:180]
+        if re.search(r"^(?:engineering|product|data|machine learning) manager\b", line, re.I):
+            return True, raw_line[:180]
+        if re.search(r"\b5\+?\s*years\s+in\s+a\s+senior\s+role\b", line, re.I):
+            return True, raw_line[:180]
+    return False, ""
+
+
+def evaluate_eligibility(
+    job_text: str,
+    candidate_text: str,
+    candidate_profile: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Evaluate explicit gating constraints separately from role-fit scoring."""
+    profile = candidate_profile or infer_candidate_experience_profile(candidate_text)
+    reasons: list[dict[str, str]] = []
+    failed = False
+    manual_review = False
+    level = str(profile.get("career_level", "unknown"))
+    years = profile.get("years_experience")
+
+    required_years, years_evidence = _required_experience_years(job_text)
+    if required_years is not None:
+        if isinstance(years, (int, float)):
+            if float(years) < required_years:
+                failed = True
+                reasons.append(_eligibility_reason(
+                    "minimum_experience",
+                    f"The role requires {required_years:g}+ years, but the candidate source states {float(years):g}.",
+                    years_evidence,
+                ))
+        elif level in {"student", "new_grad"} and required_years >= 3:
+            failed = True
+            reasons.append(_eligibility_reason(
+                "minimum_experience",
+                f"The role requires {required_years:g}+ years and the candidate is explicitly identified as {level.replace('_', ' ')}.",
+                years_evidence,
+            ))
+        else:
+            manual_review = True
+            reasons.append(_eligibility_reason(
+                "minimum_experience",
+                f"Confirm the explicit {required_years:g}+ year requirement against candidate experience.",
+                years_evidence,
+            ))
+
+    required_degree, equivalent_allowed, degree_evidence = _required_degree(job_text)
+    if required_degree:
+        candidate_degree = str(profile.get("highest_degree", "unknown"))
+        if equivalent_allowed and DEGREE_RANK.get(candidate_degree, 0) < DEGREE_RANK[required_degree]:
+            manual_review = True
+            reasons.append(_eligibility_reason(
+                "graduate_degree_equivalent",
+                "The graduate-degree requirement allows equivalent experience; confirm equivalence manually.",
+                degree_evidence,
+            ))
+        elif candidate_degree == "unknown":
+            manual_review = True
+            reasons.append(_eligibility_reason(
+                "graduate_degree",
+                f"Confirm the required {required_degree} degree against candidate education.",
+                degree_evidence,
+            ))
+        elif DEGREE_RANK[candidate_degree] < DEGREE_RANK[required_degree]:
+            failed = True
+            reasons.append(_eligibility_reason(
+                "graduate_degree",
+                f"The role requires a {required_degree} degree; the candidate source explicitly shows {candidate_degree} as highest degree.",
+                degree_evidence,
+            ))
+
+    seniority_required, seniority_evidence = _hard_seniority_requirement(job_text)
+    if seniority_required:
+        if level in {"student", "new_grad", "junior"}:
+            failed = True
+            reasons.append(_eligibility_reason(
+                "seniority_requirement",
+                f"The role is explicitly senior-level while candidate evidence indicates {level.replace('_', ' ')}.",
+                seniority_evidence,
+            ))
+        elif level == "unknown":
+            manual_review = True
+            reasons.append(_eligibility_reason(
+                "seniority_requirement",
+                "Confirm the explicit seniority requirement against candidate experience.",
+                seniority_evidence,
+            ))
+
+    normalized_job = normalize_text(job_text)
+    normalized_candidate = normalize_text(candidate_text)
+    authorization_mentioned = any(
+        contains_alias(normalized_job, phrase)
+        for phrase in ["work authorization", "right to work", "visa sponsorship", "sponsorship", "citizenship"]
+    )
+    existing_authorization_required = any(
+        contains_alias(normalized_job, phrase)
+        for phrase in [
+            "must be authorized",
+            "must have the right to work",
+            "currently have the right to work",
+            "current right to work",
+            "sponsorship is not available",
+            "no visa sponsorship",
+        ]
+    )
+    candidate_incompatible = any(
+        contains_alias(normalized_candidate, phrase)
+        for phrase in ["requires visa sponsorship", "require visa sponsorship", "not authorized to work"]
+    )
+    candidate_confirmed = any(
+        contains_alias(normalized_candidate, phrase)
+        for phrase in ["authorized to work", "right to work", "citizen", "permanent resident"]
+    )
+    if authorization_mentioned and not candidate_confirmed:
+        if existing_authorization_required and candidate_incompatible:
+            failed = True
+            reasons.append(_eligibility_reason(
+                "work_authorization",
+                "The role requires existing authorization and the candidate source explicitly states an incompatible status.",
+                "Explicit authorization requirement in job text.",
+            ))
+        else:
+            manual_review = True
+            reasons.append(_eligibility_reason(
+                "work_authorization",
+                "Work authorization or sponsorship must be confirmed; no compatible status is assumed.",
+                "Authorization or sponsorship language appears in the job text.",
+            ))
+
+    status = "failed" if failed else "manual_review" if manual_review else "passed"
+    return {"status": status, "reasons": reasons}
+
+
+def calculate_scoring_confidence(
+    job_text: str,
+    candidate_text: str,
+    score_breakdown: list[dict[str, object]],
+    candidate_profile: dict[str, object],
+) -> dict[str, object]:
+    """Describe deterministic evidence coverage independently from role fit."""
+    active_count = sum(len(item["active_terms"]) for item in score_breakdown)
+    candidate_evidence_count = len(find_keywords(candidate_text)) + len(candidate_profile.get("evidence", []))
+    reasons: list[str] = []
+    job_word_count = len(job_text.split())
+    if not candidate_text.strip():
+        reasons.append("Candidate source is missing or empty.")
+    if job_word_count < 20:
+        reasons.append("Job text is too short for reliable scoring.")
+    if active_count < 4:
+        reasons.append("Fewer than four scored requirements were extracted.")
+    if candidate_evidence_count == 0:
+        reasons.append("No usable candidate evidence was extracted.")
+
+    if reasons:
+        level = "low"
+    elif active_count >= 8:
+        level = "high"
+        reasons.append("At least eight scored requirements and candidate evidence were extracted.")
+    else:
+        level = "medium"
+        reasons.append("Four to seven scored requirements and candidate evidence were extracted.")
+    return {
+        "level": level,
+        "active_requirement_count": active_count,
+        "candidate_evidence_count": candidate_evidence_count,
+        "reasons": reasons,
+    }
+
+
+def final_recommendation(score: int, eligibility: dict[str, object], confidence: dict[str, object]) -> str:
+    """Apply eligibility and confidence gates to the calibrated score label."""
+    if eligibility["status"] == "failed":
+        return "Skip / Not Eligible"
+    if eligibility["status"] == "manual_review" or confidence["level"] == "low":
+        return "Manual Review"
+    return recommendation_for_score(score)
+
+
+def explain_final_decision(
+    score: int,
+    recommendation: str,
+    eligibility: dict[str, object],
+    confidence: dict[str, object],
+) -> str:
+    """Explain the recommendation using role fit, eligibility, and confidence."""
+    reasons = eligibility.get("reasons", [])
+    if isinstance(reasons, list) and reasons:
+        first = reasons[0]
+        if isinstance(first, dict) and first.get("message"):
+            return f"Role fit is {score}/100. {first['message']}"
+    confidence_reasons = confidence.get("reasons", [])
+    if confidence.get("level") == "low" and isinstance(confidence_reasons, list) and confidence_reasons:
+        return f"Role fit is {score}/100, but manual review is needed because {str(confidence_reasons[0]).lower()}"
+    return (
+        f"{recommendation} because the role-fit score is {score}/100 after normalizing only "
+        "the categories the job description actually mentions."
+    )
 
 
 def is_uk_job(job_text: str) -> bool:
@@ -637,9 +969,8 @@ def calculate_match_score(
 
 
 def apply_uk_work_authorization_score_cap(score: int, job_text: str) -> int:
-    """Cap UK jobs that require current right-to-work status."""
-    if is_uk_job(job_text) and must_already_have_uk_work_authorization(job_text):
-        return min(score, 74)
+    """Compatibility helper; eligibility no longer changes the role-fit score."""
+    _ = job_text
     return score
 
 
@@ -673,6 +1004,8 @@ def build_markdown_report(
     resume_evidence: list[str],
     score: int,
     recommendation: str,
+    eligibility: dict[str, object],
+    confidence: dict[str, object],
 ) -> str:
     """Build the Markdown report saved for human review."""
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -687,9 +1020,13 @@ def build_markdown_report(
             "",
             "## Summary",
             "",
-            f"- Match score: **{score}/100**",
+            f"- Role Fit Score: **{score}/100**",
+            f"- Eligibility: **{str(eligibility['status']).replace('_', ' ').title()}**",
+            f"- Scoring Confidence: **{str(confidence['level']).title()}**",
             f"- Recommendation: **{recommendation}**",
-            f"- Why: {explain_overall_score(score, recommendation, penalties, red_flags)}",
+            f"- Why: {explain_final_decision(score, recommendation, eligibility, confidence)}",
+            f"- Eligibility reasons: {format_reason_messages(eligibility.get('reasons', []))}",
+            f"- Confidence reasons: {format_inline_list(confidence.get('reasons', []))}",
             "",
             "## Parsed Job Requirements",
             "",
@@ -734,8 +1071,9 @@ def build_markdown_report(
             "## Human Review Notes",
             "",
             "- This report uses weighted keyword matching and simple penalty rules.",
-            "- Required JD terms carry full weight; preferred or plus terms carry partial weight.",
+            "- Required and preferred JD terms use symmetric requirement weights; preferred gaps have less impact.",
             "- Categories the JD does not mention are marked N/A and are not counted against the final score.",
+            "- Eligibility and scoring confidence are separate from the role-fit score and may override the recommendation.",
             "- It should be reviewed by a person before preparing application materials.",
             "- It does not invent experience, skills, degree level, metrics, visa status, or work authorization.",
             "- Confirm the resume source's degree level before relying on education-related statements.",
@@ -750,6 +1088,13 @@ def format_bullets(items: list[str]) -> str:
     if not items:
         return "- None found"
     return "\n".join(f"- {item}" for item in items)
+
+
+def format_reason_messages(reasons: object) -> str:
+    """Format structured eligibility reasons without exposing implementation detail."""
+    if not isinstance(reasons, list) or not reasons:
+        return "None"
+    return "; ".join(str(reason.get("message", "")) for reason in reasons if isinstance(reason, dict))
 
 
 def format_score_breakdown(score_breakdown: list[dict[str, object]]) -> str:
@@ -857,24 +1202,55 @@ def resume_suggestions_for_keywords(
     return suggestions[:5]
 
 
+def score_job_texts(job_text: str, candidate_text: str) -> dict[str, object]:
+    """Run the deterministic scoring pipeline without file or network access."""
+    job_keywords = find_keywords(job_text)
+    resume_keywords = find_keywords(candidate_text)
+    candidate_profile = infer_candidate_experience_profile(candidate_text)
+    parsed_job = parse_job_description(job_text, candidate_text)
+    score_breakdown = calculate_score_breakdown(parsed_job, resume_keywords, candidate_profile)
+    penalties = find_penalties(job_text)
+    score = calculate_match_score(score_breakdown, penalties)
+    eligibility = evaluate_eligibility(job_text, candidate_text, candidate_profile)
+    confidence = calculate_scoring_confidence(
+        job_text,
+        candidate_text,
+        score_breakdown,
+        candidate_profile,
+    )
+    recommendation = final_recommendation(score, eligibility, confidence)
+    return {
+        "score": score,
+        "recommendation": recommendation,
+        "score_breakdown": score_breakdown,
+        "eligibility": eligibility,
+        "confidence": confidence,
+        "candidate_profile": candidate_profile,
+        "parsed_job": parsed_job,
+        "job_keywords": job_keywords,
+        "resume_keywords": resume_keywords,
+        "penalties": penalties,
+    }
+
+
 def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = "") -> dict[str, object]:
     """Return structured, dependency-light fit analysis for UI display.
 
     This helper preserves the original Markdown analyzer contract by sitting
     beside ``analyze_job()`` instead of changing its return value.
     """
-    job_keywords = find_keywords(job_text)
-    resume_keywords = find_keywords(resume_text)
-    parsed_job = parse_job_description(job_text, resume_text)
+    result = score_job_texts(job_text, resume_text)
+    job_keywords = result["job_keywords"]
+    resume_keywords = result["resume_keywords"]
+    parsed_job = result["parsed_job"]
     themes = choose_relevant_themes(job_keywords, resume_keywords)
-    score_breakdown = calculate_score_breakdown(parsed_job, resume_keywords)
+    score_breakdown = result["score_breakdown"]
     matched_keywords, partial_matches, missing_keywords = collect_report_matches(score_breakdown)
-    penalties = find_penalties(job_text)
+    penalties = result["penalties"]
     red_flags = list(parsed_job["red_flags"])
-    score = calculate_match_score(score_breakdown, penalties)
-    score = apply_uk_work_authorization_score_cap(score, job_text)
-    recommendation = recommendation_for_score(score)
-    main_reason = explain_overall_score(score, recommendation, penalties, red_flags)
+    score = result["score"]
+    recommendation = result["recommendation"]
+    main_reason = explain_final_decision(score, recommendation, result["eligibility"], result["confidence"])
 
     matched_strengths = [
         f"Resume source supports requested keyword: {keyword}."
@@ -898,6 +1274,14 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     return {
         "score": score,
         "recommendation": recommendation,
+        "score_breakdown": score_breakdown,
+        "eligibility": result["eligibility"],
+        "confidence": result["confidence"],
+        "candidate_profile": result["candidate_profile"],
+        "parsed_job": parsed_job,
+        "matched_skills": matched_keywords,
+        "partial_matches": partial_matches,
+        "missing_skills": missing_keywords,
         "main_reason": main_reason,
         "main_risk": red_flags[0] if red_flags else (weak_areas[0] if weak_areas else "No major risk detected."),
         "matched_strengths": matched_strengths[:6],
@@ -939,19 +1323,18 @@ def analyze_job(
     resume_text = workspace.resume_source_path.read_text(encoding="utf-8")
     job_text = job_description_path.read_text(encoding="utf-8")
 
-    job_keywords = find_keywords(job_text)
-    resume_keywords = find_keywords(resume_text)
-
-    parsed_job = parse_job_description(job_text, resume_text)
+    result = score_job_texts(job_text, resume_text)
+    job_keywords = result["job_keywords"]
+    resume_keywords = result["resume_keywords"]
+    parsed_job = result["parsed_job"]
     themes = choose_relevant_themes(job_keywords, resume_keywords)
-    score_breakdown = calculate_score_breakdown(parsed_job, resume_keywords)
+    score_breakdown = result["score_breakdown"]
     matched_skills, partial_matches, missing_skills = collect_report_matches(score_breakdown)
-    penalties = find_penalties(job_text)
+    penalties = result["penalties"]
     red_flags = parsed_job["red_flags"]
     resume_evidence = find_resume_evidence(themes)
-    score = calculate_match_score(score_breakdown, penalties)
-    score = apply_uk_work_authorization_score_cap(score, job_text)
-    recommendation = recommendation_for_score(score)
+    score = result["score"]
+    recommendation = result["recommendation"]
 
     report = build_markdown_report(
         job_description_path=job_description_path,
@@ -967,6 +1350,8 @@ def analyze_job(
         resume_evidence=resume_evidence,
         score=score,
         recommendation=recommendation,
+        eligibility=result["eligibility"],
+        confidence=result["confidence"],
     )
     report_path = save_report(job_description_path, report, workspace, package_dir)
     return report, report_path

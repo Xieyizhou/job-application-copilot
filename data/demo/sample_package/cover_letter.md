@@ -1,14 +1,18 @@
-# Demo Cover Letter
+I am interested in the fictional Data Analyst role at Northstar Metrics Studio.
+My entry-level internship and academic projects include Python and SQL analysis,
+data visualization, statistics, documentation, and communicating findings to a
+small project team.
 
-Dear Hiring Team,
+In a fictional community research internship, I cleaned tabular datasets, built
+recurring dashboards, documented quality checks, and presented results to
+non-technical stakeholders. I also built a classification pipeline with Python
+and scikit-learn, evaluated it with cross-validation, and created charts explaining
+the model's performance and limitations.
 
-I am interested in the demo Machine Learning Intern role because it combines
-Python analysis, model evaluation, and clear communication. My sample background
-aligns with the role's emphasis on structured experimentation and practical
-reporting.
+These experiences align with the role's practical analysis and communication
+requirements. I would bring an evidence-focused approach while continuing to learn
+from project review and feedback.
 
-This file is sanitized demo content and should not be sent to an employer.
+Thank you for considering this fictional Demo application.
 
-Sincerely,
-
-Demo Candidate
+This is fictional Demo output and must not be submitted to an employer.

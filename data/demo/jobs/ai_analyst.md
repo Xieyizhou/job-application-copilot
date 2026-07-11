@@ -1,23 +1,29 @@
-# AI Analyst
+# Senior Data Scientist
 
-Company: Example Insight Studio
-Role: AI Analyst
+Company: Summit Forecast Works
+Role: Senior Data Scientist
 Location: Remote
 Source: Demo
-Job URL: https://example.com/demo-ai-analyst
-Match Score: 74
-Recommendation: Maybe Apply
+Job URL: https://example.com/fictional-summit-senior-data-scientist
 Company Confidence: High
 Company Confirmed By User: true
 
-Example Insight Studio is looking for an AI Analyst to turn product and customer
-data into practical recommendations. The role combines exploratory analysis,
-model interpretation, and concise stakeholder updates.
+Summit Forecast Works is a fictional company seeking a Senior Data Scientist to
+lead production analytics projects, set technical direction, and mentor a small
+team. The role owns project planning, model review, stakeholder communication, and
+delivery standards. This sanitized description is included only to demonstrate a
+clear hard-requirement outcome in the public Demo workspace.
 
 Requirements:
-- Python data analysis
-- statistics
-- dashboard or report writing
-- model evaluation basics
+- 5+ years of professional data science experience required
+- senior-level responsibility leading data science projects
+- Python
+- SQL
+- machine learning
+- model evaluation
+- statistics and data analysis
 - stakeholder communication
-- comfort with ambiguous business questions
+
+Candidates must provide evidence of at least five years of professional experience
+and previous senior ownership of delivered projects. Academic projects and an
+entry-level internship do not satisfy this fictional role's experience requirement.

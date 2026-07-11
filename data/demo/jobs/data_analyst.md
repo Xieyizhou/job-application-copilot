@@ -1,22 +1,28 @@
 # Data Analyst
 
-Company: Sample Metrics Co.
+Company: Northstar Metrics Studio
 Role: Data Analyst
-Location: London
+Location: Remote
 Source: Demo
-Job URL: https://example.com/demo-data-analyst
-Match Score: 68
-Recommendation: Maybe Apply
+Job URL: https://example.com/fictional-northstar-data-analyst
 Company Confidence: High
 Company Confirmed By User: true
 
-Sample Metrics Co. needs a Data Analyst to clean datasets, build recurring
-reports, and explain trends to non-technical teams. This sample posting is
-sanitized for public demo use.
+Northstar Metrics Studio is a fictional organization seeking an early-career Data
+Analyst to help a small operations team understand recurring trends. The analyst
+will clean structured datasets, check data quality, build dashboards, and explain
+findings in concise written updates. This is a fictional, sanitized job description
+created only for the public Demo workspace.
 
 Requirements:
-- SQL or structured data querying
-- Python or spreadsheet analysis
+- Python
+- SQL
 - data visualization
-- quality checks and documentation
-- communication with operations teams
+- statistics and data analysis
+- documentation
+- stakeholder communication
+
+The role is designed for a recent graduate or candidate with internship and
+academic project experience. Work is reviewed by a project lead, and no specific
+degree level beyond the stated skills or years of experience is required by this
+fictional posting.

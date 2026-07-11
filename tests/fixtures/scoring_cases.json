@@ -1,0 +1,142 @@
+[
+  {
+    "case_id": "new_grad_ml_good_fit",
+    "description": "Recent graduate applying to a fictional entry-level ML analyst role.",
+    "candidate_text": "Recent graduate with a bachelor's degree. Evidence includes Python, pandas, scikit-learn, SQL, machine learning, model evaluation, data visualization, classification, PCA, communication, teamwork, and documentation.",
+    "job_text": "Fictional Northstar Models seeks an entry-level Machine Learning Analyst. Requirements: Python; pandas; scikit-learn; SQL; machine learning; model evaluation; data visualization; classification; communication; teamwork; new grad applicants welcome.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["minimum_experience"]}
+  },
+  {
+    "case_id": "uav_path_planning_strong_fit",
+    "description": "Fictional UAV algorithm role with direct domain evidence.",
+    "candidate_text": "Junior engineer with a bachelor's degree and internship evidence in Python, UAV systems, robotics, sensor data, thermal data, route planning, documentation, communication, and teamwork.",
+    "job_text": "Fictional Sky Orchard Lab needs a Junior UAV Algorithm Engineer. Required skills include Python, UAV systems, robotics, sensor data, thermal data, route planning, documentation, communication, and teamwork for inspection research.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["seniority_requirement"]}
+  },
+  {
+    "case_id": "econometrics_data_analysis_fit",
+    "description": "Fictional economics data role with strong analytical evidence.",
+    "candidate_text": "Recent graduate with a bachelor's degree. Project evidence includes Python, SQL, pandas, data analysis, econometrics, statistical analysis, causal inference, data visualization, documentation, presentation, and communication.",
+    "job_text": "Fictional Cedar Metrics seeks an Entry-level Data Analyst. Requirements are Python, SQL, pandas, data analysis, econometrics, statistical analysis, causal inference, data visualization, documentation, presentation, and communication.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "unrelated_frontend_weak_fit",
+    "description": "Fictional frontend role has little catalog overlap with a data candidate.",
+    "candidate_text": "Recent graduate with Python, pandas, SQL, machine learning, model evaluation, and data analysis project evidence.",
+    "job_text": "Fictional Pixel Harbor needs a frontend interface specialist. Required work includes presentation, documentation, communication, and teamwork while building browser layouts with unrelated tools and visual design systems.",
+    "expectations": {"eligibility": "passed", "confidence": "medium", "score_min": 0, "score_max": 30, "recommendation_group": "skip", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "senior_ml_five_years",
+    "description": "Senior fictional ML role is ineligible for an explicit new graduate.",
+    "candidate_text": "New graduate with a bachelor's degree and evidence in Python, pandas, scikit-learn, machine learning, model evaluation, SQL, data visualization, communication, and teamwork.",
+    "job_text": "Senior Machine Learning Engineer at Fictional Summit Logic. Required: Python, pandas, scikit-learn, machine learning, model evaluation, SQL, data visualization, communication, teamwork, and 5+ years of professional experience required.",
+    "expectations": {"eligibility": "failed", "confidence": "high", "score_min": 55, "score_max": 90, "recommendation_group": "not_eligible", "required_reason_codes": ["minimum_experience", "seniority_requirement"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "required_three_years",
+    "description": "Three required years fail an explicit new graduate.",
+    "candidate_text": "Recent graduate with a bachelor's degree. Skills include Python, SQL, pandas, data analysis, data visualization, documentation, and communication.",
+    "job_text": "Fictional Lantern Data requires Python, SQL, pandas, data analysis, data visualization, documentation, and communication. Applicants must have 3+ years of professional experience required for this analyst role.",
+    "expectations": {"eligibility": "failed", "confidence": "high", "score_min": 55, "score_max": 90, "recommendation_group": "not_eligible", "required_reason_codes": ["minimum_experience"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "preferred_three_years",
+    "description": "Preferred experience remains a soft fit gap.",
+    "candidate_text": "Recent graduate with a bachelor's degree and evidence in Python, SQL, pandas, data analysis, data visualization, documentation, and communication.",
+    "job_text": "Fictional Lantern Data seeks an analyst. Required: Python, SQL, pandas, data analysis, data visualization, documentation, and communication. Three years of professional experience preferred, but new graduates may apply.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 70, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["minimum_experience"]}
+  },
+  {
+    "case_id": "masters_required_bachelor_candidate",
+    "description": "Required master's degree fails explicit bachelor's-only evidence.",
+    "candidate_text": "Recent graduate whose highest completed education is a bachelor's degree. Evidence includes Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "job_text": "Fictional Academic Signals requires a master's degree required for this analyst role. Technical requirements include Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "expectations": {"eligibility": "failed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "not_eligible", "required_reason_codes": ["graduate_degree"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "masters_preferred",
+    "description": "Preferred master's degree does not gate eligibility.",
+    "candidate_text": "Recent graduate with a bachelor's degree and Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork evidence.",
+    "job_text": "Fictional Academic Signals seeks an analyst. Required skills: Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork. A master's degree is preferred rather than required.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["graduate_degree"]}
+  },
+  {
+    "case_id": "masters_or_equivalent",
+    "description": "Equivalent-experience language requires human review.",
+    "candidate_text": "Recent graduate with a bachelor's degree and Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork evidence.",
+    "job_text": "Fictional Equinox Research requires a master's degree or equivalent practical experience. Work includes Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "expectations": {"eligibility": "manual_review", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "manual_review", "required_reason_codes": ["graduate_degree_equivalent"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "uk_current_right_to_work",
+    "description": "UK current-right-to-work wording is never assumed.",
+    "candidate_text": "Recent graduate with Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork evidence. Work authorization status is not stated.",
+    "job_text": "Fictional Thames Analytics in London requires applicants to currently have the right to work in the UK. Required skills include Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "expectations": {"eligibility": "manual_review", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "manual_review", "required_reason_codes": ["work_authorization"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "sponsorship_manual_review",
+    "description": "Sponsorship language with unknown status requires review.",
+    "candidate_text": "Junior analyst with Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork evidence. No authorization status is provided.",
+    "job_text": "Fictional Harbor Numbers notes that visa sponsorship may be considered after review. Requirements include Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "expectations": {"eligibility": "manual_review", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "manual_review", "required_reason_codes": ["work_authorization"], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "report_to_manager_not_senior",
+    "description": "Incidental manager wording is not a hard seniority constraint.",
+    "candidate_text": "Recent graduate with Python, SQL, pandas, data analysis, data visualization, communication, documentation, teamwork, and presentation evidence.",
+    "job_text": "Fictional Meadow Reports seeks an entry-level analyst who will report to the engineering manager. Requirements include Python, SQL, pandas, data analysis, data visualization, communication, documentation, teamwork, and presentation.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["seniority_requirement"]}
+  },
+  {
+    "case_id": "support_senior_engineers_not_senior",
+    "description": "Supporting senior colleagues does not classify the role as senior.",
+    "candidate_text": "Current student with internship evidence in Python, pandas, machine learning, model evaluation, data visualization, communication, documentation, and teamwork.",
+    "job_text": "Fictional Pebble Robotics seeks a machine learning intern to support senior engineers. Requirements include Python, pandas, machine learning, model evaluation, data visualization, communication, documentation, teamwork, and internship availability.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 65, "score_max": 85, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": ["seniority_requirement"]}
+  },
+  {
+    "case_id": "preferred_skills_only_category",
+    "description": "A fully matched preferred-only technical category earns full category credit.",
+    "candidate_text": "Junior analyst with explicit Python, pandas, SQL, and data visualization project evidence plus communication experience.",
+    "job_text": "Fictional Optional Systems describes general analytical work for carefully reviewed local reports. Nice to have: Python, pandas, SQL, and data visualization. These skills are preferred rather than required for the role.",
+    "expectations": {"eligibility": "passed", "confidence": "medium", "score_min": 95, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "very_short_job",
+    "description": "Very short job text has low scoring confidence.",
+    "candidate_text": "Junior analyst with Python, SQL, pandas, and communication evidence.",
+    "job_text": "Python analyst wanted.",
+    "expectations": {"eligibility": "passed", "confidence": "low", "score_min": 0, "score_max": 100, "recommendation_group": "manual_review", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "ocr_noisy_usable",
+    "description": "OCR-like punctuation noise still yields usable deterministic requirements.",
+    "candidate_text": "Recent graduate with Python, pandas, SQL, machine learning, model evaluation, data visualization, communication, documentation, and teamwork evidence.",
+    "job_text": "Ficti0nal Mosaic Lab analyst r0le. REQUIREMENTS:: Python ;; pandas // SQL ;; machine learning -- model evaluation !! data visualization ;; communication ;; documentation ;; teamwork. Review extracted text manually.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 85, "score_max": 100, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "required_and_preferred_related",
+    "description": "Required and preferred technical terms use different requirement weights.",
+    "candidate_text": "Recent graduate with Python, SQL, data analysis, communication, and teamwork evidence.",
+    "job_text": "Fictional Balanced Metrics requires Python, SQL, data analysis, communication, and teamwork. Preferred additions are pandas and data visualization. The role welcomes new graduate applicants.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 70, "score_max": 95, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "unknown_candidate_level",
+    "description": "Candidate with no explicit career level receives no automatic experience credit.",
+    "candidate_text": "Project portfolio includes Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork. Career stage and years are not stated.",
+    "job_text": "Fictional Open Door Data seeks an entry-level new grad analyst. Requirements include Python, SQL, pandas, data analysis, data visualization, communication, documentation, and teamwork.",
+    "expectations": {"eligibility": "passed", "confidence": "high", "score_min": 60, "score_max": 90, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  },
+  {
+    "case_id": "adjacent_domain_evidence",
+    "description": "UAV evidence partially supports robotics and sensor-data requirements.",
+    "candidate_text": "Junior engineer with Python, UAV, route planning, thermal data, communication, documentation, and teamwork evidence.",
+    "job_text": "Fictional Field Machines requires Python, robotics, sensor data, communication, documentation, and teamwork for a junior inspection algorithm role. Direct robotics deployment experience is desirable.",
+    "expectations": {"eligibility": "passed", "confidence": "medium", "score_min": 55, "score_max": 90, "recommendation_group": "apply", "required_reason_codes": [], "forbidden_reason_codes": []}
+  }
+]

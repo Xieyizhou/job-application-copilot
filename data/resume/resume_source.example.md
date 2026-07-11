@@ -1,54 +1,47 @@
-# Resume Source of Truth
+# Demo Candidate Profile
 
-## Contact
-
-Your Name
-Your City, State or Country
-you@example.com
-https://www.linkedin.com/in/your-profile/
+This profile is fully fictional and exists only for the read-only public Demo workspace.
 
 ## Summary
 
-Briefly describe your target role, strongest technical areas, and the kinds of
-evidence the assistant may safely use in generated materials.
+Entry-level data professional with academic and internship experience using Python,
+SQL, statistics, and data visualization to answer practical questions. Comfortable
+documenting analysis, evaluating models, and presenting findings to project teams.
 
 ## Education
 
-Example University
-Expected or completed graduation date
+Bachelor's degree in Data Science, Fictional Technical College
 
-- Degree, major, concentration, or relevant coursework
+- Coursework included statistics, machine learning, databases, and data visualization.
 
 ## Technical Skills
 
-### Programming and Data
-
 - Python
 - SQL
-- Excel
-
-### Libraries and Tools
-
-- pandas
-- NumPy
+- pandas and NumPy
 - scikit-learn
-- matplotlib
+- data visualization with matplotlib
+- statistics and data analysis
+- machine learning and model evaluation
+- documentation and stakeholder communication
 
 ## Experience
 
-### Example Role, Example Organization
+### Data Analysis Intern, Fictional Community Research Lab
 
-Location
-Dates
-
-- Describe only factual work you are comfortable reusing in applications.
-- Include measurable outcomes only when they are accurate and verifiable.
+- Cleaned tabular datasets with Python, pandas, and SQL for an entry-level internship.
+- Built recurring dashboards and data visualizations for a small project team.
+- Documented quality checks and presented findings to non-technical stakeholders.
 
 ## Projects
 
-### Example Machine Learning Project
+### Classification Pipeline
 
-Python, pandas, scikit-learn
+- Built a classification pipeline with Python and scikit-learn.
+- Evaluated models with cross-validation and summarized model evaluation results.
+- Created charts explaining model performance and limitations.
 
-- Describe the problem, your contribution, methods used, and evaluation.
-- Avoid adding skills, tools, or metrics that are not true.
+### Public Data Dashboard
+
+- Analyzed a fictional public dataset using SQL, Python, and statistics.
+- Created a dashboard and concise written report for an academic project.

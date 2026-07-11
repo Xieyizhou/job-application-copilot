@@ -49,7 +49,7 @@ TRACKING_QUERY_PARAMETERS = {
 
 def parse_analysis_summary(report_text: str) -> tuple[int, str]:
     """Extract match score and recommendation from the analysis report."""
-    score_match = re.search(r"Match score:\s+\*\*(\d+)/100\*\*", report_text)
+    score_match = re.search(r"(?:Role Fit Score|Match score):\s+\*\*(\d+)/100\*\*", report_text)
     recommendation_match = re.search(r"Recommendation:\s+\*\*(.+?)\*\*", report_text)
 
     if not score_match:
