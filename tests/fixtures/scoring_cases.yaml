@@ -1,0 +1,801 @@
+- id: data-analyst-strong-direct
+  role_family: Data Analyst
+  candidate_text: >-
+    Junior data analyst with 2 years of professional experience. Bachelor's degree.
+    Python, pandas, SQL, data analysis, data visualization, statistical analysis,
+    communication, documentation, teamwork, and presentation experience.
+  job_text: >-
+    Data Analyst. Required skills include Python, pandas, SQL, data analysis,
+    data visualization, statistical analysis, communication, documentation,
+    teamwork, and presentation. This junior role supports a fictional retail
+    dataset and prepares reproducible weekly reports for internal reviewers.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Broad direct evidence supports every material requirement in an entry-level role.
+
+- id: data-analyst-required-and-preferred
+  role_family: Data Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Projects use Python, SQL, data
+    analysis, visualization, communication, and documentation.
+  job_text: |-
+    Entry-level Data Analyst for a fictional subscription dataset.
+    Required: Python, SQL, data analysis, communication, and documentation.
+    Preferred: pandas, data visualization, presentation, and teamwork.
+    The analyst will explain recurring trends to an internal planning group.
+  expected:
+    score_min: 82
+    score_max: 90
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: All required evidence is present, while several preferred items remain unproven.
+
+- id: data-analyst-missing-sql-pandas
+  role_family: Data Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Coursework and projects cover
+    data analysis, data visualization, communication, documentation, and teamwork.
+  job_text: >-
+    Entry-level Data Analyst. The role requires Python, pandas, SQL, data analysis,
+    data visualization, communication, documentation, and teamwork to maintain a
+    fictional operations report and explain data-quality issues to reviewers.
+  expected:
+    score_min: 50
+    score_max: 68
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: Transferable analysis evidence is useful, but several central technical requirements are missing.
+
+- id: data-analyst-low-fit-passed
+  role_family: Data Analyst
+  candidate_text: >-
+    Junior coordinator with 1 year of professional experience. Communication,
+    teamwork, documentation, and presentation are the only stated relevant skills.
+  job_text: >-
+    Junior Data Analyst required to use Python, pandas, SQL, statistical analysis,
+    data analysis, data visualization, communication, documentation, and teamwork
+    on a fictional inventory dataset with monthly quality checks.
+  expected:
+    score_min: 25
+    score_max: 49
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: Eligibility passes, but the candidate lacks most of the role's technical evidence.
+
+- id: data-analyst-one-of-one
+  role_family: Data Analyst
+  candidate_text: Python project portfolio.
+  job_text: Python analyst wanted.
+  expected:
+    score_min: 95
+    score_max: 100
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: A one-of-one match is numerically complete but too narrow for a confident recommendation.
+
+- id: data-analyst-authorization-review
+  role_family: Data Analyst
+  candidate_text: >-
+    Junior analyst with 2 years of professional experience and a bachelor's degree.
+    Python, SQL, pandas, data analysis, visualization, communication, and documentation.
+  job_text: >-
+    Data Analyst requiring Python, SQL, pandas, data analysis, data visualization,
+    communication, and documentation. Visa sponsorship and work authorization will
+    be reviewed individually before work begins on a fictional customer dataset.
+  expected:
+    score_min: 85
+    score_max: 100
+    eligibility: manual_review
+    confidence: medium
+    recommendation: Manual Review
+  reason: Role evidence is strong, but authorization language requires a separate human decision.
+
+- id: data-analyst-years-mismatch
+  role_family: Data Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree and internship experience. Python,
+    SQL, pandas, data analysis, data visualization, communication, documentation,
+    teamwork, and presentation.
+  job_text: |-
+    Data Analyst.
+    Minimum 4+ years of professional experience required.
+    Required: Python, SQL, pandas, data analysis, data visualization, communication,
+    documentation, teamwork, and presentation for a fictional planning dataset.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: Strong skill overlap cannot override an explicit minimum-years mismatch.
+
+- id: data-analyst-incomplete-description
+  role_family: Data Analyst
+  candidate_text: >-
+    Junior analyst with Python, SQL, pandas, data analysis, communication, and documentation.
+  job_text: >-
+    Data analyst opening. Help with reports and other duties for a fictional internal team.
+  expected:
+    score_min: 0
+    score_max: 20
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: The description supplies too little scored requirement evidence for a reliable fit judgment.
+
+- id: ai-ml-analyst-strong-direct
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Junior AI analyst with 2 years of professional experience and a master's degree.
+    Python, pandas, scikit-learn, SQL, machine learning, model evaluation,
+    classification, feature engineering, communication, documentation, and teamwork.
+  job_text: >-
+    AI and ML Analyst requiring Python, pandas, scikit-learn, SQL, machine learning,
+    model evaluation, classification, feature engineering, communication,
+    documentation, and teamwork for a fictional product experiment archive.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: The candidate provides direct evidence across technical, project, and collaboration categories.
+
+- id: ai-ml-analyst-preferred-project-skills
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, pandas, SQL, machine learning,
+    model evaluation, communication, documentation, and teamwork projects.
+  job_text: |-
+    Entry-level AI Analyst using a fictional evaluation dataset.
+    Required: Python, pandas, SQL, machine learning, model evaluation, communication,
+    documentation, and teamwork.
+    Preferred: classification, PCA, and feature engineering.
+  expected:
+    score_min: 85
+    score_max: 95
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Required evidence is comprehensive; absent preferred project methods should have limited impact.
+
+- id: ai-ml-analyst-mixed-evidence
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, SQL, data analysis,
+    classification, communication, and documentation projects.
+  job_text: >-
+    Entry-level AI Analyst requiring Python, pandas, SQL, machine learning, model
+    evaluation, classification, feature engineering, communication, documentation,
+    and teamwork for a fictional model-monitoring exercise.
+  expected:
+    score_min: 50
+    score_max: 64
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: Some foundation and project evidence transfers, but core ML workflow gaps remain.
+
+- id: ai-ml-analyst-low-fit
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Junior reporting analyst with SQL, data visualization, presentation, and communication.
+  job_text: >-
+    AI Analyst requiring Python, pandas, scikit-learn, machine learning, model
+    evaluation, classification, PCA, feature engineering, documentation, teamwork,
+    and communication for a fictional research backlog.
+  expected:
+    score_min: 0
+    score_max: 15
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: Reporting strengths do not compensate for missing required ML implementation evidence.
+
+- id: ai-ml-analyst-empty-candidate-evidence
+  role_family: AI / ML Analyst
+  candidate_text: ""
+  job_text: >-
+    Entry-level AI Analyst requiring Python, pandas, SQL, machine learning, model
+    evaluation, communication, documentation, and teamwork for a fictional benchmark study.
+  expected:
+    score_min: 0
+    score_max: 5
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: A complete-looking job description cannot be scored confidently without candidate evidence.
+
+- id: ai-ml-analyst-masters-required
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Junior analyst with 2 years of professional experience and a bachelor's degree.
+    Python, pandas, SQL, machine learning, model evaluation, communication, and documentation.
+  job_text: |-
+    AI Analyst.
+    Master's degree required.
+    Required: Python, pandas, SQL, machine learning, model evaluation, communication,
+    and documentation for a fictional forecasting dataset.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: failed
+    confidence: medium
+    recommendation: Skip / Not Eligible
+  reason: Direct skill fit remains separate from an explicit unmet graduate-degree requirement.
+
+- id: ai-ml-analyst-equivalent-experience
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Mid-level analyst with 4 years of professional experience and a bachelor's degree.
+    Python, SQL, machine learning, model evaluation, communication, and documentation.
+  job_text: |-
+    AI Analyst for a fictional experimentation team.
+    Master's degree required or equivalent professional experience.
+    Required: Python, SQL, machine learning, model evaluation, communication, and documentation.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: manual_review
+    confidence: medium
+    recommendation: Manual Review
+  reason: Equivalent-experience wording prevents an automatic degree failure but needs human confirmation.
+
+- id: ai-ml-analyst-high-score-auth-fail
+  role_family: AI / ML Analyst
+  candidate_text: >-
+    Junior AI analyst with 2 years of professional experience. Python, pandas, SQL,
+    machine learning, model evaluation, communication, documentation, and teamwork.
+    Candidate requires visa sponsorship.
+  job_text: >-
+    AI Analyst requiring Python, pandas, SQL, machine learning, model evaluation,
+    communication, documentation, and teamwork. Applicants must currently have the
+    right to work in the UK; no visa sponsorship is available for this fictional role.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: An explicit authorization incompatibility must gate an otherwise excellent fit.
+
+- id: mle-production-ready
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Mid-level engineer with 4 years of professional experience and a master's degree.
+    Python, pandas, scikit-learn, SQL, machine learning, model evaluation, feature
+    engineering, classification, communication, documentation, and teamwork.
+  job_text: >-
+    Machine Learning Engineer requiring Python, pandas, scikit-learn, SQL, machine
+    learning, model evaluation, feature engineering, classification, communication,
+    documentation, and teamwork for a fictional batch-scoring service.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Direct evidence spans all recognized requirements with adequate experience context.
+
+- id: mle-new-grad-senior-role
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, pandas, scikit-learn, SQL,
+    machine learning, model evaluation, feature engineering, communication, and documentation.
+  job_text: |-
+    Senior Machine Learning Engineer.
+    Required: Python, pandas, scikit-learn, SQL, machine learning, model evaluation,
+    feature engineering, communication, and documentation for a fictional platform.
+  expected:
+    score_min: 75
+    score_max: 95
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: A senior hard constraint outweighs strong skills from a new-graduate profile.
+
+- id: mle-unknown-minimum-years
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Engineer portfolio with Python, scikit-learn, SQL, machine learning, model
+    evaluation, feature engineering, communication, and documentation; years are not stated.
+  job_text: |-
+    Machine Learning Engineer.
+    Minimum 3+ years of professional experience required.
+    Required: Python, scikit-learn, SQL, machine learning, model evaluation, feature
+    engineering, communication, and documentation for a fictional service.
+  expected:
+    score_min: 70
+    score_max: 85
+    eligibility: manual_review
+    confidence: high
+    recommendation: Manual Review
+  reason: The skills fit, but missing years evidence cannot establish the explicit minimum.
+
+- id: mle-preferred-ml-stack
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Junior Python engineer with 2 years of professional experience. Python, SQL,
+    documentation, teamwork, communication, and data analysis.
+  job_text: |-
+    Junior Python and Machine Learning Engineer for a fictional internal tool.
+    Required: Python, SQL, documentation, teamwork, and communication.
+    Preferred: pandas, scikit-learn, machine learning, model evaluation, and feature engineering.
+  expected:
+    score_min: 58
+    score_max: 70
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: Core engineering requirements are supported, while the preferred ML stack is incomplete.
+
+- id: mle-missing-core-stack
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Junior analyst with SQL, data visualization, communication, presentation, and documentation.
+  job_text: >-
+    Machine Learning Engineer requiring Python, pandas, scikit-learn, SQL, machine
+    learning, model evaluation, feature engineering, classification, communication,
+    documentation, and teamwork for a fictional scoring pipeline.
+  expected:
+    score_min: 20
+    score_max: 45
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: The candidate lacks most of the required programming and ML stack.
+
+- id: mle-short-description
+  role_family: Machine Learning Engineer
+  candidate_text: Python and machine learning projects.
+  job_text: Python machine learning engineer.
+  expected:
+    score_min: 95
+    score_max: 100
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: Two matching terms in a very short description are insufficient for an Apply decision.
+
+- id: mle-authorization-confirmed
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Junior engineer with 2 years of professional experience. Authorized to work in
+    the UK. Python, pandas, SQL, machine learning, model evaluation, feature
+    engineering, communication, documentation, and teamwork.
+  job_text: >-
+    Machine Learning Engineer requiring Python, pandas, SQL, machine learning, model
+    evaluation, feature engineering, communication, documentation, and teamwork.
+    Applicants must have the right to work in the UK for this fictional role.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Explicit compatible authorization and broad skill evidence support applying.
+
+- id: mle-moderate-project-fit
+  role_family: Machine Learning Engineer
+  candidate_text: >-
+    Junior engineer with Python, SQL, machine learning, classification, communication,
+    and documentation projects.
+  job_text: >-
+    Junior Machine Learning Engineer requiring Python, pandas, scikit-learn, SQL,
+    machine learning, model evaluation, classification, feature engineering,
+    communication, documentation, and teamwork for a fictional prototype.
+  expected:
+    score_min: 50
+    score_max: 64
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: Meaningful project overlap exists, but several required implementation skills are absent.
+
+- id: python-software-strong
+  role_family: Python / Software
+  candidate_text: >-
+    Junior software developer with 2 years of professional experience and a bachelor's
+    degree. Python, SQL, pandas, data analysis, documentation, communication, teamwork,
+    presentation, and feature engineering.
+  job_text: >-
+    Junior Python Software Developer requiring Python, SQL, pandas, data analysis,
+    documentation, communication, teamwork, presentation, and feature engineering
+    to maintain a fictional internal reporting utility and its tests.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: The recognized technical and collaboration requirements all have direct support.
+
+- id: python-software-balanced
+  role_family: Python / Software
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, SQL, data analysis,
+    documentation, communication, and teamwork projects.
+  job_text: >-
+    Entry-level Python Developer requiring Python, SQL, pandas, data analysis,
+    documentation, communication, teamwork, and presentation for a fictional
+    reporting utility used by an internal operations team.
+  expected:
+    score_min: 78
+    score_max: 86
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Most central requirements are supported, with two clear but non-gating gaps.
+
+- id: python-software-transferable
+  role_family: Python / Software
+  candidate_text: >-
+    Recent graduate with Python, data analysis, communication, and documentation projects.
+  job_text: >-
+    Entry-level Python Developer requiring Python, SQL, pandas, data analysis,
+    feature engineering, communication, documentation, teamwork, and presentation
+    for a fictional quality-control utility.
+  expected:
+    score_min: 50
+    score_max: 64
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: A usable foundation is present, but breadth is below the role's stated needs.
+
+- id: python-software-low-fit
+  role_family: Python / Software
+  candidate_text: >-
+    Junior coordinator with communication, presentation, and teamwork experience.
+  job_text: >-
+    Python Developer requiring Python, SQL, pandas, data analysis, feature engineering,
+    classification, documentation, communication, and teamwork to maintain a fictional
+    data-processing utility and technical runbooks.
+  expected:
+    score_min: 0
+    score_max: 20
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: General collaboration evidence does not establish the required technical capability.
+
+- id: python-software-tiny-jd
+  role_family: Python / Software
+  candidate_text: Python, SQL, and documentation projects.
+  job_text: Python and SQL required.
+  expected:
+    score_min: 95
+    score_max: 100
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: A perfect match on two extracted terms is still insufficient evidence.
+
+- id: python-software-no-candidate-source
+  role_family: Python / Software
+  candidate_text: ""
+  job_text: >-
+    Junior Python Developer requiring Python, SQL, pandas, data analysis,
+    documentation, communication, teamwork, and presentation for a fictional
+    maintenance and reporting project.
+  expected:
+    score_min: 0
+    score_max: 5
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: Missing candidate evidence requires review rather than a confident low-priority label.
+
+- id: python-software-senior-mismatch
+  role_family: Python / Software
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, SQL, pandas, data analysis,
+    documentation, communication, teamwork, and presentation.
+  job_text: |-
+    Senior Python Engineer.
+    Required: Python, SQL, pandas, data analysis, documentation, communication,
+    teamwork, and presentation for a fictional internal software platform.
+  expected:
+    score_min: 75
+    score_max: 95
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: Strong term overlap does not satisfy an explicitly senior role.
+
+- id: python-software-auth-incompatible
+  role_family: Python / Software
+  candidate_text: >-
+    Junior developer with Python, SQL, pandas, documentation, communication, and
+    teamwork. Candidate requires visa sponsorship.
+  job_text: >-
+    Python Developer requiring Python, SQL, pandas, documentation, communication,
+    and teamwork. Applicants must be authorized to work in the UK and no visa
+    sponsorship is available for this fictional position.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: failed
+    confidence: medium
+    recommendation: Skip / Not Eligible
+  reason: Explicitly incompatible work authorization is a hard gate independent of score.
+
+- id: uav-robotics-strong-direct
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Junior robotics engineer with 2 years of professional experience. Python, UAV,
+    robotics, sensor data, thermal data, route planning, machine learning,
+    communication, documentation, teamwork, and presentation.
+  job_text: >-
+    Junior UAV Robotics Analyst requiring Python, UAV, robotics, sensor data,
+    thermal data, route planning, machine learning, communication, documentation,
+    teamwork, and presentation for a fictional inspection simulation.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Direct domain, technical, and collaboration evidence covers the complete role profile.
+
+- id: uav-robotics-partial-robotics
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, UAV, route planning,
+    thermal data, communication, documentation, and teamwork projects.
+  job_text: >-
+    Entry-level Robotics Analyst requiring Python, robotics, sensor data, route
+    planning, communication, documentation, and teamwork for a fictional mobile
+    inspection prototype with repeatable test routes.
+  expected:
+    score_min: 84
+    score_max: 95
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: UAV and route-planning work is adjacent to robotics and sensor work, but not fully direct.
+
+- id: uav-robotics-partial-sensor
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Junior UAV analyst with Python, UAV, thermal data, data analysis,
+    communication, documentation, and presentation experience.
+  job_text: >-
+    Junior UAV Data Analyst requiring Python, UAV, sensor data, thermal data,
+    data analysis, statistical analysis, communication, documentation, teamwork,
+    and presentation for a fictional inspection dataset.
+  expected:
+    score_min: 80
+    score_max: 90
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Thermal and UAV evidence partially supports sensor work while other gaps remain visible.
+
+- id: uav-robotics-missing-domain
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Junior data analyst with Python, SQL, pandas, data analysis, communication,
+    documentation, teamwork, and presentation.
+  job_text: >-
+    UAV Robotics Analyst requiring Python, UAV, robotics, sensor data, thermal data,
+    route planning, machine learning, communication, documentation, and teamwork
+    for a fictional autonomous inspection exercise.
+  expected:
+    score_min: 35
+    score_max: 49
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: General analysis strengths do not replace the central UAV and robotics domain requirements.
+
+- id: uav-robotics-short
+  role_family: UAV / Robotics
+  candidate_text: UAV route planning project.
+  job_text: UAV route planning role.
+  expected:
+    score_min: 95
+    score_max: 100
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: Two direct domain terms cannot support a high-confidence perfect fit.
+
+- id: uav-robotics-authorization-review
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Junior engineer with Python, UAV, robotics, sensor data, route planning,
+    communication, documentation, and teamwork.
+  job_text: >-
+    UAV Robotics Engineer requiring Python, UAV, robotics, sensor data, route
+    planning, communication, documentation, and teamwork. Work authorization and
+    possible visa sponsorship require manual confirmation for this fictional role.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: manual_review
+    confidence: high
+    recommendation: Manual Review
+  reason: Fit is strong, but the authorization condition is unresolved.
+
+- id: uav-robotics-senior-new-grad
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Python, UAV, robotics, sensor data,
+    route planning, communication, documentation, and teamwork.
+  job_text: |-
+    Principal Robotics Engineer.
+    Required: Python, UAV, robotics, sensor data, route planning, communication,
+    documentation, and teamwork for a fictional autonomy research platform.
+  expected:
+    score_min: 75
+    score_max: 95
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: A principal-level requirement is incompatible with explicit new-graduate evidence.
+
+- id: uav-robotics-moderate-fit
+  role_family: UAV / Robotics
+  candidate_text: >-
+    Junior engineer with Python, UAV, route planning, data analysis,
+    communication, and documentation projects.
+  job_text: >-
+    Junior Robotics Analyst requiring Python, robotics, sensor data, route planning,
+    data analysis, statistical analysis, communication, documentation, teamwork,
+    and presentation for a fictional field-test archive.
+  expected:
+    score_min: 78
+    score_max: 86
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: Adjacent domain work and transferable analysis evidence justify consideration, with notable gaps.
+
+- id: quant-analyst-strong-direct
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Junior quantitative analyst with 2 years of professional experience and a master's
+    degree. Python, SQL, R programming, Excel, data analysis, econometrics,
+    statistical analysis, causal inference, communication, presentation, and documentation.
+  job_text: >-
+    Quantitative Analyst requiring Python, SQL, R programming, Excel, data analysis,
+    econometrics, statistical analysis, causal inference, communication, presentation,
+    and documentation for a fictional policy simulation dataset.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: passed
+    confidence: high
+    recommendation: Apply
+  reason: The candidate directly supports the technical, quantitative, and communication requirements.
+
+- id: business-analyst-required-preferred
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Recent graduate with a bachelor's degree. Business analysis, requirements
+    gathering, stakeholder management, process improvement, SQL, Excel, data
+    analysis, data visualization, communication, presentation, and documentation projects.
+  job_text: |-
+    Entry-level Business Analyst for a fictional service dataset.
+    Required: business analysis, requirements gathering, stakeholder management,
+    process improvement, SQL, Excel, data analysis, communication, presentation,
+    and documentation.
+    Preferred: Python, pandas, statistical analysis, and teamwork.
+  expected:
+    score_min: 65
+    score_max: 75
+    eligibility: passed
+    confidence: high
+    recommendation: Apply / Maybe Apply
+  reason: Required business-analysis evidence is direct and preferred technical breadth is incomplete.
+
+- id: quant-analyst-mixed
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Recent graduate with SQL, Excel, data analysis, statistical analysis,
+    communication, and documentation projects.
+  job_text: >-
+    Entry-level Quantitative Analyst requiring Python, SQL, R programming, Excel,
+    data analysis, econometrics, statistical analysis, causal inference,
+    communication, presentation, and documentation for a fictional market exercise.
+  expected:
+    score_min: 50
+    score_max: 64
+    eligibility: passed
+    confidence: high
+    recommendation: Maybe Apply
+  reason: Several quantitative foundations match, while programming and econometric gaps are material.
+
+- id: business-analyst-low-fit-passed
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Junior coordinator with Excel, communication, teamwork, and presentation experience.
+  job_text: >-
+    Quantitative Business Analyst requiring Python, SQL, R programming, data analysis,
+    econometrics, statistical analysis, causal inference, communication,
+    documentation, and presentation for a fictional planning model.
+  expected:
+    score_min: 0
+    score_max: 20
+    eligibility: passed
+    confidence: high
+    recommendation: Skip or Low Priority
+  reason: The candidate passes eligibility but lacks most quantitative and programming requirements.
+
+- id: quant-analyst-phd-required
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Mid-level analyst with 4 years of professional experience and a master's degree.
+    Python, SQL, R programming, econometrics, statistical analysis, causal inference,
+    communication, presentation, and documentation.
+  job_text: |-
+    Quantitative Analyst.
+    PhD required.
+    Required: Python, SQL, R programming, econometrics, statistical analysis,
+    causal inference, communication, presentation, and documentation for a fictional study.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: An explicit PhD gate is unmet even though role-fit evidence is excellent.
+
+- id: quant-analyst-phd-equivalent
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Senior quantitative analyst with 7 years of professional experience and a master's
+    degree. Python, SQL, econometrics, statistical analysis, causal inference,
+    communication, presentation, and documentation.
+  job_text: |-
+    Quantitative Analyst for a fictional research unit.
+    PhD required or equivalent professional experience.
+    Required: Python, SQL, econometrics, statistical analysis, causal inference,
+    communication, presentation, and documentation.
+  expected:
+    score_min: 90
+    score_max: 100
+    eligibility: manual_review
+    confidence: high
+    recommendation: Manual Review
+  reason: Extensive experience may be equivalent, but deterministic text matching should not decide equivalence.
+
+- id: business-analyst-insufficient-jd
+  role_family: Business / Quantitative Analyst
+  candidate_text: SQL, Excel, communication, and data analysis portfolio.
+  job_text: Business analyst for reports.
+  expected:
+    score_min: 0
+    score_max: 20
+    eligibility: passed
+    confidence: low
+    recommendation: Manual Review
+  reason: The job text does not expose enough recognized requirements to interpret the fit score.
+
+- id: quant-analyst-minimum-years-high-fit
+  role_family: Business / Quantitative Analyst
+  candidate_text: >-
+    Junior quantitative analyst with 2 years of professional experience and a master's
+    degree. Python, SQL, R programming, econometrics, statistical analysis,
+    causal inference, communication, presentation, and documentation.
+  job_text: |-
+    Quantitative Analyst.
+    At least 5 years of professional experience required.
+    Required: Python, SQL, R programming, econometrics, statistical analysis,
+    causal inference, communication, presentation, and documentation for a fictional model.
+  expected:
+    score_min: 75
+    score_max: 95
+    eligibility: failed
+    confidence: high
+    recommendation: Skip / Not Eligible
+  reason: Excellent skill coverage must not hide the explicit three-year experience shortfall.
