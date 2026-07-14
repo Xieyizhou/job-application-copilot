@@ -16,6 +16,7 @@ from analyze_job import (  # noqa: E402
     calculate_match_score,
     calculate_score_breakdown,
     evaluate_eligibility,
+    find_keywords,
     infer_candidate_experience_profile,
     parse_job_description,
     score_job_texts,
@@ -230,6 +231,57 @@ class ScoringInvariantTests(unittest.TestCase):
 
     def test_direct_match_strength_constant_is_full(self) -> None:
         self.assertEqual(DIRECT_MATCH_STRENGTH, 1.0)
+
+    def test_business_analysis_requirements_are_direct_matches(self) -> None:
+        candidate = (
+            "Business analysis, requirements gathering, stakeholder management, "
+            "process improvement, Excel, presentation, and communication experience."
+        )
+        job = (
+            "Business Analyst requiring business analysis, requirements gathering, "
+            "stakeholder management, process improvement, Excel, presentation, and communication."
+        )
+        result = score_job_texts(job, candidate)
+        matched = {
+            keyword
+            for category in result["score_breakdown"]
+            for keyword in category["matched"]
+        }
+        self.assertTrue(
+            {
+                "business analysis",
+                "requirements gathering",
+                "stakeholder management",
+                "process improvement",
+                "Excel",
+                "presentation",
+                "communication",
+            }.issubset(matched)
+        )
+
+    def test_broad_business_and_management_words_do_not_match_ba_skills(self) -> None:
+        keywords = set(
+            find_keywords("Worked in a business environment and reported to management.")
+        )
+        self.assertTrue(
+            {
+                "business analysis",
+                "requirements gathering",
+                "stakeholder management",
+                "process improvement",
+            }.isdisjoint(keywords)
+        )
+
+    def test_adding_business_analysis_direct_match_never_reduces_score(self) -> None:
+        job = (
+            "Business Analyst requiring SQL, Excel, business analysis, requirements "
+            "gathering, stakeholder management, process improvement, communication, "
+            "presentation, and documentation."
+        )
+        candidate = "SQL Excel communication presentation documentation"
+        before = score_job_texts(job, candidate)["score"]
+        after = score_job_texts(job, candidate + " business analysis")["score"]
+        self.assertGreaterEqual(after, before)
 
 
 if __name__ == "__main__":

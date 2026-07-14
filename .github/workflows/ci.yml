@@ -19,8 +19,10 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python files
-        run: python -m py_compile main.py scripts/privacy_audit.py src/*.py
+        run: python -m py_compile main.py scripts/privacy_audit.py scripts/evaluate_scoring.py src/*.py
       - name: Run tests
         run: python -m unittest discover -s tests -v
+      - name: Run scoring benchmark
+        run: python scripts/evaluate_scoring.py
       - name: Run privacy audit
         run: python scripts/privacy_audit.py
