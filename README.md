@@ -374,8 +374,6 @@ available in:
 
 [`docs/USAGE.md`](docs/USAGE.md)
 
-...
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
