@@ -17,11 +17,28 @@ match is documented adjacent evidence, such as UAV route-planning work for a
 robotics requirement. Partial evidence receives less credit and is labeled; it is
 never reported as a direct claim.
 
-Scores use active-category normalization. Only scoring categories mentioned by
-the job description enter the denominator. Categories absent from the description
-are marked not applicable rather than treated as candidate gaps. Required and
-preferred weights affect terms within each active category; active categories
-retain their configured category weight.
+The scorer first calculates **Observed Requirement Coverage** using active-category
+normalization. Only scoring categories mentioned by the job description enter the
+coverage denominator. Categories absent from the description are marked not
+applicable rather than treated as candidate gaps. Required and preferred weights
+affect terms within each active category; active categories retain their configured
+category weight.
+
+Observed coverage is not automatically the final Role Fit. When fewer than four
+reliable requirement signals are available, high coverage is calibrated toward a
+neutral 50-point prior. The evidence factor is `reliable signals / 4`; a 1-of-1
+match therefore has 100% observed coverage but a 62/100 provisional Role Fit.
+Calibration never increases a weak observed score. Saved API descriptions that
+are short or visibly truncated are limited to at most three reliable signals even
+if several keywords happen to appear in the snippet.
+
+For saved jobs, the explicit role title contributes one separate **role-focus
+alignment** signal. Specialized titles such as physics, audio engineering, data
+migration, or data entry require candidate evidence in that core domain; a generic
+machine-learning overlap cannot by itself produce the same fit as a matching ML
+or data role. Role-focus alignment may reduce a superficial coverage score and may
+add one reliable signal, but it never raises the score above observed requirement
+coverage or fills an explicitly missing requirement.
 
 ## Eligibility, Confidence, and Recommendation
 
@@ -35,9 +52,10 @@ Role Fit a second time; the Recommendation gate prevents an unsafe Apply result.
 Confidence describes evidence coverage, not candidate quality. It reflects job
 text completeness, the number of recognized requirements, and whether usable
 candidate evidence exists. A very short description or a narrow 1-of-1 match is
-low confidence even when its numerical match is 100. The dashboard labels such a
-number as a **Provisional Role Fit** so users can inspect coverage of the extracted
-terms without mistaking it for a reliable recommendation. Low confidence still
+low confidence even when its observed coverage is 100%. The dashboard labels the
+calibrated number as a **Provisional Role Fit** and shows observed coverage
+separately, so users can inspect the extracted terms without mistaking a narrow
+match for a reliable recommendation. Low confidence still
 forces **Manual Review** until the full job description provides enough evidence.
 
 The final Recommendation applies gates in this order:

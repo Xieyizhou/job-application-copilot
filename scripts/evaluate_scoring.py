@@ -122,7 +122,7 @@ def _rate(agreed: int, total: int) -> str:
 def terminal_report(summary: dict[str, Any]) -> str:
     """Render a concise plain-text report for local runs and CI logs."""
     lines = [
-        "Scoring Benchmark and Calibration V1",
+        "Scoring Benchmark and Calibration V2",
         "=" * 36,
         f"Total cases: {summary['total']}",
         f"Score-range agreement: {_rate(summary['agreements']['score'], summary['total'])}",
@@ -155,7 +155,7 @@ def terminal_report(summary: dict[str, Any]) -> str:
 def markdown_report(summary: dict[str, Any]) -> str:
     """Render a stable Markdown report with no timestamp or personal paths."""
     lines = [
-        "# Scoring Benchmark and Calibration V1",
+        "# Scoring Benchmark and Calibration V2",
         "",
         f"- Total cases: **{summary['total']}**",
         f"- Score-range agreement: **{_rate(summary['agreements']['score'], summary['total'])}**",

@@ -111,7 +111,9 @@ class ScoringBenchmarkRegressionTests(unittest.TestCase):
 
     def test_one_of_one_match_is_not_a_high_confidence_perfect_fit(self) -> None:
         result = score_job_texts("Python analyst wanted.", "Python project portfolio.")
-        self.assertEqual(result["score"], 100)
+        self.assertEqual(result["coverage_score"], 100)
+        self.assertEqual(result["score"], 62)
+        self.assertTrue(result["score_calibration"]["applied"])
         self.assertEqual(result["confidence"]["active_requirement_count"], 1)
         self.assertEqual(result["confidence"]["level"], "low")
         self.assertEqual(result["recommendation"], "Manual Review")

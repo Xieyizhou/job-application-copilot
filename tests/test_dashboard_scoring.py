@@ -47,15 +47,17 @@ class CanonicalDashboardAnalysisTests(unittest.TestCase):
     def test_dashboard_uses_full_analyzer_not_lightweight_score(self) -> None:
         job = analyzed_job("Machine learning")
         self.assertEqual(dashboard.score_job_for_dashboard("Machine learning"), 57)
-        self.assertEqual(job["score"], 100)
+        self.assertEqual(job["score"], 62)
+        self.assertEqual(job["analysis_result"]["coverage_score"], 100)
         self.assertEqual(job["recommendation"], "Manual Review")
         self.assertEqual(job["confidence"]["level"], "low")
 
-    def test_low_confidence_hides_primary_numeric_fit(self) -> None:
+    def test_low_confidence_labels_numeric_fit_as_provisional(self) -> None:
         presentation = dashboard.build_fit_presentation(analyzed_job("Machine learning"))
-        self.assertEqual(presentation["role_fit"], "Insufficient evidence")
+        self.assertEqual(presentation["role_fit"], "Provisional 62/100")
         self.assertIn("Low confidence", presentation["card_status"])
-        self.assertNotIn("100/100", presentation["card_status"])
+        self.assertIn("Provisional 62/100", presentation["card_status"])
+        self.assertEqual(presentation["recommendation"], "Manual Review")
         self.assertEqual(presentation["coverage_score"], 100)
         self.assertEqual(presentation["terms"]["active_requirement_count"], 1)
         self.assertEqual(presentation["terms"]["matched_requirement_count"], 1)
@@ -241,6 +243,31 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
             dashboard.analyze_job_for_dashboard(job, "Python", "Python", use_cache=True)
             dashboard.analyze_job_for_dashboard(job, "Python and SQL", "Python", use_cache=True)
         self.assertEqual(analyzer.call_count, 2)
+
+
+class DashboardActionGuidanceTests(unittest.TestCase):
+    def test_tracker_actions_change_with_pipeline_stage(self) -> None:
+        self.assertIn("Review fit", dashboard.tracker_next_action({"status": "saved"}))
+        self.assertIn("apply manually", dashboard.tracker_next_action({"status": "ready"}))
+        self.assertIn("Prepare role-specific", dashboard.tracker_next_action({"status": "interview"}))
+
+    def test_old_applied_role_is_flagged_for_follow_up(self) -> None:
+        row = {"status": "applied", "applied_date": "2020-01-01"}
+        self.assertTrue(dashboard.tracker_follow_up_due(row))
+        self.assertIn("Follow up", dashboard.tracker_next_action(row))
+
+    def test_review_action_prioritizes_evidence_and_eligibility(self) -> None:
+        missing_analysis = {"analysis_available": False}
+        self.assertIn("complete job description", dashboard.review_job_next_action(missing_analysis))
+
+        failed = analyzed_job(
+            "Senior Data Engineer requires Python SQL pandas data analysis communication "
+            "documentation and 5+ years experience required."
+        )
+        self.assertIn("hard constraint", dashboard.review_job_next_action(failed))
+
+        low_confidence = analyzed_job("Machine learning")
+        self.assertIn("full job description", dashboard.review_job_next_action(low_confidence))
 
 
 if __name__ == "__main__":

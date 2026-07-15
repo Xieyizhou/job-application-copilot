@@ -184,7 +184,42 @@ class ScoringInvariantTests(unittest.TestCase):
         self.assertEqual(required["status"], "failed")
 
     def test_low_requirement_count_produces_low_confidence(self) -> None:
-        self.assertEqual(self.result("Python analyst wanted.")["confidence"]["level"], "low")
+        result = self.result("Python analyst wanted.")
+        self.assertEqual(result["confidence"]["level"], "low")
+        self.assertEqual(result["coverage_score"], 100)
+        self.assertEqual(result["score"], 62)
+
+    def test_evidence_calibration_never_increases_a_weak_score(self) -> None:
+        result = self.result("Unrelated role requiring pandas.")
+        self.assertLessEqual(result["score"], result["coverage_score"])
+
+    def test_truncated_api_description_stays_low_confidence(self) -> None:
+        job = """# Data Analyst
+Source: Jooble
+## Job Description
+Python SQL pandas data analysis communication role..."""
+        result = self.result(job, "Python SQL pandas data analysis communication")
+        self.assertEqual(result["coverage_score"], 100)
+        self.assertLess(result["score"], result["coverage_score"])
+        self.assertEqual(result["confidence"]["level"], "low")
+        self.assertTrue(result["confidence"]["job_description_quality"]["appears_incomplete"])
+
+    def test_saved_title_focus_separates_domain_match_from_generic_ai_overlap(self) -> None:
+        candidate = "Machine learning and model evaluation project portfolio."
+        ml_job = """# Machine Learning Engineer
+Source: Jooble
+## Job Description
+Machine learning role..."""
+        physics_job = """# Physics Expert for AI Model Training
+Source: Jooble
+## Job Description
+Machine learning role..."""
+        aligned = self.result(ml_job, candidate)
+        mismatched = self.result(physics_job, candidate)
+        self.assertEqual(aligned["coverage_score"], mismatched["coverage_score"])
+        self.assertEqual(aligned["role_alignment"]["score"], 100)
+        self.assertEqual(mismatched["role_alignment"]["score"], 0)
+        self.assertGreater(aligned["score"], mismatched["score"])
 
     def test_eligibility_failure_overrides_high_raw_fit(self) -> None:
         result = self.result(

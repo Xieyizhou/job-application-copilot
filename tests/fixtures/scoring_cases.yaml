@@ -74,12 +74,12 @@
   candidate_text: Python project portfolio.
   job_text: Python analyst wanted.
   expected:
-    score_min: 95
-    score_max: 100
+    score_min: 60
+    score_max: 65
     eligibility: passed
     confidence: low
     recommendation: Manual Review
-  reason: A one-of-one match is numerically complete but too narrow for a confident recommendation.
+  reason: A one-of-one match has complete observed coverage but is calibrated toward neutral because evidence is sparse.
 
 - id: data-analyst-authorization-review
   role_family: Data Analyst
@@ -358,12 +358,12 @@
   candidate_text: Python and machine learning projects.
   job_text: Python machine learning engineer.
   expected:
-    score_min: 95
-    score_max: 100
+    score_min: 70
+    score_max: 80
     eligibility: passed
     confidence: low
     recommendation: Manual Review
-  reason: Two matching terms in a very short description are insufficient for an Apply decision.
+  reason: Two matching terms have complete observed coverage but are evidence-calibrated and require review.
 
 - id: mle-authorization-confirmed
   role_family: Machine Learning Engineer
@@ -472,12 +472,12 @@
   candidate_text: Python, SQL, and documentation projects.
   job_text: Python and SQL required.
   expected:
-    score_min: 95
-    score_max: 100
+    score_min: 70
+    score_max: 80
     eligibility: passed
     confidence: low
     recommendation: Manual Review
-  reason: A perfect match on two extracted terms is still insufficient evidence.
+  reason: A perfect observed match on two terms is calibrated below a reliable high-fit score.
 
 - id: python-software-no-candidate-source
   role_family: Python / Software
@@ -602,12 +602,12 @@
   candidate_text: UAV route planning project.
   job_text: UAV route planning role.
   expected:
-    score_min: 95
-    score_max: 100
+    score_min: 70
+    score_max: 80
     eligibility: passed
     confidence: low
     recommendation: Manual Review
-  reason: Two direct domain terms cannot support a high-confidence perfect fit.
+  reason: Two direct domain terms have full coverage but not enough evidence for an uncalibrated perfect fit.
 
 - id: uav-robotics-authorization-review
   role_family: UAV / Robotics

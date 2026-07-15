@@ -153,3 +153,62 @@ EXPERIENCE_THEMES = {
     "Econometrics and statistical reasoning": ["econometrics", "regression", "causal inference", "statistical analysis"],
     "Teaching and communication": ["communication", "teaching", "Python", "data analysis"],
 }
+
+# Ordered from narrow/specialized titles to broader role families. Title focus is
+# a separate signal from requirement coverage: it can reduce a superficially high
+# keyword match, but it never fills an explicitly missing requirement.
+ROLE_FOCUS_RULES = [
+    {
+        "name": "Physics",
+        "title_patterns": [r"\bphysics\b"],
+        "candidate_aliases": ["physics", "physical science", "mechanics", "electromagnetism", "quantum"],
+    },
+    {
+        "name": "Audio engineering",
+        "title_patterns": [r"\baudio\b", r"\bacoustic"],
+        "candidate_aliases": ["audio engineering", "audio", "acoustic", "signal processing", "speech processing"],
+    },
+    {
+        "name": "Data entry / annotation",
+        "title_patterns": [r"\bdata entry\b", r"\bdata annotation\b", r"\bdata label"],
+        "candidate_aliases": ["data entry", "data annotation", "data labeling", "data labelling", "video annotation"],
+    },
+    {
+        "name": "Data migration",
+        "title_patterns": [r"\bdata migration\b"],
+        "candidate_aliases": ["data migration", "etl", "data integration", "data warehouse"],
+    },
+    {
+        "name": "Data engineering",
+        "title_patterns": [r"\bdata engineer"],
+        "candidate_aliases": ["data engineering", "data pipeline", "etl", "data warehouse", "spark"],
+    },
+    {
+        "name": "Business intelligence / analysis",
+        "title_patterns": [r"\bbusiness intelligence\b", r"\bbusiness (?:and )?data analyst\b", r"\bbusiness analyst\b"],
+        "candidate_aliases": ["business intelligence", "power bi", "tableau", "business analysis", "requirements gathering"],
+    },
+    {
+        "name": "Data analytics",
+        "title_patterns": [r"\bdata analyst\b", r"\banalytics analyst\b"],
+        "candidate_aliases": ["data analysis", "analytics", "sql", "statistical analysis", "data visualization"],
+    },
+    {
+        "name": "Data science",
+        "title_patterns": [r"\bdata scientist\b", r"\bdata science\b"],
+        "candidate_aliases": ["data science", "machine learning", "statistical analysis", "model evaluation"],
+    },
+    {
+        "name": "Machine learning / AI engineering",
+        "title_patterns": [
+            r"\bmachine learning\b",
+            r"\bai engineer\b",
+            r"\bai developer\b",
+            r"\breinforcement learning\b",
+        ],
+        "candidate_aliases": [
+            "machine learning", "model evaluation", "scikit-learn", "sklearn",
+            "deep learning", "reinforcement learning",
+        ],
+    },
+]

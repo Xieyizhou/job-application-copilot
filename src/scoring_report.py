@@ -79,6 +79,8 @@ def build_markdown_report(
     red_flags: list[str],
     resume_evidence: list[str],
     score: int,
+    coverage_score: int,
+    role_alignment: dict[str, object],
     recommendation: str,
     eligibility: dict[str, object],
     confidence: dict[str, object],
@@ -96,6 +98,13 @@ def build_markdown_report(
             "## Summary",
             "",
             f"- Role Fit Score: **{score}/100**",
+            f"- Observed Requirement Coverage: **{coverage_score}%**",
+            (
+                f"- Role Focus Alignment: **{role_alignment.get('focus', 'Not detected')} — "
+                f"{'Supported' if role_alignment.get('score') == 100 else 'Candidate evidence not found'}**"
+                if role_alignment.get("detected")
+                else "- Role Focus Alignment: **Not detected from saved title**"
+            ),
             f"- Eligibility: **{str(eligibility['status']).replace('_', ' ').title()}**",
             f"- Scoring Confidence: **{str(confidence['level']).title()}**",
             f"- Recommendation: **{recommendation}**",
@@ -148,6 +157,7 @@ def build_markdown_report(
             "- This report uses weighted keyword matching and simple penalty rules.",
             "- Required and preferred JD terms use symmetric requirement weights; preferred gaps have less impact.",
             "- Categories the JD does not mention are marked N/A and are not counted against the final score.",
+            "- High coverage from sparse or truncated evidence is calibrated toward a neutral score before recommendation.",
             "- Eligibility and scoring confidence are separate from the role-fit score and may override the recommendation.",
             "- It should be reviewed by a person before preparing application materials.",
             "- It does not invent experience, skills, degree level, metrics, visa status, or work authorization.",
@@ -202,6 +212,13 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         matched_strengths.append("No strong keyword overlap was detected; review manually.")
 
     weak_areas = [f"Missing or unclear evidence for: {keyword}." for keyword in missing_keywords[:6]]
+    role_alignment = dict(result.get("role_alignment", {}) or {})
+    if role_alignment.get("detected"):
+        focus = str(role_alignment.get("focus", "the title's core domain"))
+        if role_alignment.get("score") == 100:
+            matched_strengths.insert(0, f"Candidate source supports the title's core role focus: {focus}.")
+        else:
+            weak_areas.insert(0, f"Candidate source does not clearly support the title's core role focus: {focus}.")
     if red_flags and len(weak_areas) < 6:
         weak_areas.extend(red_flags[: 6 - len(weak_areas)])
     if not weak_areas:
@@ -210,6 +227,9 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     resume_evidence = find_resume_evidence(themes)
     return {
         "score": score,
+        "coverage_score": result["coverage_score"],
+        "score_calibration": result["score_calibration"],
+        "role_alignment": result["role_alignment"],
         "recommendation": recommendation,
         "score_breakdown": score_breakdown,
         "eligibility": result["eligibility"],
@@ -280,6 +300,8 @@ def analyze_job(
         red_flags=red_flags,
         resume_evidence=resume_evidence,
         score=result["score"],
+        coverage_score=result["coverage_score"],
+        role_alignment=result["role_alignment"],
         recommendation=result["recommendation"],
         eligibility=result["eligibility"],
         confidence=result["confidence"],
