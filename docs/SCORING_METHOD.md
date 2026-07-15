@@ -35,7 +35,10 @@ Role Fit a second time; the Recommendation gate prevents an unsafe Apply result.
 Confidence describes evidence coverage, not candidate quality. It reflects job
 text completeness, the number of recognized requirements, and whether usable
 candidate evidence exists. A very short description or a narrow 1-of-1 match is
-low confidence even when its numerical match is 100.
+low confidence even when its numerical match is 100. The dashboard labels such a
+number as a **Provisional Role Fit** so users can inspect coverage of the extracted
+terms without mistaking it for a reliable recommendation. Low confidence still
+forces **Manual Review** until the full job description provides enough evidence.
 
 The final Recommendation applies gates in this order:
 

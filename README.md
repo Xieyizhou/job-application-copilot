@@ -200,6 +200,9 @@ Role Fit is kept separate from:
 A high raw match percentage does not automatically produce an Apply
 recommendation.
 
+See [Scoring Method](docs/SCORING_METHOD.md) for the scoring, gating, and public
+benchmark methodology.
+
 For example, when only one requirement is recognized, the app may show:
 
 ```text
@@ -302,8 +305,9 @@ See `privacy_terms.local.example.txt` for the expected format.
 Run the complete automated test suite:
 
 ```bash
-python -m py_compile main.py scripts/privacy_audit.py src/*.py
+python -m py_compile main.py scripts/privacy_audit.py scripts/evaluate_scoring.py src/*.py
 python -m unittest discover -s tests -v
+python scripts/evaluate_scoring.py
 python -m pip check
 python scripts/privacy_audit.py
 ```
