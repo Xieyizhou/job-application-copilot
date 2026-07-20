@@ -1,9 +1,9 @@
-"""Generate a complete local application package for one job description.
+"""Generate a local cover-letter bundle for one job description.
 
 This script runs the local workflow only:
 1. Analyze the job.
-2. Generate a tailored resume.
-3. Generate a cover letter.
+2. Generate a resume-grounded cover letter.
+3. Export the cover letter to DOCX.
 4. Add a local SQLite tracker record.
 
 It does not submit applications or interact with job platforms.
@@ -21,7 +21,6 @@ from analyze_job import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARN
 from company_verification import assert_cover_letter_company_verified, parse_bool
 from export_documents import export_application_package
 from generate_cover_letter import generate_cover_letter
-from generate_tailored_resume import generate_tailored_resume
 from output_paths import application_package_dir, safe_slug, timestamp_slug
 from tracker import add_application
 from workspace import Workspace, WorkspaceError, personal_workspace
@@ -65,7 +64,7 @@ def parse_analysis_summary(report_text: str) -> tuple[int, str]:
 def build_tracker_notes(score: int, recommendation: str) -> str:
     """Create short tracker notes without inventing extra facts."""
     return (
-        f"Generated local application package. Match score: {score}/100. "
+        f"Generated local cover-letter bundle. Match score: {score}/100. "
         f"Recommendation: {recommendation}. Review all files before applying."
     )
 
@@ -189,7 +188,7 @@ def create_application_package(
     location: str,
     job_url: str,
 ) -> dict[str, object]:
-    """Run the full local package workflow and return summary details."""
+    """Run the CL-only local workflow and return summary details."""
     workspace.require_writable()
     assert workspace.tracker_database_path is not None
     job_text = job_description_path.read_text(encoding="utf-8")
@@ -216,9 +215,8 @@ def create_application_package(
     match_score, recommendation = parse_analysis_summary(analysis_report)
     uk_review_notes = collect_uk_review_notes(analysis_report)
 
-    _, resume_path, _, tailoring_notes_path = generate_tailored_resume(job_description_path, workspace, package_dir)
     _, cover_letter_path, _, cover_letter_notes_path = generate_cover_letter(job_description_path, workspace, package_dir)
-    resume_docx_path, cover_letter_docx_path, export_warnings = export_application_package(package_dir, workspace)
+    cover_letter_docx_path, export_warnings = export_application_package(package_dir, workspace)
 
     tracker_args = SimpleNamespace(
         company=company,
@@ -228,7 +226,7 @@ def create_application_package(
         match_score=match_score,
         recommendation=recommendation,
         status="ready",
-        resume_file=relative_path(resume_path),
+        resume_file="",
         cover_letter_file=relative_path(cover_letter_docx_path),
         notes=build_tracker_notes(match_score, recommendation),
     )
@@ -243,11 +241,8 @@ def create_application_package(
         "recommendation": recommendation,
         "package_dir": package_dir,
         "analysis_path": analysis_path,
-        "resume_path": resume_path,
-        "resume_docx_path": resume_docx_path,
         "cover_letter_path": cover_letter_path,
         "cover_letter_docx_path": cover_letter_docx_path,
-        "tailoring_notes_path": tailoring_notes_path,
         "cover_letter_notes_path": cover_letter_notes_path,
         "export_warnings": export_warnings,
         "tracker_id": tracker_id,
@@ -268,7 +263,7 @@ def parse_markdown_value(job_text: str, field_name: str) -> str:
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Generate a local application package for one job description."
+        description="Generate a local cover-letter bundle for one job description."
     )
     parser.add_argument("job_description", help="Path to a Markdown or text job description.")
     parser.add_argument("--company", default="")
@@ -304,7 +299,7 @@ def main() -> None:
         job_url=metadata["job_url"],
     )
 
-    print("\nApplication Package Summary")
+    print("\nCover Letter Bundle Summary")
     print("---------------------------")
     print(f"Parsed company: {summary['company']}")
     print(f"Parsed role: {summary['role']}")
@@ -312,9 +307,8 @@ def main() -> None:
     print(f"Parsed job URL: {summary['job_url']}")
     print(f"Match score: {summary['match_score']}/100")
     print(f"Recommendation: {summary['recommendation']}")
-    print(f"Generated package folder: {summary['package_dir']}")
+    print(f"Generated bundle folder: {summary['package_dir']}")
     print(f"Analysis report file: {summary['analysis_path']}")
-    print(f"Resume DOCX file: {summary['resume_docx_path']}")
     print(f"Cover letter Markdown file: {summary['cover_letter_path']}")
     print(f"Cover letter DOCX file: {summary['cover_letter_docx_path']}")
     print(f"Tracker id: {summary['tracker_id']}")

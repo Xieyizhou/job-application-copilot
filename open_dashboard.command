@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-echo "Starting Job Application Copilot..."
+echo "Starting Job Application Toolkit..."
 echo "-----------------------------------"
 
 # Go to the folder where this command file is located

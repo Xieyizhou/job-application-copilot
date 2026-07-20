@@ -331,7 +331,7 @@ def delete_application(application_id: int, database_path: Path) -> None:
             f"Warning: deleting tracker record #{row['id']} for "
             f"{row['company']} - {row['role']}."
         )
-        print("Generated resume, cover letter, and report files will not be deleted.")
+        print("Generated cover-letter and report files will not be deleted.")
 
         connection.execute(
             """

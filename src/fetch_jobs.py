@@ -46,6 +46,7 @@ ENV_PATH = PROJECT_ROOT / ".env"
 JOB_DESCRIPTION_DIR = PROJECT_ROOT / "data" / "job_descriptions"
 ADZUNA_API_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/1"
 JOOBLE_API_URL = "https://jooble.org/api/{api_key}"
+JSEARCH_API_URL = "https://api.openwebninja.com/jsearch/search-v2"
 API_REQUEST_DELAY_SECONDS = 0
 DEFAULT_MAX_RESULTS = 8
 MAX_RESULTS_PER_SOURCE = 20
@@ -115,6 +116,30 @@ def load_jooble_api_key() -> str:
         )
 
     return api_key
+
+
+def load_jsearch_api_key() -> str:
+    """Load the OpenWeb Ninja JSearch key without printing it."""
+    if not ENV_PATH.exists():
+        raise FileNotFoundError(
+            "Missing .env file. Create one in the project root with JSEARCH_API_KEY."
+        )
+
+    load_dotenv(ENV_PATH)
+    api_key = os.getenv("JSEARCH_API_KEY", "").strip()
+    if not api_key:
+        raise ValueError(
+            "Missing JSEARCH_API_KEY in .env. JSearch is the preferred source for full job descriptions."
+        )
+    return api_key
+
+
+def jsearch_configured() -> bool:
+    """Return whether the optional full-description search source is configured."""
+    if not ENV_PATH.exists():
+        return False
+    load_dotenv(ENV_PATH)
+    return bool(os.getenv("JSEARCH_API_KEY", "").strip())
 
 
 def fetch_adzuna_jobs(
@@ -218,6 +243,54 @@ def fetch_jooble_jobs(
     return jobs
 
 
+def fetch_jsearch_jobs(
+    country: str,
+    query: str,
+    location: str,
+    max_results: int,
+) -> list[dict[str, Any]]:
+    """Search JSearch for jobs whose response includes the full description."""
+    if not query.strip():
+        raise ValueError("--query is required for JSearch searches.")
+
+    api_key = load_jsearch_api_key()
+    try:
+        import requests
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "The requests package is not installed. Run `pip install -r requirements.txt` first."
+        ) from error
+
+    location_query = f" in {location.strip()}" if location.strip() else ""
+    params = {
+        "query": f"{query.strip()}{location_query}",
+        "country": (country or "us").lower(),
+        "language": "en",
+    }
+    try:
+        if API_REQUEST_DELAY_SECONDS > 0:
+            time.sleep(API_REQUEST_DELAY_SECONDS)
+        response = requests.get(
+            JSEARCH_API_URL,
+            params=params,
+            headers={"x-api-key": api_key},
+            timeout=25,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise RuntimeError(
+            f"JSearch API request failed: {sanitize_error_message(str(error))}"
+        ) from error
+
+    data = response.json()
+    raw_jobs = data.get("data", []) if isinstance(data, dict) else []
+    jobs = [normalize_jsearch_job(job, location) for job in raw_jobs if isinstance(job, dict)]
+    jobs = [job for job in jobs if job.get("description")][:max_results]
+    if not jobs:
+        raise RuntimeError("No JSearch jobs with full descriptions were found for this query and location.")
+    return jobs
+
+
 def clean_text(value: object) -> str:
     """Convert API text into readable plain text for Markdown."""
     if value is None:
@@ -244,6 +317,8 @@ def normalize_adzuna_job(job: dict[str, object]) -> dict[str, Any]:
         "requirements": extract_requirements(job),
         "salary": format_salary(job),
         "source": "adzuna",
+        "description_source": "api_snippet",
+        "jd_fetch_status": "snippet_only",
         "ats_company_token": "",
     }
     return enrich_job_with_company_verification(normalized, structured_company=True)
@@ -262,9 +337,67 @@ def normalize_jooble_job(job: dict[str, object], fallback_location: str) -> dict
         "requirements": extract_requirements_from_text(description),
         "salary": clean_text(job.get("salary")),
         "source": "jooble",
+        "description_source": "api_snippet",
+        "jd_fetch_status": "snippet_only",
         "ats_company_token": "",
     }
     return enrich_job_with_company_verification(normalized, structured_company=True)
+
+
+def normalize_jsearch_job(job: dict[str, object], fallback_location: str) -> dict[str, Any]:
+    """Convert a JSearch result into the local normalized job shape."""
+    description = clean_text(job.get("job_description"))
+    city = clean_text(job.get("job_city"))
+    state = clean_text(job.get("job_state"))
+    country = clean_text(job.get("job_country"))
+    structured_location = ", ".join(part for part in [city, state, country] if part)
+    if bool(job.get("job_is_remote")) and not structured_location:
+        structured_location = "Remote"
+
+    highlights = job.get("job_highlights")
+    requirement_parts: list[str] = []
+    if isinstance(highlights, dict):
+        for key in ["Qualifications", "Responsibilities"]:
+            values = highlights.get(key, [])
+            if isinstance(values, list):
+                requirement_parts.extend(clean_text(value) for value in values if clean_text(value))
+    requirements = " ".join(requirement_parts) or extract_requirements_from_text(description)
+
+    normalized = {
+        "source_job_id": clean_text(job.get("job_id")),
+        "company": clean_text(job.get("employer_name")),
+        "role": clean_text(job.get("job_title")),
+        "location": structured_location or clean_text(fallback_location),
+        "job_url": sanitize_job_url(
+            clean_text(job.get("job_apply_link") or job.get("job_google_link"))
+        ),
+        "description": description,
+        "requirements": requirements,
+        "salary": format_jsearch_salary(job),
+        "source": "jsearch",
+        "description_source": "full_jd_api",
+        "jd_fetch_status": "complete" if description else "missing",
+        "ats_company_token": "",
+    }
+    return enrich_job_with_company_verification(normalized, structured_company=True)
+
+
+def format_jsearch_salary(job: dict[str, object]) -> str:
+    """Format JSearch salary fields without inventing a currency or period."""
+    minimum = job.get("job_min_salary")
+    maximum = job.get("job_max_salary")
+    currency = clean_text(job.get("job_salary_currency"))
+    period = clean_text(job.get("job_salary_period"))
+    if minimum is None and maximum is None:
+        return ""
+    if minimum is not None and maximum is not None:
+        value = f"{minimum} - {maximum}"
+    elif minimum is not None:
+        value = f"From {minimum}"
+    else:
+        value = f"Up to {maximum}"
+    suffix = " ".join(part for part in [currency, f"per {period.lower()}" if period else ""] if part)
+    return f"{value} {suffix}".strip()
 
 
 def enrich_job_with_company_verification(job: dict[str, str], *, structured_company: bool = False) -> dict[str, Any]:
@@ -370,6 +503,8 @@ def build_job_markdown(job: dict[str, Any]) -> str:
     salary = clean_text(job.get("salary"))
     ats_company_token = clean_text(job.get("ats_company_token"))
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    description_source = clean_text(job.get("description_source"))
+    jd_fetch_status = clean_text(job.get("jd_fetch_status"))
 
     lines = [
         f"# {role or 'Untitled Role'}",
@@ -381,6 +516,8 @@ def build_job_markdown(job: dict[str, Any]) -> str:
         f"Source: {source.title() if source else 'Not provided'}",
         f"Source Job ID: {source_job_id or 'Not provided'}",
         f"Created at: {created_at}",
+        f"Description Source: {description_source or 'Not provided'}",
+        f"JD Fetch Status: {jd_fetch_status or 'Not provided'}",
     ]
     for field_name, value in markdown_metadata_from_verification(job).items():
         lines.append(f"{field_name}: {clean_text(value) or 'Not provided'}")
@@ -429,7 +566,7 @@ def save_job_markdown(
         f"{index:02d}_"
         f"{safe_slug(role)}"
     )
-    if source == "adzuna":
+    if source in {"adzuna", "jsearch"}:
         base_filename = f"{index:02d}_{safe_slug(company)}_{safe_slug(role)}"
 
     output_path = unique_output_path(output_dir, base_filename)
@@ -556,9 +693,9 @@ def sanitize_job_url(job_url: str) -> str:
 def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
     """Fetch jobs, record a fetch run, and save only newly discovered jobs."""
     source = args.source.lower()
-    if source not in {"adzuna", "jooble"}:
+    if source not in {"adzuna", "jooble", "jsearch"}:
         raise ValueError(
-            f"Invalid source '{args.source}'. Supported sources: adzuna, jooble."
+            f"Invalid source '{args.source}'. Supported sources: jsearch, adzuna, jooble."
         )
     max_results = cap_max_results(args.max_results)
     fetch_run_id = new_fetch_run_id(source)
@@ -576,7 +713,7 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
             )
             source_scope = args.country
             location_scope = args.location or "all_locations"
-        else:
+        elif source == "jooble":
             jobs = fetch_jooble_jobs(
                 query=args.query,
                 location=args.location,
@@ -584,6 +721,15 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
             )
             source_scope = jooble_region_scope(args.location)
             location_scope = args.location or "remote"
+        else:
+            jobs = fetch_jsearch_jobs(
+                country=args.country,
+                query=args.query,
+                location=args.location,
+                max_results=max_results,
+            )
+            source_scope = args.country
+            location_scope = args.location or "all_locations"
     except Exception as error:
         append_fetch_run(
             {
@@ -673,6 +819,8 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
             "company_candidates": job.get("company_candidates", []),
             "company_confirmed_by_user": bool(job.get("company_confirmed_by_user")),
             "company_confirmed_at": clean_text(job.get("company_confirmed_at")),
+            "description_source": clean_text(job.get("description_source")),
+            "jd_fetch_status": clean_text(job.get("jd_fetch_status")),
         }
         job_index[canonical_key] = record
         new_jobs.append(job_summary_for_run(record, is_new=True))
@@ -701,6 +849,9 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
         "new_jobs_count": len(new_jobs),
         "duplicate_jobs_count": duplicate_jobs_count,
         "saved_jobs_count": len(saved_paths),
+        "full_descriptions_count": sum(
+            1 for job in jobs if clean_text(job.get("jd_fetch_status")) == "complete"
+        ),
         "skipped_jobs_count": skipped_jobs_count,
         "fetch_status": "success",
         "notes": "",

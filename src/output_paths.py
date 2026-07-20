@@ -20,7 +20,7 @@ def first_slug_word(value: str) -> str:
 
 
 def timestamp_slug() -> str:
-    """Return the current timestamp used for application package folders."""
+    """Return the current timestamp used for cover-letter bundle folders."""
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 

@@ -33,7 +33,7 @@ MANUAL_UPLOADS_DIR = MANUAL_JOBS_DIR / "uploads"
 STATUS_OPTIONS = [
     "Saved",
     "Analyzed",
-    "Resume Generated",
+    "Cover Letter Generated",
     "Applied",
     "Interview",
     "Rejected",

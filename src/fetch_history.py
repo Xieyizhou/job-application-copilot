@@ -197,6 +197,8 @@ def existing_markdown_record(path: Path) -> dict[str, Any]:
         ],
         "company_confirmed_by_user": parse_bool(read_markdown_field(text, "Company Confirmed By User")),
         "company_confirmed_at": read_markdown_field(text, "Company Confirmed At"),
+        "description_source": read_markdown_field(text, "Description Source"),
+        "jd_fetch_status": read_markdown_field(text, "JD Fetch Status"),
     }
 
 
@@ -240,6 +242,8 @@ def job_summary_for_run(record: dict[str, Any], is_new: bool) -> dict[str, Any]:
         "company_confidence": record.get("company_confidence", ""),
         "company_needs_review": record.get("company_needs_review", True),
         "company_confirmed_by_user": record.get("company_confirmed_by_user", False),
+        "description_source": record.get("description_source", ""),
+        "jd_fetch_status": record.get("jd_fetch_status", ""),
     }
 
 

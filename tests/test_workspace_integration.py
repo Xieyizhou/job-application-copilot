@@ -64,11 +64,15 @@ Company Evidence: Confirmed during sanitized test setup.
                 job_url="https://example.invalid/jobs/data-analyst",
             )
 
-            for key in ["analysis_path", "resume_path", "cover_letter_path", "resume_docx_path", "cover_letter_docx_path"]:
+            for key in ["analysis_path", "cover_letter_path", "cover_letter_docx_path", "cover_letter_notes_path"]:
                 path = summary[key]
                 self.assertIsInstance(path, Path)
                 self.assertTrue(path.is_file())
                 self.assertTrue(path.is_relative_to(workspace.generated_dir))
+            self.assertNotIn("resume_path", summary)
+            self.assertNotIn("resume_docx_path", summary)
+            self.assertFalse((summary["package_dir"] / "tailored_resume.md").exists())
+            self.assertFalse((summary["package_dir"] / "tailored_resume.docx").exists())
             self.assertTrue(workspace.tracker_database_path and workspace.tracker_database_path.is_file())
             self.assertIsInstance(summary["tracker_id"], int)
 

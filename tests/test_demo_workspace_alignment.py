@@ -26,7 +26,10 @@ EXPECTED_JOBS = {"ai_analyst.md", "data_analyst.md", "machine_learning_intern.md
 
 
 def load_demo_jobs() -> list[dict[str, object]]:
-    with patch.object(dashboard, "demo_mode_enabled", return_value=True):
+    with (
+        patch.object(dashboard, "demo_mode_enabled", return_value=True),
+        patch.object(dashboard, "current_workspace", return_value=demo_workspace()),
+    ):
         return dashboard.load_screened_jobs()
 
 
@@ -40,7 +43,7 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         self.assertEqual(dashboard.default_review_inbox_view(self.jobs, [], demo=True), "All Jobs")
         with (
             patch.object(dashboard, "tracker_status_for_job", return_value="Not tracked"),
-            patch.object(dashboard, "package_status_for_job", return_value="No package"),
+            patch.object(dashboard, "package_status_for_job", return_value="No cover letter"),
         ):
             self.assertEqual(
                 dashboard.default_review_inbox_view([self.jobs_by_role["Data Analyst"]], [], demo=False),
@@ -86,15 +89,15 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
     def test_demo_inbox_membership_and_dashboard_counts_follow_canonical_rules(self) -> None:
         recommended = [
             job for job in self.jobs
-            if dashboard.review_inbox_view_matches(job, "Recommended", "Demo only", "Demo package")
+            if dashboard.review_inbox_view_matches(job, "Recommended", "Demo only", "Demo cover letter")
         ]
         needs_review = [
             job for job in self.jobs
-            if dashboard.review_inbox_view_matches(job, "Needs Review", "Demo only", "Demo package")
+            if dashboard.review_inbox_view_matches(job, "Needs Review", "Demo only", "Demo cover letter")
         ]
         all_jobs = [
             job for job in self.jobs
-            if dashboard.review_inbox_view_matches(job, "All Jobs", "Demo only", "Demo package")
+            if dashboard.review_inbox_view_matches(job, "All Jobs", "Demo only", "Demo cover letter")
         ]
         self.assertEqual([job["role"] for job in recommended], ["Data Analyst"])
         self.assertEqual([job["role"] for job in needs_review], ["Machine Learning Intern"])
@@ -103,7 +106,7 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         self.assertEqual(sum(dashboard.is_strong_match(job) for job in self.jobs), 1)
         with patch.object(dashboard, "demo_mode_enabled", return_value=True):
             package_statuses = {job["role"]: dashboard.package_status_for_job(job, []) for job in self.jobs}
-        self.assertEqual(package_statuses["Data Analyst"], "Demo package")
+        self.assertEqual(package_statuses["Data Analyst"], "Demo cover letter")
         self.assertEqual(package_statuses["Machine Learning Intern"], "Demo only")
         self.assertEqual(package_statuses["Senior Data Scientist"], "Demo only")
 

@@ -1,6 +1,6 @@
 # Scoring Method
 
-Job Application Copilot uses deterministic requirement matching to support human
+Job Application Toolkit uses deterministic requirement matching to support human
 review. It does not use a trained model and does not predict hiring decisions.
 Deterministic rules keep the same text reproducible, make each match inspectable,
 and avoid presenting historical hiring patterns as judgments about a candidate.
@@ -103,4 +103,4 @@ recency, depth, or truthful ownership of an accomplishment.
 A Role Fit score is not a probability of interview or offer. The benchmark is
 not a statistical validation against real recruiting outcomes, does not measure
 employer behavior, and should not be used as an automated hiring decision. It is
-a regression and calibration suite for this project's explainable rules.
+a regression and calibration suite for the toolkit's explainable rules.
