@@ -9,10 +9,10 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-streamlit run src/dashboard.py
+python run_dashboard.py
 ```
 
-The initial screen uses the sanitized, read-only Demo workspace.
+The initial screen is the Personal workspace. Select **Explore Read-only Demo** at the top of the sidebar to inspect the sanitized workflow without configuring Personal data.
 
 macOS users can also launch the app after setup by opening
 `open_dashboard.command`.
@@ -21,7 +21,7 @@ macOS users can also launch the app after setup by opening
 
 ### Demo
 
-Demo loads tracked fictional jobs and a pre-generated sample package from
+Demo is opened through a separate sidebar button. It loads tracked fictional jobs and a pre-generated sample cover-letter bundle from
 `data/demo/`. It requires no credentials and does not create tracker records or
 Personal outputs.
 
@@ -61,11 +61,23 @@ use:
 ADZUNA_APP_ID=your_adzuna_app_id
 ADZUNA_APP_KEY=your_adzuna_app_key
 JOOBLE_API_KEY=your_jooble_api_key
+JSEARCH_API_KEY=your_openwebninja_jsearch_api_key
 ```
 
 The dashboard supports preset regions and custom locations. It ranks results
-after duplicate removal and local filtering. Provider descriptions may be
-partial, so confirm requirements on the original job page.
+after duplicate removal and local filtering. Configure JSearch for automatic
+full job descriptions. Adzuna and Jooble are treated as discovery-only sources
+because their official search APIs return snippets.
+
+JSearch command-line example:
+
+```bash
+python src/fetch_jobs.py \
+  --source jsearch \
+  --query "data analyst" \
+  --location "Remote" \
+  --max-results 10
+```
 
 Adzuna command-line example:
 
@@ -102,7 +114,7 @@ python src/analyze_job.py data/demo/jobs/machine_learning_intern.md --demo
 The report includes matched evidence, missing keywords, risk notes, a score,
 and a recommendation based on deterministic rules.
 
-## Generate an Application Package
+## Generate a Cover Letter Bundle
 
 After Personal workspace setup, run:
 
@@ -114,27 +126,24 @@ python src/apply_package.py data/demo/jobs/machine_learning_intern.md \
   --job-url "https://example.com/job"
 ```
 
-Each run creates a timestamped package:
+Each run uses the uploaded resume as an unchanged factual source and creates a timestamped bundle:
 
 ```text
 data/local_workspace/generated/<company_role>/<timestamp>/
   analysis.md
-  tailored_resume.md
-  tailored_resume.docx
   cover_letter.md
   cover_letter.docx
-  tailoring_notes.md
   cover_letter_notes.md
 ```
 
-To re-export an existing package:
+To re-export an existing cover-letter bundle:
 
 ```bash
 python src/export_documents.py \
   data/local_workspace/generated/example_company_role/<timestamp>/
 ```
 
-Review every generated file before sharing it with an employer.
+Review the cover letter and its evidence-trace notes before sharing it with an employer. The workflow does not rewrite or export a new resume.
 
 ## Local Data Boundaries
 
@@ -143,7 +152,7 @@ Do not commit:
 - `.env` or API credentials
 - candidate files and experience banks
 - fetched job records
-- generated application packages
+- generated cover-letter bundles
 - SQLite databases, logs, or caches
 
 The `.gitignore` covers the standard local paths. Before publishing, run:

@@ -1,4 +1,4 @@
-"""Focused checks for the tracked, read-only Demo application package."""
+"""Focused checks for the tracked, read-only Demo cover-letter bundle."""
 
 from __future__ import annotations
 
@@ -20,14 +20,11 @@ import dashboard
 
 
 DEMO_PACKAGE_DIR = PROJECT_ROOT / "data" / "demo" / "sample_package"
-DOCX_NAMES = ["tailored_resume.docx", "cover_letter.docx"]
+DOCX_NAMES = ["cover_letter.docx"]
 EXPECTED_ZIP_NAMES = {
-    "tailored_resume.md",
-    "tailored_resume.docx",
     "cover_letter.md",
     "cover_letter.docx",
     "analysis.md",
-    "tailoring_notes.md",
     "cover_letter_notes.md",
 }
 
@@ -35,13 +32,6 @@ EXPECTED_ZIP_NAMES = {
 class DemoPackageTests(unittest.TestCase):
     def test_demo_docx_files_are_valid_and_neutral(self) -> None:
         expected_text = {
-            "tailored_resume.docx": [
-                "Demo Candidate",
-                "Bachelor's degree in Data Science, Fictional Technical College",
-                "Data Analysis Intern, Fictional Community Research Lab",
-                "Built a classification pipeline with Python and scikit-learn.",
-                "Evaluated models with cross-validation",
-            ],
             "cover_letter.docx": [
                 "Demo Candidate",
                 "Northstar Metrics Studio",
@@ -68,8 +58,8 @@ class DemoPackageTests(unittest.TestCase):
             text = "\n".join(paragraph.text for paragraph in document.paragraphs)
             for expected in expected_text[filename]:
                 self.assertIn(expected, text)
-            self.assertEqual(document.core_properties.author, "Job Application Copilot Demo")
-            self.assertEqual(document.core_properties.last_modified_by, "Job Application Copilot Demo")
+            self.assertEqual(document.core_properties.author, "Job Application Toolkit Demo")
+            self.assertEqual(document.core_properties.last_modified_by, "Job Application Toolkit Demo")
 
     def test_demo_zip_includes_all_sanitized_sample_materials(self) -> None:
         zip_bytes, package_files = dashboard.build_application_package_zip(DEMO_PACKAGE_DIR)
@@ -82,16 +72,16 @@ class DemoPackageTests(unittest.TestCase):
         local_workspace = PROJECT_ROOT / "data" / "local_workspace"
         existed_before = local_workspace.exists()
         app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
+        app.session_state["workspace_mode"] = "Demo"
         app.run(timeout=30)
-        app.radio[0].set_value("Application Package").run(timeout=30)
+        app.radio[0].set_value("Cover Letter").run(timeout=30)
 
         self.assertEqual(list(app.exception), [])
         statuses = app.table[0].value.set_index("Material")["Status"].to_dict()
         self.assertEqual(
             statuses,
             {
-                "Tailored Resume": "Ready",
-                "Resume DOCX": "Ready",
+                "Uploaded Resume": "Used unchanged",
                 "Cover Letter": "Ready",
                 "Cover Letter DOCX": "Ready",
                 "Match Report": "Ready",
@@ -101,11 +91,10 @@ class DemoPackageTests(unittest.TestCase):
         self.assertEqual(
             {button.label for button in app.get("download_button")},
             {
-                "Download Resume DOCX",
                 "Download Cover Letter DOCX",
                 "Download Match Report",
                 "Download Internal Notes",
-                "Download Full Application Package ZIP",
+                "Download Cover Letter Bundle ZIP",
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)
@@ -119,7 +108,7 @@ class DemoPackageTests(unittest.TestCase):
         for inbox_view in [
             "Recommended",
             "Needs Review",
-            "Package Ready",
+            "Cover Letter Ready",
             "Not Tracked",
             "Ignored",
             "All Jobs",
@@ -141,7 +130,7 @@ class DemoPackageTests(unittest.TestCase):
             "Newest first",
             "Recommendation",
             "Company A-Z",
-            "Package status",
+            "Cover letter status",
             "Tracker status",
         ]:
             self.assertEqual(len(dashboard.sorted_review_jobs(jobs, sort_by)), len(jobs))

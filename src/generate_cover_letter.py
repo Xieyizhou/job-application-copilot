@@ -23,14 +23,14 @@ from company_verification import (
     validate_company_name,
 )
 from output_paths import application_package_dir
-from workspace import GENERIC_EXPERIENCE_BANK_PATH, Workspace, WorkspaceError, personal_workspace
+from workspace import Workspace, WorkspaceError, personal_workspace
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 COVER_LETTER_EXAMPLES_DIR = PROJECT_ROOT / "data" / "cover_letter_examples_md"
 
-TARGET_WORD_COUNT_MIN = 230
-TARGET_WORD_COUNT_MAX = 320
+TARGET_WORD_COUNT_MIN = 120
+TARGET_WORD_COUNT_MAX = 250
 DEFAULT_THEME_KEYWORDS = {
     "machine_learning": ["machine learning", "ml", "classification", "model", "prediction"],
     "python_data": ["python", "pandas", "numpy", "scikit-learn", "sklearn", "data analysis"],
@@ -336,6 +336,212 @@ def select_evidence_bullets(experience: dict[str, Any], matched_themes: list[str
     return selected[:3]
 
 
+EVIDENCE_STOPWORDS = {
+    "and", "the", "with", "for", "from", "that", "this", "into", "using", "used",
+    "role", "work", "team", "job", "your", "our", "you", "are", "will", "have",
+    "has", "was", "were", "their", "they", "but", "not", "all", "can", "who",
+}
+
+
+def clean_resume_evidence_line(raw_line: str) -> str:
+    """Normalize one resume line while preserving the candidate's factual wording."""
+    line = raw_line.strip()
+    line = re.sub(r"^[-*•]+\s*", "", line)
+    line = re.sub(r"^\d+[.)]\s*", "", line)
+    line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
+    line = re.sub(r"`([^`]+)`", r"\1", line)
+    line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
+    return re.sub(r"\s+", " ", line).strip()
+
+
+def evidence_terms(text: str) -> set[str]:
+    """Return useful lexical terms for transparent JD-to-resume evidence ranking."""
+    return {
+        token
+        for token in re.findall(r"[a-z0-9+#.-]{3,}", text.lower())
+        if token not in EVIDENCE_STOPWORDS
+    }
+
+
+def extract_candidate_name(resume_text: str) -> str:
+    """Use the first plausible resume heading or short line as the sign-off name."""
+    for raw_line in resume_text.splitlines():
+        line = clean_resume_evidence_line(raw_line.lstrip("#").strip())
+        if not line or "@" in line or "http" in line.lower() or "|" in line:
+            continue
+        words = line.split()
+        if 2 <= len(words) <= 5 and not any(char.isdigit() for char in line):
+            return line
+    return "Candidate Name"
+
+
+def extract_resume_evidence_blocks(
+    resume_text: str,
+    experience_bank: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Build factual evidence blocks directly from the uploaded resume text.
+
+    The experience bank may expand theme vocabulary, but employer-facing claims
+    always come from the resume itself.
+    """
+    bank = experience_bank or {}
+    theme_keywords = bank.get("theme_keywords") or DEFAULT_THEME_KEYWORDS
+    current_heading = "Resume evidence"
+    grouped: dict[str, list[str]] = {}
+
+    for raw_line in resume_text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            heading = clean_resume_evidence_line(stripped.lstrip("#").strip())
+            if heading and heading != extract_candidate_name(resume_text):
+                current_heading = heading
+            continue
+
+        is_bullet = bool(re.match(r"^[-*•]\s+", stripped))
+        line = clean_resume_evidence_line(stripped)
+        if not line or "@" in line or line.lower().startswith(("http://", "https://")):
+            continue
+        word_count = len(line.split())
+        if word_count < 4 or word_count > 80:
+            continue
+        if not is_bullet and current_heading.lower() in {"resume evidence", "contact", "summary"}:
+            continue
+        grouped.setdefault(current_heading, []).append(line)
+
+    blocks = []
+    for heading, evidence in grouped.items():
+        combined = " ".join(evidence)
+        tags = [
+            theme
+            for theme, keywords in theme_keywords.items()
+            if any(contains_phrase(combined, str(keyword)) for keyword in keywords)
+        ]
+        blocks.append(
+            {
+                "id": re.sub(r"[^a-z0-9]+", "_", heading.lower()).strip("_") or "resume_evidence",
+                "name": heading,
+                "category": "resume",
+                "tags": tags,
+                "evidence": evidence,
+                "safe_phrases": [],
+            }
+        )
+    return blocks
+
+
+def score_resume_evidence_line(
+    line: str,
+    job_text: str,
+    detected_themes: list[str],
+    experience_bank: dict[str, Any],
+) -> tuple[int, list[str]]:
+    """Rank a resume line by theme support, JD overlap, and concrete outcomes."""
+    theme_keywords = experience_bank.get("theme_keywords") or DEFAULT_THEME_KEYWORDS
+    matched_themes = [
+        theme
+        for theme in detected_themes
+        if any(contains_phrase(line, str(keyword)) for keyword in theme_keywords.get(theme, []))
+    ]
+    overlap = evidence_terms(line).intersection(evidence_terms(job_text))
+    concrete_bonus = 2 if re.search(r"\b\d+(?:[.,]\d+)?%?\b", line) else 0
+    action_bonus = 1 if re.match(
+        r"^(built|created|developed|designed|implemented|analyzed|evaluated|led|improved|reduced|increased|delivered|automated|researched|supported)\b",
+        line,
+        flags=re.IGNORECASE,
+    ) else 0
+    return len(matched_themes) * 5 + min(len(overlap), 8) + concrete_bonus + action_bonus, matched_themes
+
+
+def select_resume_evidence_blocks(
+    resume_text: str,
+    job_text: str,
+    detected_themes: list[str],
+    experience_bank: dict[str, Any],
+    max_experiences: int = 2,
+) -> list[dict[str, Any]]:
+    """Select one or two strongest resume-grounded proof blocks for this JD."""
+    scored_blocks = []
+    for block in extract_resume_evidence_blocks(resume_text, experience_bank):
+        scored_lines = []
+        block_themes: set[str] = set()
+        for line in block.get("evidence", []):
+            score, themes = score_resume_evidence_line(line, job_text, detected_themes, experience_bank)
+            scored_lines.append((score, line))
+            block_themes.update(themes)
+        scored_lines.sort(key=lambda item: item[0], reverse=True)
+        positive_lines = [line for score, line in scored_lines if score > 0][:2]
+        block_score = sum(score for score, _ in scored_lines[:2])
+        if positive_lines:
+            scored_blocks.append(
+                {
+                    "score": block_score,
+                    "experience": block,
+                    "matched_themes": sorted(block_themes),
+                    "selected_evidence": positive_lines,
+                }
+            )
+
+    scored_blocks.sort(key=lambda item: item["score"], reverse=True)
+    if scored_blocks:
+        return scored_blocks[:max_experiences]
+
+    fallback_blocks = extract_resume_evidence_blocks(resume_text, experience_bank)
+    return [
+        {
+            "score": 0,
+            "experience": block,
+            "matched_themes": [],
+            "selected_evidence": list(block.get("evidence", []))[:1],
+        }
+        for block in fallback_blocks[:1]
+    ]
+
+
+def first_person_evidence_sentence(line: str) -> str:
+    """Turn a resume bullet into restrained first-person prose without adding facts."""
+    sentence = clean_resume_evidence_line(line).rstrip(".")
+    if not sentence:
+        return ""
+    if sentence.lower().startswith(("i ", "my ")):
+        return sentence + "."
+    lower = sentence.lower()
+    if lower.startswith("experience in ") or lower.startswith("experience with "):
+        return f"I have {lower}."
+    if lower.startswith(("proficient in ", "skilled in ", "familiar with ")):
+        return f"I am {lower}."
+    action_verbs = (
+        "built", "created", "developed", "designed", "implemented", "analyzed", "evaluated",
+        "led", "improved", "reduced", "increased", "delivered", "automated", "researched",
+        "supported", "produced", "managed", "coordinated", "conducted", "presented", "wrote",
+    )
+    if lower.startswith(action_verbs):
+        first_word, separator, rest = sentence.partition(" ")
+        normalized = f"{first_word.lower()} {rest}" if separator else first_word.lower()
+        return f"I {normalized}."
+    if "," in sentence or " · " in sentence or " | " in sentence:
+        return f"My resume lists {sentence}."
+    return f"My resume describes {sentence[0].lower() + sentence[1:]}."
+
+
+def top_job_priority(job_text: str, detected_themes: list[str]) -> str:
+    """Return one concise, source-grounded description of the role's priority."""
+    required, preferred = extract_requirements(job_text)
+    candidates = required or preferred
+    if candidates:
+        priority = re.sub(
+            r"^(required|requirements?|must|responsible for|experience with)[:\s-]*",
+            "",
+            clean_resume_evidence_line(candidates[0]),
+            flags=re.IGNORECASE,
+        )
+        words = priority.rstrip(".").split()
+        if words:
+            return " ".join(words[:18])
+    return build_focus_summary(detected_themes[:2])
+
+
 def build_focus_summary(detected_themes: list[str]) -> str:
     """Describe the JD focus in one short phrase."""
     labels = [THEME_LABELS.get(theme, theme.replace("_", " ")) for theme in detected_themes]
@@ -361,32 +567,31 @@ def build_evidence_sentence(selection: dict[str, Any]) -> str:
 
 
 def build_primary_evidence_paragraph(selection: dict[str, Any]) -> str:
-    """Build a detailed paragraph from the strongest selected evidence."""
+    """Build a source-grounded proof paragraph from the strongest resume block."""
     experience = selection["experience"]
     bullets = selection.get("selected_evidence", [])
     name = str(experience.get("name", "this experience"))
 
     if not bullets:
-        return build_evidence_sentence(selection)
+        return ""
 
-    return f"I bring relevant experience from {name}: " + " ".join(bullets)
+    sentences = [first_person_evidence_sentence(bullet) for bullet in bullets[:2]]
+    if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
+        return " ".join(sentences)
+    return f"In {name}, " + " ".join(sentences)
 
 
 def build_secondary_evidence_paragraph(selected: list[dict[str, Any]]) -> str:
-    """Build a concise second evidence paragraph when additional matches exist."""
+    """Add one concise, independently sourced proof when another block is relevant."""
     if len(selected) > 1:
-        return " ".join(build_evidence_sentence(selection) for selection in selected[1:3])
-
-    primary = selected[0]["experience"] if selected else {}
-    if "machine_learning" in primary.get("tags", []):
-        return (
-            "That work is relevant because it required turning raw information "
-            "into structured features, comparing model outputs with multiple "
-            "metrics, and explaining what evaluation results meant rather than "
-            "relying on a single score. I would bring the same careful, "
-            "evidence-based approach to model development and review."
-        )
-
+        secondary = selected[1]
+        evidence = list(secondary.get("selected_evidence", []))
+        if evidence:
+            sentence = first_person_evidence_sentence(evidence[0])
+            name = str(secondary["experience"].get("name", "another resume experience"))
+            if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
+                return sentence
+            return f"In {name}, {sentence}"
     return ""
 
 
@@ -395,63 +600,53 @@ def build_cover_letter(
     job_text: str,
     experience_bank: dict[str, Any] | None = None,
 ) -> str:
-    """Build the employer-facing cover letter from local evidence blocks."""
-    _ = resume_text
-    bank = experience_bank or load_experience_bank()
+    """Build a concise employer-facing CL from JD priorities and resume proof."""
+    bank = experience_bank or {"theme_keywords": DEFAULT_THEME_KEYWORDS}
     detected_themes = detect_themes(job_text, bank)
-    selected = select_evidence_blocks(bank, detected_themes, job_text)
-    profile = bank.get("profile", {})
-    positioning = str(
-        profile.get(
-            "positioning",
-            "early-career candidate with experience in Python, data analysis, model evaluation, and technical communication.",
-        )
-    )
-    candidate_name = str(profile.get("name", "Candidate Name") or "Candidate Name").strip()
+    selected = select_resume_evidence_blocks(resume_text, job_text, detected_themes, bank)
+    candidate_name = extract_candidate_name(resume_text)
     job_title = extract_job_title(job_text)
     company = extract_company(job_text)
-    focus_summary = build_focus_summary(detected_themes)
-
-    evidence_sentences = [build_evidence_sentence(selection) for selection in selected[:3]]
-    first_evidence = evidence_sentences[0] if evidence_sentences else ""
-    other_evidence = evidence_sentences[1:3]
+    focus_summary = build_focus_summary(detected_themes[:2])
+    priority = top_job_priority(job_text, detected_themes)
 
     paragraphs = [
         "Dear Hiring Team,",
         (
-            f"I am excited to apply for the {job_title} position at {company}. "
-            f"I am a {positioning[0].lower() + positioning[1:]} This role's focus on {focus_summary} connects closely "
-            "with the project and internship work I would bring to the team."
+            f"The {job_title} role at {company} emphasizes {priority}. "
+            f"My resume shows hands-on work in {focus_summary}, and the evidence most relevant to this role "
+            "comes from projects and experience where I applied those skills to concrete work."
         ),
     ]
 
     if selected:
-        paragraphs.append(build_primary_evidence_paragraph(selected[0]))
-
-    secondary_paragraph = build_secondary_evidence_paragraph(selected)
-    if secondary_paragraph:
-        paragraphs.append(secondary_paragraph)
-
-    contribution_themes = [THEME_LABELS.get(theme, theme.replace("_", " ")) for theme in detected_themes[:2]]
-    if not contribution_themes:
-        contribution_text = "applied technical work"
-    elif len(contribution_themes) == 1:
-        contribution_text = contribution_themes[0]
+        proof_sentences = [build_primary_evidence_paragraph(selected[0])]
+        secondary = build_secondary_evidence_paragraph(selected)
+        if secondary:
+            proof_sentences.append(secondary)
+        paragraphs.append(" ".join(sentence for sentence in proof_sentences if sentence))
     else:
-        contribution_text = f"{contribution_themes[0]} and {contribution_themes[1]}"
+        paragraphs.append(
+            "My uploaded resume does not contain a sufficiently specific proof point for the main JD priority, "
+            "so I would review this draft and add only a truthful example already supported by the resume."
+        )
 
     paragraphs.extend(
         [
             (
-                f"I would welcome the opportunity to discuss how my experience in "
-                f"{contribution_text} could contribute to the {job_title} role. "
-                "Thank you for your time and consideration."
+                f"I would welcome a conversation about how I could bring this experience to {company}'s "
+                f"{focus_summary} work."
             ),
             f"Sincerely,\n\n{candidate_name}",
         ]
     )
 
     cover_letter = "\n\n".join(paragraphs) + "\n"
+    if len(cover_letter.split()) > TARGET_WORD_COUNT_MAX and selected:
+        compact_selection = dict(selected[0])
+        compact_selection["selected_evidence"] = list(selected[0].get("selected_evidence", []))[:1]
+        paragraphs[2] = build_primary_evidence_paragraph(compact_selection)
+        cover_letter = "\n\n".join(paragraphs) + "\n"
     return clean_duplicated_punctuation(cover_letter)
 
 
@@ -486,9 +681,6 @@ def find_missing_or_weak_areas(job_text: str, detected_themes: list[str], select
         if theme not in selected_theme_set:
             weak_areas.append(f"{theme}: no strong evidence block selected")
 
-    if contains_phrase(job_text, "robotics") and not contains_phrase(job_text, "uav"):
-        weak_areas.append("robotics: resume support is strongest through UAV inspection algorithms and route planning")
-
     if not weak_areas:
         weak_areas.append("No major missing or weak areas detected by keyword matching.")
 
@@ -496,13 +688,15 @@ def find_missing_or_weak_areas(job_text: str, detected_themes: list[str], select
 
 
 def build_internal_notes(
+    resume_text: str,
     job_text: str,
     experience_bank: dict[str, Any],
     examples: list[str],
+    cover_letter: str,
 ) -> str:
-    """Build separate internal notes for human review."""
+    """Build a source trace, gap audit, and quality check for human review."""
     detected_themes = detect_themes(job_text, experience_bank)
-    selected = select_evidence_blocks(experience_bank, detected_themes, job_text)
+    selected = select_resume_evidence_blocks(resume_text, job_text, detected_themes, experience_bank)
     required, preferred = extract_requirements(job_text)
 
     selected_experience_lines = [
@@ -520,6 +714,13 @@ def build_internal_notes(
         [
             "# Internal Cover Letter Notes",
             "",
+            "## Draft Quality",
+            "",
+            f"- Word count: {len(cover_letter.split())} (target: {TARGET_WORD_COUNT_MIN}-{TARGET_WORD_COUNT_MAX})",
+            f"- Primary JD priority: {top_job_priority(job_text, detected_themes)}",
+            "- Employer-facing claims are selected only from the uploaded resume text.",
+            "- A personal experience bank may expand matching vocabulary but cannot introduce new claims.",
+            "",
             "## Detected JD Themes",
             "",
             format_bullets(detected_themes),
@@ -532,11 +733,11 @@ def build_internal_notes(
             "",
             format_bullets(preferred),
             "",
-            "## Selected Experiences",
+            "## Selected Resume Sections",
             "",
             format_bullets(selected_experience_lines),
             "",
-            "## Selected Evidence Bullets",
+            "## Claim Trace — Exact Resume Evidence",
             "",
             format_bullets(selected_evidence_lines),
             "",
@@ -554,7 +755,7 @@ def build_internal_notes(
             "- Confirm degree, visa, work authorization, citizenship, sponsorship, seniority, and location requirements manually.",
             "- Do not submit this internal notes file to employers.",
             "- Confirm the candidate's degree level before relying on education-related statements.",
-            "- Review the generated tailored resume before submitting.",
+            "- The uploaded resume is not rewritten or regenerated by this workflow.",
         ]
     ) + "\n"
 
@@ -566,6 +767,9 @@ def validate_cover_letter(cover_letter: str, experience_bank: dict[str, Any]) ->
     for phrase in banned_phrases + GENERIC_PHRASES:
         if phrase in cover_letter:
             found.append(phrase)
+    word_count = len(cover_letter.split())
+    if word_count > TARGET_WORD_COUNT_MAX:
+        found.append(f"word count {word_count} exceeds {TARGET_WORD_COUNT_MAX}")
     return found
 
 
@@ -603,7 +807,11 @@ def generate_cover_letter(
     assert workspace.resume_source_path is not None
     resume_text = workspace.resume_source_path.read_text(encoding="utf-8")
     job_text = job_description_path.read_text(encoding="utf-8")
-    experience_bank = load_experience_bank(workspace.experience_bank_path or GENERIC_EXPERIENCE_BANK_PATH)
+    experience_bank = (
+        load_experience_bank(workspace.experience_bank_path)
+        if workspace.experience_bank_path
+        else {"theme_keywords": DEFAULT_THEME_KEYWORDS, "banned_phrases": DEFAULT_BANNED_PHRASES}
+    )
     examples = load_cover_letter_examples()
     company = extract_markdown_field(job_text, "Company", "")
     assert_cover_letter_company_verified(
@@ -618,7 +826,7 @@ def generate_cover_letter(
     )
 
     cover_letter = build_cover_letter(resume_text, job_text, experience_bank)
-    internal_notes = build_internal_notes(job_text, experience_bank, examples)
+    internal_notes = build_internal_notes(resume_text, job_text, experience_bank, examples, cover_letter)
 
     forbidden_phrases = validate_cover_letter(cover_letter, experience_bank)
     if forbidden_phrases:

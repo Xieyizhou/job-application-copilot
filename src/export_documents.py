@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 
 from docx import Document
-from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 
@@ -89,37 +88,6 @@ def configure_document_styles(document: Document) -> None:
     normal_style.paragraph_format.line_spacing = 1.0
 
 
-def configure_resume_document_styles(document: Document) -> None:
-    """Apply compact resume-safe page and font settings."""
-    section = document.sections[0]
-    section.top_margin = Inches(0.6)
-    section.bottom_margin = Inches(0.6)
-    section.left_margin = Inches(0.7)
-    section.right_margin = Inches(0.7)
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)
-        normal_style = document.styles["Normal"]
-    normal_style.font.name = "Calibri"
-    normal_style.font.size = Pt(10.5)
-    normal_style.paragraph_format.space_after = Pt(3)
-    normal_style.paragraph_format.line_spacing = 1.0
-
-    for style_name, font_size in [("Heading 1", 14), ("Heading 2", 12), ("Heading 3", 11)]:
-        style = document.styles[style_name]
-        style.font.name = "Calibri"
-        style.font.size = Pt(font_size)
-        style.font.bold = True
-        style.paragraph_format.space_before = Pt(8)
-        style.paragraph_format.space_after = Pt(3)
-
-    if "List Bullet" in [style.name for style in document.styles if style.type == WD_STYLE_TYPE.PARAGRAPH]:
-        bullet_style = document.styles["List Bullet"]
-        bullet_style.font.name = "Calibri"
-        bullet_style.font.size = Pt(10.5)
-        bullet_style.paragraph_format.space_after = Pt(2)
-
-
 def clear_document_body(document: Document) -> None:
     """Remove template placeholder body content while keeping styles/margins."""
     body = document._element.body
@@ -186,66 +154,6 @@ def add_paragraph(
     run.bold = bold
     run.font.name = "Times New Roman"
     run.font.size = Pt(font_size)
-
-
-def clean_markdown_inline(text: str) -> str:
-    """Remove simple Markdown emphasis/link markers for DOCX text."""
-    text = re.sub(r"`([^`]+)`", r"\1", text)
-    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
-    text = re.sub(r"\*([^*]+)\*", r"\1", text)
-    text = re.sub(r"__([^_]+)__", r"\1", text)
-    text = re.sub(r"_([^_]+)_", r"\1", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    return clean_duplicated_punctuation(text.strip())
-
-
-def add_resume_paragraph(document: Document, text: str, *, style: str | None = None) -> None:
-    """Add a compact resume paragraph with optional built-in style."""
-    paragraph = document.add_paragraph(style=style)
-    paragraph.paragraph_format.space_after = Pt(2 if style == "List Bullet" else 3)
-    paragraph.paragraph_format.line_spacing = 1.0
-    run = paragraph.add_run(clean_markdown_inline(text))
-    run.font.name = "Calibri"
-    run.font.size = Pt(10.5)
-
-
-def add_resume_markdown_to_document(document: Document, markdown_text: str) -> None:
-    """Convert simple Markdown resume content into a Word document."""
-    paragraph_lines: list[str] = []
-
-    def flush_paragraph() -> None:
-        nonlocal paragraph_lines
-        if paragraph_lines:
-            add_resume_paragraph(document, " ".join(paragraph_lines))
-            paragraph_lines = []
-
-    for raw_line in markdown_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            flush_paragraph()
-            continue
-
-        heading_match = re.match(r"^(#{1,3})\s+(.+)$", line)
-        if heading_match:
-            flush_paragraph()
-            level = len(heading_match.group(1))
-            heading_text = clean_markdown_inline(heading_match.group(2))
-            document.add_heading(heading_text, level=level)
-            continue
-
-        bullet_match = re.match(r"^[-*]\s+(.+)$", line)
-        if bullet_match:
-            flush_paragraph()
-            add_resume_paragraph(document, bullet_match.group(1), style="List Bullet")
-            continue
-
-        if re.fullmatch(r"-{3,}|\*{3,}|_{3,}", line):
-            flush_paragraph()
-            continue
-
-        paragraph_lines.append(line)
-
-    flush_paragraph()
 
 
 def add_cover_letter_to_template(
@@ -336,52 +244,37 @@ def export_cover_letter_to_docx(
     return warnings
 
 
-def export_resume_to_docx(markdown_path: Path, docx_path: Path) -> list[str]:
-    """Export tailored_resume.md to a simple resume DOCX."""
-    markdown_text = clean_duplicated_punctuation(markdown_path.read_text(encoding="utf-8"))
-    warnings = validate_employer_content(markdown_path.name, markdown_text)
-
-    document = Document()
-    configure_resume_document_styles(document)
-    add_resume_markdown_to_document(document, markdown_text)
-    warnings.extend(validate_employer_content(docx_path.name, final_document_text(document)))
-    document.save(docx_path)
-    return warnings
-
-
 def export_application_package(
     package_dir: Path,
     workspace: Workspace,
-) -> tuple[Path, Path, list[str]]:
-    """Export employer-facing resume and cover letter files from one package folder."""
+) -> tuple[Path, list[str]]:
+    """Export the employer-facing cover letter from one CL-only bundle."""
     workspace.require_writable()
-    resume_markdown = package_dir / "tailored_resume.md"
     cover_letter_markdown = package_dir / "cover_letter.md"
     template_path = generic_cover_letter_template(workspace)
 
     if not template_path.exists():
         raise FileNotFoundError(f"Missing cover letter template: {template_path}")
-    if not resume_markdown.exists():
-        raise FileNotFoundError(f"Missing required file: {resume_markdown}")
     if not cover_letter_markdown.exists():
         raise FileNotFoundError(f"Missing required file: {cover_letter_markdown}")
 
-    resume_docx = package_dir / "tailored_resume.docx"
     cover_letter_docx = package_dir / "cover_letter.docx"
     metadata = parse_job_metadata_from_package(package_dir)
-    export_warnings = export_resume_to_docx(resume_markdown, resume_docx)
-    export_warnings.extend(
-        export_cover_letter_to_docx(cover_letter_markdown, cover_letter_docx, metadata, template_path)
+    export_warnings = export_cover_letter_to_docx(
+        cover_letter_markdown,
+        cover_letter_docx,
+        metadata,
+        template_path,
     )
-    return resume_docx, cover_letter_docx, export_warnings
+    return cover_letter_docx, export_warnings
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Export tailored_resume.md and cover_letter.md to DOCX."
+        description="Export cover_letter.md to DOCX."
     )
-    parser.add_argument("package_dir", help="Application package folder containing Markdown files.")
+    parser.add_argument("package_dir", help="Cover-letter bundle folder containing Markdown files.")
     return parser.parse_args()
 
 
@@ -402,15 +295,12 @@ def main() -> None:
     except WorkspaceError as error:
         raise SystemExit(str(error)) from None
     template_found = generic_cover_letter_template(workspace).exists()
-    resume_md_found = (package_dir / "tailored_resume.md").exists()
     cover_letter_md_found = (package_dir / "cover_letter.md").exists()
-    resume_docx, cover_letter_docx, warnings = export_application_package(package_dir, workspace)
+    cover_letter_docx, warnings = export_application_package(package_dir, workspace)
 
     print(f"Package folder: {package_dir}")
     print(f"Template file found: {template_found}")
-    print(f"tailored_resume.md found: {resume_md_found}")
     print(f"cover_letter.md found: {cover_letter_md_found}")
-    print(f"Created resume DOCX: {resume_docx}")
     print(f"Created cover letter DOCX: {cover_letter_docx}")
 
     if warnings:

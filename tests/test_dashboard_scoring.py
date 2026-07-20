@@ -172,10 +172,10 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
         low = analyzed_job("Machine learning")
         for job in [failed, low]:
             self.assertFalse(
-                dashboard.review_inbox_view_matches(job, "Recommended", "Not tracked", "No package")
+                dashboard.review_inbox_view_matches(job, "Recommended", "Not tracked", "No cover letter")
             )
             self.assertTrue(
-                dashboard.review_inbox_view_matches(job, "Needs Review", "Not tracked", "No package")
+                dashboard.review_inbox_view_matches(job, "Needs Review", "Not tracked", "No cover letter")
             )
 
     def test_strong_match_requires_passed_confident_apply(self) -> None:
@@ -268,6 +268,25 @@ class DashboardActionGuidanceTests(unittest.TestCase):
 
         low_confidence = analyzed_job("Machine learning")
         self.assertIn("full job description", dashboard.review_job_next_action(low_confidence))
+
+    def test_workspace_switch_clears_cross_workspace_selection(self) -> None:
+        session_state = {
+            "workspace_mode": "Personal",
+            "workspace_setup_open": True,
+            "latest_generated_package_dir": "/private/example",
+            "package_viewer_tracker_id": 17,
+            "selected_review_job_path": "/private/job.md",
+            "active_page": "Review Jobs",
+        }
+        with patch.object(dashboard.st, "session_state", session_state):
+            dashboard.switch_workspace_mode("Demo")
+
+        self.assertEqual(session_state["workspace_mode"], "Demo")
+        self.assertFalse(session_state["workspace_setup_open"])
+        self.assertEqual(session_state["active_page"], "Review Jobs")
+        self.assertNotIn("latest_generated_package_dir", session_state)
+        self.assertNotIn("package_viewer_tracker_id", session_state)
+        self.assertNotIn("selected_review_job_path", session_state)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Unified command-line entry point for the job application copilot.
+"""Unified command-line entry point for the local Job Application Toolkit.
 
 This file is a thin convenience wrapper. The existing scripts in src/ still
 work directly; main.py only makes the daily workflow shorter.
@@ -19,11 +19,11 @@ if str(SRC_DIR) not in sys.path:
 from apply_package import create_application_package, resolve_metadata  # noqa: E402
 from fetch_jobs import fetch_and_save_jobs  # noqa: E402
 from tracker import delete_application, list_applications, show_application, update_status  # noqa: E402
+from workspace import WorkspaceError, personal_workspace  # noqa: E402
 
 
 def run_fetch(args: argparse.Namespace) -> None:
     """Fetch jobs through the existing fetch_jobs.py logic."""
-    args.source = "adzuna"
     result = fetch_and_save_jobs(args)
     saved_paths = list(result.get("saved_paths", []))
     fetch_run = dict(result.get("fetch_run", {}))
@@ -44,11 +44,11 @@ def run_fetch(args: argparse.Namespace) -> None:
     else:
         print("No new job description files were created.")
     print("")
-    print("Next step: run `python3 main.py package <job.md>`.")
+    print("Next step: run `python3 main.py cover-letter <job.md>`.")
 
 
 def run_package(args: argparse.Namespace) -> None:
-    """Generate an application package through apply_package.py logic."""
+    """Generate a cover-letter bundle through apply_package.py logic."""
     job_description_path = Path(args.job_description).expanduser()
     if not job_description_path.is_absolute():
         job_description_path = PROJECT_ROOT / job_description_path
@@ -57,15 +57,21 @@ def run_package(args: argparse.Namespace) -> None:
         raise FileNotFoundError(f"Job description file was not found: {job_description_path}")
 
     metadata = resolve_metadata(args, job_description_path)
+    workspace = personal_workspace()
+    try:
+        workspace.require_ready()
+    except WorkspaceError as error:
+        raise SystemExit(str(error)) from None
     summary = create_application_package(
         job_description_path=job_description_path,
+        workspace=workspace,
         company=metadata["company"],
         role=metadata["role"],
         location=metadata["location"],
         job_url=metadata["job_url"],
     )
 
-    print("\nApplication Package Summary")
+    print("\nCover Letter Bundle Summary")
     print("---------------------------")
     print(f"Parsed company: {summary['company']}")
     print(f"Parsed role: {summary['role']}")
@@ -73,9 +79,8 @@ def run_package(args: argparse.Namespace) -> None:
     print(f"Parsed job URL: {summary['job_url']}")
     print(f"Match score: {summary['match_score']}/100")
     print(f"Recommendation: {summary['recommendation']}")
-    print(f"Generated package folder: {summary['package_dir']}")
+    print(f"Generated bundle folder: {summary['package_dir']}")
     print(f"Analysis report file: {summary['analysis_path']}")
-    print(f"Resume DOCX file: {summary['resume_docx_path']}")
     print(f"Cover letter Markdown file: {summary['cover_letter_path']}")
     print(f"Cover letter DOCX file: {summary['cover_letter_docx_path']}")
     print(f"Tracker id: {summary['tracker_id']}")
@@ -91,16 +96,21 @@ def run_package(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the unified CLI parser."""
-    parser = argparse.ArgumentParser(description="Job Application Copilot CLI")
+    parser = argparse.ArgumentParser(description="Local Job Application Toolkit CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    fetch_parser = subparsers.add_parser("fetch", help="Fetch jobs from Adzuna.")
+    fetch_parser = subparsers.add_parser("fetch", help="Fetch jobs from a supported source.")
+    fetch_parser.add_argument("--source", choices=["jsearch", "adzuna", "jooble"], default="jsearch")
     fetch_parser.add_argument("--query", required=True)
     fetch_parser.add_argument("--country", default="sg")
     fetch_parser.add_argument("--location", default="")
     fetch_parser.add_argument("--max-results", type=int, default=5)
 
-    package_parser = subparsers.add_parser("package", help="Generate an application package.")
+    package_parser = subparsers.add_parser(
+        "cover-letter",
+        aliases=["package"],
+        help="Generate a resume-grounded cover-letter bundle.",
+    )
     package_parser.add_argument("job_description")
     package_parser.add_argument("--company", default="")
     package_parser.add_argument("--role", default="")
@@ -128,7 +138,7 @@ def main() -> None:
 
     if args.command == "fetch":
         run_fetch(args)
-    elif args.command == "package":
+    elif args.command in {"cover-letter", "package"}:
         run_package(args)
     elif args.command == "list":
         list_applications()

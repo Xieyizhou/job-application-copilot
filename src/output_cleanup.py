@@ -10,7 +10,7 @@ TIMESTAMP_DIR_PATTERN = r"\d{8}_\d{6}"
 
 
 def cleanup_old_outputs(output_dir: str, keep: int = 3) -> list[Path]:
-    """Keep only the latest generated application package folders per family.
+    """Keep only the latest generated cover-letter bundle folders per family.
 
     The cleanup is intentionally narrow:
     - It only operates inside a directory named ``generated_applications``.

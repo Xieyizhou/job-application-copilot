@@ -21,6 +21,7 @@ def run_child_check() -> None:
     recent_contents_before = recent_regions.read_bytes() if recent_existed_before else None
 
     app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
+    app.session_state["workspace_mode"] = "Demo"
     app.run(timeout=30)
     app.radio[0].set_value("Review Jobs").run(timeout=30)
     assert list(app.exception) == []

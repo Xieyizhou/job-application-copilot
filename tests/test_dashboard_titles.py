@@ -95,6 +95,7 @@ def run_custom_location_child() -> None:
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
+    app.session_state["workspace_mode"] = "Demo"
     app.run(timeout=30)
     app.radio[0].set_value("Find Jobs").run(timeout=30)
     assert not list(app.exception)
