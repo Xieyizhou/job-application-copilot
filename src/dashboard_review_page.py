@@ -10,7 +10,6 @@ import streamlit as st
 
 from apply_package import create_application_package, parse_job_metadata
 from company_verification import normalize_company_name, verification_from_markdown
-from dashboard_fit import build_fit_presentation
 from dashboard_regions import (
     build_region_options,
     dynamic_source_options,
@@ -31,6 +30,7 @@ from dashboard_review_components import (
     render_review_overview_section as render_compact_review_overview,
     render_selected_review_header as render_compact_review_header,
 )
+from dashboard_review_selector import render_review_job_picker
 from dashboard_titles import get_job_display_title
 from fetch_history import load_fetch_runs
 from output_paths import safe_slug
@@ -436,31 +436,6 @@ def resolve_selected_review_job(shortlist: list[dict[str, Any]], services: Revie
     return job
 
 
-def render_review_list_column(
-    shortlist: list[dict[str, Any]],
-    tracker_rows: list[dict[str, Any]],
-    summary_parts: list[str],
-    services: ReviewPageServices,
-) -> None:
-    """Render cards plus the optional compact comparison table."""
-    st.caption(" · ".join(summary_parts))
-    render_job_result_cards(shortlist, tracker_rows, services)
-    with st.expander("Compact table view", expanded=False):
-        st.dataframe(
-            [
-                {
-                    "Company": job["company"], "Role": get_job_display_title(job),
-                    "Location": job["normalized_location"], "Source": source_display_name(str(job["source"])),
-                    "Role Fit": build_fit_presentation(job)["role_fit"], "Recommendation": job["recommendation"],
-                    "Tracker": job.get("tracker_status") or services.tracker_status_for_job(job, tracker_rows),
-                    "Cover Letter": job.get("package_status") or services.package_status_for_job(job, tracker_rows),
-                }
-                for job in shortlist
-            ],
-            width="stretch", hide_index=True,
-        )
-
-
 def render_selected_review_header(
     job: dict[str, Any],
     tracker_rows: list[dict[str, Any]],
@@ -673,8 +648,12 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
         with right:
             st.button("Show All", on_click=filters["show_all"], width="stretch")
     selected_job = resolve_selected_review_job(shortlist, services)
-    left_col, right_col = st.columns([0.42, 0.58], gap="large")
-    with left_col:
-        render_review_list_column(shortlist, tracker_rows, review_summary_parts(shortlist, filters), services)
-    with right_col:
-        render_selected_review_detail(selected_job, tracker_rows, services)
+    selected_job = render_review_job_picker(
+        shortlist,
+        tracker_rows,
+        selected_job,
+        review_summary_parts(shortlist, filters),
+        services,
+        set_review_job_selection,
+    )
+    render_selected_review_detail(selected_job, tracker_rows, services)

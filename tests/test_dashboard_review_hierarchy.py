@@ -18,6 +18,7 @@ from dashboard_review_components import (
     visible_role_fit,
 )
 from dashboard_review_styles import badge_html, decision_field_html
+from dashboard_review_selector import job_picker_label, picked_review_job
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +103,12 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;", rendered)
         decision = decision_field_html("Recommendation", "Manual Review <unsafe>")
         self.assertIn("Manual Review &lt;unsafe&gt;", decision)
+
+    def test_job_picker_uses_paths_and_compact_labels(self) -> None:
+        first = {"path": "/jobs/one.md", "company": "Example", "role": "Data Analyst", "recommendation": "Apply"}
+        second = {"path": "/jobs/two.md", "company": "Example", "role": "ML Engineer", "recommendation": "Manual Review"}
+        self.assertEqual(picked_review_job([first, second], "/jobs/two.md"), second)
+        self.assertEqual(job_picker_label(second), "Example · ML Engineer — Manual Review")
 
     def test_review_modules_stay_bounded(self) -> None:
         self.assertLessEqual(source_line_count("src/dashboard_review_page.py"), 700)

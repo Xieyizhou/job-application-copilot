@@ -3,23 +3,42 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 from typing import Any, Callable
 
 import streamlit as st
 
-from fetch_jobs import fetch_and_save_jobs, jsearch_configured
+from fetch_jobs import jsearch_configured
+from dashboard_fetch_runner import run_job_search
 from dashboard_regions import source_display_name
+from dashboard_search_profile import search_profile_from_path
 
 
 DEFAULT_FETCH_LIMIT_PER_SOURCE = 20
 MAX_FETCH_LIMIT_PER_SOURCE = 20
-REGION_OPTIONS = ["Remote", "United States", "Canada", "Australia", "Custom"]
+REGION_OPTIONS = [
+    "Remote",
+    "Singapore",
+    "United Kingdom",
+    "United States",
+    "Canada",
+    "Australia",
+    "Custom",
+]
 ADZUNA_SUPPORTED_COUNTRIES = {
     "sg", "gb", "us", "ca", "au", "nz", "de", "fr", "it", "nl", "pl", "br", "za", "in"
 }
 REGION_CONFIG = {
     "Remote": {"adzuna_country": "us", "adzuna_location": "Remote", "jooble_location": "Remote"},
+    "Singapore": {
+        "adzuna_country": "sg",
+        "adzuna_location": "Singapore",
+        "jooble_location": "Singapore",
+    },
+    "United Kingdom": {
+        "adzuna_country": "gb",
+        "adzuna_location": "United Kingdom",
+        "jooble_location": "United Kingdom",
+    },
     "United States": {
         "adzuna_country": "us",
         "adzuna_location": "United States",
@@ -40,6 +59,7 @@ class FetchPageServices:
     """Shared dashboard operations required by the job-discovery page."""
 
     demo_mode_enabled: Callable[[], bool]
+    current_workspace: Callable[[], Any]
     go_to_page: Callable[[str], None]
     relocate_fetched_jobs_to_workspace: Callable[..., list[Any]]
     render_fetch_history_section: Callable[[], None]
@@ -70,7 +90,21 @@ def fetch_jobs_tab(services: FetchPageServices) -> None:
     )
     backend_outputs: list[str] = []
 
-    query = st.text_input("Target role / query", value="data analyst")
+    workspace = services.current_workspace()
+    profile = search_profile_from_path(workspace.resume_source_path)
+    profile_key = ":".join(
+        [workspace.mode, str(workspace.resume_source_path), profile.query, *profile.keywords]
+    )
+    if st.session_state.get("fetch_profile_key") != profile_key:
+        st.session_state["fetch_profile_key"] = profile_key
+        st.session_state["fetch_query"] = profile.query
+    query = st.text_input("Target role / query", key="fetch_query")
+    if profile.source_ready:
+        matched_keywords = ", ".join(keyword.title() for keyword in profile.keywords)
+        detail = f" Resume signals: {matched_keywords}." if matched_keywords else ""
+        st.caption(f"Suggested from the uploaded resume; you can edit it before searching.{detail}")
+    else:
+        st.caption("Upload a resume to receive an automatic role suggestion, or enter a query manually.")
     region = st.selectbox("Region", REGION_OPTIONS, index=0, key="fetch_region")
     region_config = REGION_CONFIG[region]
     adzuna_country = region_config["adzuna_country"]
@@ -116,7 +150,7 @@ def fetch_jobs_tab(services: FetchPageServices) -> None:
             value=DEFAULT_FETCH_LIMIT_PER_SOURCE,
             help="How many jobs to request from each source before filtering.",
         )
-        submitted = st.form_submit_button("Find Jobs")
+        submitted = st.form_submit_button("Find Jobs", type="primary", width="stretch")
 
     if submitted:
         if services.demo_mode_enabled():
@@ -128,40 +162,25 @@ def fetch_jobs_tab(services: FetchPageServices) -> None:
         if not sources:
             st.error("Select at least one source.")
             return
+        if not query.strip():
+            st.error("Enter a target role or search query.")
+            return
 
-        all_saved_paths: list[Any] = []
-        fetch_results: list[dict[str, Any]] = []
-        fetch_errors: list[str] = []
-
-        for source in sources:
-            if source == "adzuna" and not adzuna_is_supported:
-                backend_outputs.append(
-                    f"[adzuna] Skipped because country `{adzuna_country}` is not supported."
-                )
-                continue
-
-            source_location = adzuna_location if source in {"adzuna", "jsearch"} else jooble_location
-            args = SimpleNamespace(
-                source=source,
-                country=adzuna_country,
-                query=query,
-                location=source_location,
-                max_results=fetch_limit_per_source,
-            )
-            try:
-                result, output = services.run_with_captured_output(fetch_and_save_jobs, args)
-                saved_paths = list(result.get("saved_paths", []) if isinstance(result, dict) else [])
-                saved_paths = services.relocate_fetched_jobs_to_workspace(saved_paths, source)
-                run_record = dict(result.get("fetch_run", {}) if isinstance(result, dict) else {})
-                all_saved_paths.extend(saved_paths)
-                if run_record:
-                    fetch_results.append(run_record)
-                    st.session_state["latest_fetch_run_id"] = run_record.get("fetch_run_id", "")
-                if output:
-                    backend_outputs.append(f"[{source}]\n{output}")
-            except Exception as error:  # noqa: BLE001
-                fetch_errors.append(f"{source}: {error}")
-                backend_outputs.append(f"[{source}] {error}")
+        outcome = run_job_search(
+            sources=sources,
+            query=query.strip(),
+            country=adzuna_country,
+            adzuna_location=adzuna_location,
+            jooble_location=jooble_location,
+            adzuna_supported=adzuna_is_supported,
+            limit_per_source=fetch_limit_per_source,
+            run_with_captured_output=services.run_with_captured_output,
+            relocate_fetched_jobs_to_workspace=services.relocate_fetched_jobs_to_workspace,
+        )
+        all_saved_paths = outcome.saved_paths
+        fetch_results = outcome.runs
+        fetch_errors = outcome.errors
+        backend_outputs.extend(outcome.backend_outputs)
 
         total_returned = sum(int(run.get("total_jobs_returned", 0) or 0) for run in fetch_results)
         total_new = sum(int(run.get("new_jobs_count", 0) or 0) for run in fetch_results)
@@ -186,6 +205,10 @@ def fetch_jobs_tab(services: FetchPageServices) -> None:
             for error in fetch_errors
         ):
             st.info("Live job search requires API keys. You can use Demo workspace or add keys to `.env`.")
+        if fetch_errors:
+            with st.expander("Source issues", expanded=not fetch_results):
+                for error in fetch_errors:
+                    st.error(error)
         result_metrics = st.columns(6)
         result_metrics[0].metric("Returned", total_returned)
         result_metrics[1].metric("New", total_new)

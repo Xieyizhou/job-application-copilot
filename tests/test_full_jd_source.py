@@ -68,6 +68,34 @@ class JSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(kwargs["headers"], {"x-api-key": "test-key"})
         self.assertEqual(kwargs["params"]["country"], "us")
 
+    @patch("fetch_jobs.load_jsearch_api_key", return_value="test-key")
+    @patch("requests.get")
+    def test_fetch_accepts_current_v2_jobs_envelope(self, get: Mock, _load_key: Mock) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "data": {
+                "jobs": [
+                    {
+                        "job_id": "job-v2",
+                        "employer_name": "Example Robotics",
+                        "job_title": "Machine Learning Engineer",
+                        "job_country": "Singapore",
+                        "job_apply_link": "https://careers.example.com/jobs/v2",
+                        "job_description": " ".join(["Python machine learning systems"] * 40),
+                    }
+                ],
+                "cursor": "next-page-token",
+            }
+        }
+        get.return_value = response
+
+        jobs = fetch_jobs.fetch_jsearch_jobs("sg", "machine learning engineer", "Singapore", 5)
+
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["role"], "Machine Learning Engineer")
+        self.assertEqual(jobs[0]["location"], "Singapore")
+
     def test_markdown_records_description_provenance(self) -> None:
         markdown = fetch_jobs.build_job_markdown(
             fetch_jobs.normalize_jsearch_job(

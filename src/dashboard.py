@@ -1328,6 +1328,7 @@ def fetch_jobs_tab() -> None:
     """Render Find Jobs through the extracted discovery module."""
     render_fetch_jobs_page(
         FetchPageServices(
+            current_workspace=current_workspace,
             demo_mode_enabled=demo_mode_enabled,
             go_to_page=go_to_page,
             relocate_fetched_jobs_to_workspace=relocate_fetched_jobs_to_workspace,

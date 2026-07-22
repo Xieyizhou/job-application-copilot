@@ -25,6 +25,8 @@ def run_child_check() -> None:
     app.run(timeout=30)
     app.radio[0].set_value("Review Jobs").run(timeout=30)
     assert list(app.exception) == []
+    assert "Choose a job" in [selectbox.label for selectbox in app.selectbox]
+    assert "Review" not in [button.label for button in app.button]
 
     app.text_input[0].set_value("no-such-fictional-job").run(timeout=30)
     assert list(app.exception) == []

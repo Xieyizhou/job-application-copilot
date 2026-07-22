@@ -283,7 +283,13 @@ def fetch_jsearch_jobs(
         ) from error
 
     data = response.json()
-    raw_jobs = data.get("data", []) if isinstance(data, dict) else []
+    response_data = data.get("data", []) if isinstance(data, dict) else []
+    if isinstance(response_data, dict):
+        raw_jobs = response_data.get("jobs", [])
+    else:
+        raw_jobs = response_data
+    if not isinstance(raw_jobs, list):
+        raw_jobs = []
     jobs = [normalize_jsearch_job(job, location) for job in raw_jobs if isinstance(job, dict)]
     jobs = [job for job in jobs if job.get("description")][:max_results]
     if not jobs:
