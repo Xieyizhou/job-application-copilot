@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from ml.evidence import build_semantic_evidence_index
 from output_paths import application_package_dir
 from scoring_engine import explain_final_decision, score_job_texts
 from scoring_matching import (
@@ -199,10 +200,18 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     score = result["score"]
     recommendation = result["recommendation"]
     main_reason = explain_final_decision(score, recommendation, result["eligibility"], result["confidence"])
+    semantic_evidence = build_semantic_evidence_index(job_text, resume_text)
 
     matched_strengths = [
-        f"Resume source supports requested keyword: {keyword}." for keyword in matched_keywords[:6]
+        (
+            f"{match['requirement']} — {match['evidence']} "
+            f"({float(match['similarity']):.0%}, {match['match_type']})."
+        )
+        for match in semantic_evidence["accepted_matches"][:3]
     ]
+    matched_strengths.extend(
+        f"Resume source supports requested keyword: {keyword}." for keyword in matched_keywords[:6]
+    )
     if partial_matches and len(matched_strengths) < 6:
         matched_strengths.extend(
             f"Adjacent evidence may support: {keyword}."
@@ -224,7 +233,12 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     if not weak_areas:
         weak_areas.append("No major weak areas were detected by the lightweight analyzer.")
 
-    resume_evidence = find_resume_evidence(themes)
+    resume_evidence = list(
+        dict.fromkeys(
+            str(match["evidence"])
+            for match in semantic_evidence["accepted_matches"]
+        )
+    )
     return {
         "score": score,
         "coverage_score": result["coverage_score"],
@@ -249,6 +263,8 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         "resume_suggestions": resume_suggestions_for_keywords(matched_keywords, missing_keywords, red_flags),
         "jd_evidence": short_evidence_snippets(job_text, matched_keywords or job_keywords),
         "profile_evidence": resume_evidence[:3],
+        "semantic_evidence": semantic_evidence,
+        "jd_quality": dict(result["confidence"].get("job_description_quality", {})),
         "raw_analysis": raw_analysis,
     }
 
@@ -285,7 +301,18 @@ def analyze_job(
     matched_skills, partial_matches, missing_skills = collect_report_matches(score_breakdown)
     parsed_job = result["parsed_job"]
     red_flags = parsed_job["red_flags"]
-    resume_evidence = find_resume_evidence(themes)
+    semantic_evidence = build_semantic_evidence_index(job_text, resume_text)
+    resume_evidence = [
+        (
+            f"{match['requirement']} => {match['evidence']} "
+            f"({float(match['similarity']):.0%}, {match['match_type']})"
+        )
+        for match in semantic_evidence["accepted_matches"]
+    ]
+    resume_evidence.extend(
+        f"No accepted resume evidence for: {requirement}"
+        for requirement in semantic_evidence["unmatched_requirements"]
+    )
 
     report = build_markdown_report(
         job_description_path=job_description_path,

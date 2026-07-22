@@ -29,7 +29,7 @@ FORBIDDEN_EMPLOYER_PHRASES = [
     "[Hiring manager's name]",
     "[Your name]",
     "[Your signature]",
-    "AI-generated",
+    "automatically generated",
     "Tailoring Notes",
     "internal notes",
     "undergraduate graduate",

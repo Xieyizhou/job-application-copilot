@@ -22,6 +22,7 @@ from company_verification import (
     parse_bool,
     validate_company_name,
 )
+from ml.evidence import build_semantic_evidence_index
 from output_paths import application_package_dir
 from workspace import Workspace, WorkspaceError, personal_workspace
 
@@ -31,6 +32,7 @@ COVER_LETTER_EXAMPLES_DIR = PROJECT_ROOT / "data" / "cover_letter_examples_md"
 
 TARGET_WORD_COUNT_MIN = 120
 TARGET_WORD_COUNT_MAX = 250
+MAX_COVER_LETTER_EVIDENCE_LINES = 3
 DEFAULT_THEME_KEYWORDS = {
     "machine_learning": ["machine learning", "ml", "classification", "model", "prediction"],
     "python_data": ["python", "pandas", "numpy", "scikit-learn", "sklearn", "data analysis"],
@@ -47,7 +49,7 @@ GENERIC_PHRASES = [
     "my recent graduate background",
 ]
 DEFAULT_BANNED_PHRASES = [
-    "AI-generated",
+    "automatically generated",
     "Tailoring Notes",
     "internal notes",
     "undergraduate graduate",
@@ -460,43 +462,55 @@ def select_resume_evidence_blocks(
     detected_themes: list[str],
     experience_bank: dict[str, Any],
     max_experiences: int = 2,
+    evidence_index: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Select one or two strongest resume-grounded proof blocks for this JD."""
-    scored_blocks = []
-    for block in extract_resume_evidence_blocks(resume_text, experience_bank):
-        scored_lines = []
-        block_themes: set[str] = set()
-        for line in block.get("evidence", []):
-            score, themes = score_resume_evidence_line(line, job_text, detected_themes, experience_bank)
-            scored_lines.append((score, line))
-            block_themes.update(themes)
-        scored_lines.sort(key=lambda item: item[0], reverse=True)
-        positive_lines = [line for score, line in scored_lines if score > 0][:2]
-        block_score = sum(score for score, _ in scored_lines[:2])
-        if positive_lines:
-            scored_blocks.append(
-                {
-                    "score": block_score,
-                    "experience": block,
-                    "matched_themes": sorted(block_themes),
-                    "selected_evidence": positive_lines,
-                }
+    """Select only threshold-passing proof mapped to explicit JD requirements."""
+    evidence_index = evidence_index or build_semantic_evidence_index(job_text, resume_text)
+    ranked_matches = sorted(
+        [
+            match
+            for match in evidence_index["accepted_matches"]
+            if match.get("cover_letter_eligible", True)
+        ],
+        key=lambda item: (item["demand"] == "preferred", -float(item["similarity"])),
+    )
+    sections: dict[str, dict[str, Any]] = {}
+    seen_evidence: set[str] = set()
+    for match in ranked_matches:
+        evidence = str(match["evidence"])
+        if evidence in seen_evidence:
+            continue
+        seen_evidence.add(evidence)
+        section = str(match["section_evidence"])
+        block = sections.setdefault(
+            section,
+            {
+                "score": 0,
+                "experience": {
+                    "id": re.sub(r"[^a-z0-9]+", "_", section.lower()).strip("_") or "resume_evidence",
+                    "name": section,
+                    "category": "resume",
+                    "evidence": [],
+                    "safe_phrases": [],
+                },
+                "matched_themes": [],
+                "selected_evidence": [],
+                "semantic_matches": [],
+            },
+        )
+        _, themes = score_resume_evidence_line(evidence, job_text, detected_themes, experience_bank)
+        block["score"] = max(int(block["score"]), round(float(match["similarity"]) * 100))
+        block["matched_themes"] = sorted(set(block["matched_themes"]) | set(themes))
+        block["selected_evidence"].append(evidence)
+        block["experience"]["evidence"].append(evidence)
+        block["semantic_matches"].append(match)
+        if len(seen_evidence) >= MAX_COVER_LETTER_EVIDENCE_LINES or (
+            len(sections) >= max_experiences and all(
+            len(item["selected_evidence"]) >= 1 for item in sections.values()
             )
-
-    scored_blocks.sort(key=lambda item: item["score"], reverse=True)
-    if scored_blocks:
-        return scored_blocks[:max_experiences]
-
-    fallback_blocks = extract_resume_evidence_blocks(resume_text, experience_bank)
-    return [
-        {
-            "score": 0,
-            "experience": block,
-            "matched_themes": [],
-            "selected_evidence": list(block.get("evidence", []))[:1],
-        }
-        for block in fallback_blocks[:1]
-    ]
+        ):
+            break
+    return list(sections.values())[:max_experiences]
 
 
 def first_person_evidence_sentence(line: str) -> str:
@@ -603,7 +617,14 @@ def build_cover_letter(
     """Build a concise employer-facing CL from JD priorities and resume proof."""
     bank = experience_bank or {"theme_keywords": DEFAULT_THEME_KEYWORDS}
     detected_themes = detect_themes(job_text, bank)
-    selected = select_resume_evidence_blocks(resume_text, job_text, detected_themes, bank)
+    evidence_index = build_semantic_evidence_index(job_text, resume_text)
+    selected = select_resume_evidence_blocks(
+        resume_text,
+        job_text,
+        detected_themes,
+        bank,
+        evidence_index=evidence_index,
+    )
     candidate_name = extract_candidate_name(resume_text)
     job_title = extract_job_title(job_text)
     company = extract_company(job_text)
@@ -696,18 +717,39 @@ def build_internal_notes(
 ) -> str:
     """Build a source trace, gap audit, and quality check for human review."""
     detected_themes = detect_themes(job_text, experience_bank)
-    selected = select_resume_evidence_blocks(resume_text, job_text, detected_themes, experience_bank)
+    evidence_index = build_semantic_evidence_index(job_text, resume_text)
+    selected = select_resume_evidence_blocks(
+        resume_text,
+        job_text,
+        detected_themes,
+        experience_bank,
+        evidence_index=evidence_index,
+    )
     required, preferred = extract_requirements(job_text)
 
     selected_experience_lines = [
         f"{item['experience'].get('name', 'Unnamed experience')} "
-        f"(themes: {', '.join(item.get('matched_themes', [])) or 'fallback'})"
+        f"(themes: {', '.join(item.get('matched_themes', [])) or 'semantic evidence'})"
         for item in selected
     ]
     selected_evidence_lines = [
         bullet
         for item in selected
         for bullet in item.get("selected_evidence", [])
+    ]
+    evidence_map_lines = [
+        (
+            f"{match['demand'].title()} — {match['requirement']} => "
+            f"{match['evidence']} ({float(match['similarity']):.0%}, {match['match_type']}, "
+            f"section: {match['section_evidence']}, "
+            f"CL use: {'eligible' if match.get('cover_letter_eligible', True) else 'excluded'})"
+        )
+        for match in evidence_index["accepted_matches"]
+    ]
+    rejected_requirement_lines = [
+        f"{requirement} — rejected because no resume statement passed the "
+        f"{float(evidence_index['threshold']):.0%} evidence threshold"
+        for requirement in evidence_index["unmatched_requirements"]
     ]
 
     return "\n".join(
@@ -740,6 +782,16 @@ def build_internal_notes(
             "## Claim Trace — Exact Resume Evidence",
             "",
             format_bullets(selected_evidence_lines),
+            "",
+            "## Requirement-to-Resume Evidence Map",
+            "",
+            f"- Method: {evidence_index['method']}",
+            f"- Accepted: {evidence_index['accepted_count']} of {evidence_index['requirement_count']} requirements",
+            format_bullets(evidence_map_lines),
+            "",
+            "## Rejected Requirement Evidence",
+            "",
+            format_bullets(rejected_requirement_lines),
             "",
             "## Weak Or Missing Areas",
             "",

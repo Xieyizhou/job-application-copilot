@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from ml.jd_quality import classify_jd_quality, extract_description_body
 from scoring_config import (
     DIRECT_MATCH_STRENGTH,
     NO_MATCH_STRENGTH,
@@ -159,30 +160,12 @@ def calculate_match_score(
 
 def extract_job_description_body(job_text: str) -> str:
     """Return the actual description body when scoring a saved Markdown job."""
-    marker = re.search(r"(?im)^##\s+Job Description\s*$", job_text)
-    if marker is None:
-        return job_text.strip()
-    body = job_text[marker.end() :]
-    next_section = re.search(r"(?im)^##\s+", body)
-    if next_section is not None:
-        body = body[: next_section.start()]
-    return body.strip()
+    return extract_description_body(job_text)
 
 
 def assess_job_description_quality(job_text: str) -> dict[str, object]:
-    """Detect short or visibly truncated source text without treating metadata as JD evidence."""
-    body = extract_job_description_body(job_text)
-    word_count = len(body.split())
-    saved_source_record = bool(re.search(r"(?im)^Source:\s*\S+", job_text))
-    visible_truncation = bool(re.search(r"(?:\.\.\.|…)", body))
-    source_snippet = saved_source_record and (word_count < 80 or visible_truncation)
-    appears_incomplete = word_count < 20 or source_snippet
-    return {
-        "word_count": word_count,
-        "saved_source_record": saved_source_record,
-        "visible_truncation": visible_truncation,
-        "appears_incomplete": appears_incomplete,
-    }
+    """Return the explainable local JD-quality classification."""
+    return classify_jd_quality(job_text)
 
 
 def extract_saved_job_title(job_text: str) -> str:

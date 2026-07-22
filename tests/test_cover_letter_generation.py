@@ -76,6 +76,52 @@ class CoverLetterGenerationTests(unittest.TestCase):
         self.assertIn("Claim Trace — Exact Resume Evidence", notes)
         self.assertIn("Built a Python and SQL reporting dashboard", notes)
         self.assertIn("uploaded resume is not rewritten or regenerated", notes)
+        self.assertIn("Requirement-to-Resume Evidence Map", notes)
+        self.assertIn("Direct support", notes)
+
+    def test_semantic_requirement_selects_exact_etl_resume_evidence(self) -> None:
+        resume = """# Ada Example
+
+## Research Engineering
+- Developed automated ETL workflows for multi-source research data.
+"""
+        job = """# Data Engineer
+
+Company: Fictional Systems Lab
+Role: Data Engineer
+Company Confirmed By User: yes
+Company Confidence: High
+Company Evidence: Confirmed in test input.
+
+## Requirements
+- Build production data pipelines
+"""
+        letter = build_cover_letter(resume, job, self.bank)
+        notes = build_internal_notes(resume, job, self.bank, [], letter)
+        self.assertIn("developed automated ETL workflows", letter)
+        self.assertIn("Build production data pipelines", notes)
+        self.assertIn("Semantic support", notes)
+
+    def test_low_similarity_resume_line_is_not_used_in_letter(self) -> None:
+        resume = """# Ada Example
+
+## History Project
+- Presented archival research findings to a student seminar.
+"""
+        job = """# Platform Engineer
+
+Company: Fictional Platform Lab
+Role: Platform Engineer
+Company Confirmed By User: yes
+Company Confidence: High
+Company Evidence: Confirmed in test input.
+
+## Requirements
+- Manage Kubernetes infrastructure
+"""
+        letter = build_cover_letter(resume, job, self.bank)
+        self.assertIn("does not contain a sufficiently specific proof point", letter)
+        self.assertNotIn("archival research findings", letter)
 
 
 if __name__ == "__main__":

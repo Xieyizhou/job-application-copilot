@@ -535,7 +535,14 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
         selected_confidence = dict(selected_job.get("confidence", {}) or {})
         selected_package_status = selected_job.get("package_status") or services.package_status_for_job(selected_job, tracker_rows)
         selected_next_action = review_job_next_action(selected_job, tracker_status, selected_package_status)
-        fit_metrics = st.columns(4)
+        learned_signal = dict(selected_job.get("ml_relevance", {}) or {})
+        selected_jd_quality = dict(selected_job.get("jd_quality", {}) or {})
+        show_learned_signal = bool(
+            learned_signal.get("available")
+            and learned_signal.get("displayable", True)
+            and selected_jd_quality.get("reliable_scoring_ready", False)
+        )
+        fit_metrics = st.columns(5 if show_learned_signal else 4)
         fit_metrics[0].metric(
             "Role Fit",
             f"{selected_job['score']}/100" if selected_job.get("score") is not None else "—",
@@ -552,6 +559,19 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
             f"{int(selected_confidence.get('active_requirement_count', 0) or 0)} reqs",
         )
         fit_metrics[3].metric("Confidence", confidence_level(selected_confidence).title())
+        if show_learned_signal:
+            fit_metrics[4].metric(
+                "Local ML signal",
+                f"{float(learned_signal.get('probability', 0.0)):.0%}",
+                help=(
+                    "Experimental auxiliary relevance estimate trained on synthetic pairs. "
+                    "It does not affect Role Fit, eligibility, sorting, or recommendation."
+                ),
+            )
+        if selected_jd_quality:
+            st.caption(
+                f"JD quality: {selected_jd_quality.get('display_label', 'Needs review')}"
+            )
         services.render_action_callout(
             selected_next_action,
             caution=confidence_level(selected_confidence) == "low" or eligibility_status(selected_job) == "failed",

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+if [ -x ".venv/bin/python" ]; then
+    PYTHON_BIN=".venv/bin/python"
+else
+    PYTHON_BIN="python3"
+fi
+
+echo "Running repository privacy and restricted-instruction guard..."
+"$PYTHON_BIN" scripts/privacy_audit.py

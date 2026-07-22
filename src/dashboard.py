@@ -32,7 +32,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 12
 MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
-DASHBOARD_SCORING_VERSION = "canonical-v2-evidence-calibrated"
+DASHBOARD_SCORING_VERSION = "canonical-v4-jd-quality"
 SCREENING_KEYWORDS = {
     "python": 8,
     "pandas": 8,
@@ -101,6 +101,8 @@ from export_documents import (  # noqa: E402
 from fetch_history import latest_successful_fetch_run, load_fetch_runs  # noqa: E402
 import manual_jobs as manual_jobs_module  # noqa: E402
 from manual_jobs import confirm_manual_job_company  # noqa: E402
+from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
+from ml.jd_quality import classify_jd_quality  # noqa: E402
 from output_paths import safe_slug, timestamp_slug  # noqa: E402
 from tracker import add_application, update_status  # noqa: E402
 from dashboard_fit import (  # noqa: E402
@@ -623,6 +625,7 @@ def analyze_job_for_dashboard(
 def build_dashboard_job_record(path: Path) -> dict[str, Any]:
     """Build one ranked dashboard row from a saved job Markdown file."""
     job_text = read_text_file(path)
+    jd_quality = classify_jd_quality(job_text)
     company_fields = verification_from_markdown(path)
     company = str(company_fields.get("company_normalized") or read_markdown_field(job_text, "Company", "Not provided"))
     stored_role = read_markdown_field(job_text, "Role", path.stem)
@@ -683,6 +686,7 @@ def build_dashboard_job_record(path: Path) -> dict[str, Any]:
         "description_source": description_source,
         "jd_fetch_status": jd_fetch_status,
         "description_word_count": description_word_count,
+        "jd_quality": jd_quality,
         "first_seen_at": first_seen_at,
         "last_seen_at": last_seen_at,
         "first_seen_fetch_run_id": first_seen_fetch_run_id,
@@ -772,16 +776,23 @@ def load_screened_jobs(search_text: str = "") -> list[dict[str, Any]]:
     candidate_path = current_workspace().resume_source_path
     candidate_text = read_text_file(candidate_path) if candidate_path and candidate_path.is_file() else ""
     analyzed_records = []
+    relevance_pairs: list[tuple[str, str]] = []
     for job in unique_records:
         job_text = read_text_file(Path(job["path"]))
         analysis = analyze_job_for_dashboard(job, job_text, candidate_text)
         analyzed = apply_canonical_analysis(job, analysis)
+        relevance_pairs.append((candidate_text, extract_job_description_body(job_text)))
         presentation = build_fit_presentation(analyzed)
         analyzed["label"] = (
             f"{analyzed['company']} | {get_job_display_title(analyzed)} | "
             f"{analyzed['location']} | {presentation['role_fit']}"
         )
         analyzed_records.append(analyzed)
+    relevance_signals = suppress_collapsed_relevance_signals(
+        predict_relevance_batch(relevance_pairs)
+    )
+    for analyzed, relevance_signal in zip(analyzed_records, relevance_signals):
+        analyzed["ml_relevance"] = relevance_signal
     unique_records = analyzed_records
     unique_records.sort(key=dashboard_rank_key, reverse=True)
     return unique_records
@@ -1477,6 +1488,7 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
     st.markdown("**Decision summary**")
     eligibility = dict(analysis.get("eligibility", {}))
     scoring_confidence = dict(analysis.get("confidence", {}))
+    jd_quality = dict(analysis.get("jd_quality", {}) or job.get("jd_quality", {}) or {})
     level = confidence_level(scoring_confidence)
     score = analysis.get("score")
     decision_cols = st.columns(3)
@@ -1490,6 +1502,24 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
         role_focus = sanitize_fit_text(role_alignment.get("focus", "Not detected"))
         role_support = "Supported" if role_alignment.get("score") == 100 else "Candidate evidence not found"
         st.caption(f"Role focus: {role_focus} · {role_support}")
+    if jd_quality:
+        st.caption(
+            f"JD quality: {jd_quality.get('display_label', 'Needs review')} · "
+            f"{jd_quality.get('next_action', 'Verify the complete posting.')}"
+        )
+
+    learned_signal = dict(job.get("ml_relevance", {}) or {})
+    if (
+        learned_signal.get("available")
+        and learned_signal.get("displayable", True)
+        and jd_quality.get("reliable_scoring_ready", False)
+    ):
+        probability = float(learned_signal.get("probability", 0.0))
+        st.info(
+            f"Experimental local relevance signal: {probability:.0%}. "
+            "It is trained on synthetic candidate/job pairs and is shown only as a second opinion; "
+            "it does not change Role Fit, eligibility, ranking, or recommendation."
+        )
 
     if level == "low":
         if int(scoring_confidence.get("candidate_evidence_count", 0) or 0) > 0:
@@ -1514,6 +1544,29 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
         st.markdown("**Gaps / weak evidence**")
         for item in list(analysis.get("weak_areas", []))[:5] or ["No major gap detected in the recognized requirements."]:
             st.write(f"- {sanitize_fit_text(item)}")
+
+    semantic_evidence = dict(analysis.get("semantic_evidence", {}) or {})
+    semantic_matches = list(semantic_evidence.get("matches", []) or [])
+    if semantic_matches:
+        with st.expander("Requirement-to-resume evidence map", expanded=True):
+            st.caption(
+                f"{semantic_evidence.get('accepted_count', 0)} of "
+                f"{semantic_evidence.get('requirement_count', 0)} requirements have evidence above the "
+                f"{float(semantic_evidence.get('threshold', 0.0)):.0%} threshold · "
+                f"{semantic_evidence.get('method', 'local evidence retrieval')}"
+            )
+            for match in semantic_matches[:8]:
+                demand = str(match.get("demand", "required")).title()
+                st.markdown(f"**{demand}: {sanitize_fit_text(match.get('requirement', 'Requirement'))}**")
+                if match.get("accepted"):
+                    st.write(f"Resume evidence: “{sanitize_fit_text(match.get('evidence', ''))}”")
+                    st.caption(
+                        f"Similarity {float(match.get('similarity', 0.0)):.0%} · "
+                        f"{match.get('match_type', 'Evidence support')} · "
+                        f"Section: {sanitize_fit_text(match.get('section_evidence', 'Resume'))}"
+                    )
+                else:
+                    st.caption("Insufficient evidence · no resume statement passed the acceptance threshold")
 
     with st.expander("Recognized requirement details", expanded=False):
         if not terms["active_requirement_count"]:

@@ -164,6 +164,9 @@ def tracker_follow_up_due(row: dict[str, Any]) -> bool:
 
 def job_needs_full_jd(job: dict[str, Any]) -> bool:
     """Return whether low confidence is specifically caused by incomplete job text."""
+    direct_quality = dict(job.get("jd_quality", {}) or {})
+    if "reliable_scoring_ready" in direct_quality:
+        return not bool(direct_quality.get("reliable_scoring_ready"))
     confidence = dict(job.get("confidence", {}) or {})
     quality = dict(confidence.get("job_description_quality", {}) or {})
     if "appears_incomplete" in quality:

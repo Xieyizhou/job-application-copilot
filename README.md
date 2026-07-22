@@ -37,8 +37,14 @@ The walkthrough uses only fictional and sanitized data:
   - a final recommendation
 - Detects incomplete job descriptions, calibrates narrow matches toward a neutral prior,
   and labels the result provisional instead of presenting misleading confidence.
+- Classifies JD quality from completeness, requirements, truncation, boilerplate, and source
+  provenance before presenting experimental comparisons.
 - Uses one current scoring result across Dashboard summaries, Review Jobs,
   Fit Analysis, Tracker preparation, and newly generated cover-letter bundles.
+- Can optionally train a local resume/job relevance model as an experimental
+  second opinion. It never changes Role Fit, eligibility, ranking, or recommendation.
+- Maps individual JD requirements to exact resume statements with a local hybrid
+  similarity score, and lets cover letters use only evidence that passes the review threshold.
 - Generates:
   - resume-grounded cover-letter drafts
   - fit-analysis reports
@@ -80,6 +86,9 @@ flowchart LR
     R["Uploaded resume · read-only"] --> E["Evidence matching"]
     D --> E
     E --> F["Role Fit"]
+    R --> ML["Optional local relevance model"]
+    C --> ML
+    ML --> J
     D --> G["Eligibility"]
     C --> H["Confidence"]
     F --> I["Recommendation"]
@@ -93,7 +102,8 @@ flowchart LR
 ```
 
 The uploaded resume remains unchanged. Fit, eligibility, and confidence are separate
-decision signals; no application is submitted automatically.
+decision signals; the optional learned signal is advisory only, and no application is
+submitted automatically.
 
 ## Workflow
 
@@ -207,8 +217,9 @@ snippets; those records stay provisional until a full JD is available.
 
 ## Role Fit Assessment
 
-The toolkit uses a deterministic and explainable scoring pipeline rather than a
-trained prediction model.
+The toolkit's primary decision path is deterministic and explainable. An optional
+locally trained model can add a separate relevance estimate, but it is not used to
+calculate or override the score.
 
 The assessment considers:
 
@@ -232,6 +243,29 @@ recommendation.
 
 See [Scoring Method](docs/SCORING_METHOD.md) for the scoring, gating, and public
 benchmark methodology.
+
+## Optional Local ML Relevance Signal
+
+The offline pipeline under `scripts/ml/` trains on synthetic resume/job relevance
+pairs and holds out complete jobs, so test postings are unseen during training.
+
+```bash
+python -m pip install -r requirements-ml.txt
+python scripts/ml/train_relevance_baseline.py
+python run_dashboard.py
+```
+
+Models and evaluation metrics stay in ignored local paths under `data/ml/models/`
+and `reports/ml/`. Without a compatible model, the dashboard simply omits
+the learned signal and continues with deterministic scoring.
+
+The UI also omits the learned value when the JD is incomplete or a real-world batch
+collapses outside the synthetic model's useful range; it does not turn those cases into
+apparently precise `0%` judgments.
+
+The ATS-score dataset remains local research material only. Its algorithmic weak labels
+and heavy resume/job overlap are not part of product scoring or a production accuracy
+claim. See [Local ML Relevance](docs/ML_RELEVANCE.md) for details.
 
 For example, when only one requirement is recognized, the app may show:
 
@@ -367,6 +401,9 @@ job-application-copilot/
 │   ├── assets/
 │   └── USAGE.md
 ├── scripts/
+│   ├── evaluate_scoring.py
+│   ├── ml/
+│   │   └── train_relevance_baseline.py
 │   └── privacy_audit.py
 ├── src/
 │   ├── analyze_job.py
@@ -400,6 +437,20 @@ job-application-copilot/
 Local Personal data and generated outputs are excluded from the public
 repository.
 
+Local automation instructions and tool-specific configuration are repository-private.
+The ignore rules prevent routine staging, while `scripts/privacy_audit.py` blocks
+reserved instruction paths and recognizable control instructions in CI even if a file
+is force-added.
+
+Enable the repository's local pre-push guard once after cloning:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs the same privacy and restricted-instruction audit before every push. A
+failed audit cancels the push before any commit reaches GitHub.
+
 `dashboard.py` remains the Streamlit entry point and compatibility surface. The
 focused `dashboard_*` modules isolate the home, job discovery, review,
 manual-job, cover-letter, tracker, and settings pages from shared title
@@ -429,7 +480,10 @@ without hidden global coupling.
 Detailed setup instructions, workspace behavior, and command examples are
 available in:
 
-[`docs/USAGE.md`](docs/USAGE.md)
+- [Usage](docs/USAGE.md)
+- [Scoring Method](docs/SCORING_METHOD.md)
+- [Local ML Relevance](docs/ML_RELEVANCE.md)
+- [UI Simplification Plan](docs/UI_SIMPLIFICATION_PLAN.md)
 
 ## License
 

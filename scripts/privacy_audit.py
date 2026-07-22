@@ -11,6 +11,32 @@ from pathlib import Path
 
 LOCAL_TERMS_FILE = Path("privacy_terms.local.txt")
 
+PROHIBITED_AGENT_PROMPT_NAMES = {
+    "agents.md",
+    "claude.md",
+    "gemini.md",
+    "prompt.md",
+    "skill.md",
+    "copilot-instructions.md",
+}
+
+PROHIBITED_AGENT_PROMPT_DIRS = {
+    ".agent",
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".prompts",
+    "prompts",
+}
+
+PROHIBITED_AGENT_PROMPT_STEM_MARKERS = {
+    "agent_prompt",
+    "assistant_prompt",
+    "developer_prompt",
+    "system_prompt",
+}
+
 SKIP_SUFFIXES = {
     ".docx",
     ".png",
@@ -39,6 +65,38 @@ GENERIC_PATTERNS = {
     "linkedin": re.compile(r"\blinkedin\.com/in/[A-Za-z0-9_.%-]+/?", re.I),
     "absolute_path": re.compile(
         r"(?<!\w)(?:" + "|".join(re.escape(root) for root in LOCAL_PATH_ROOTS) + r")[^\s'\"`<>)]*"
+    ),
+}
+
+AGENT_PROMPT_CONTENT_PATTERNS = {
+    "agent_identity": re.compile(
+        r"\byou are (?:chatgpt|(?:an? )?(?:ai|coding) (?:assistant|agent))\b",
+        re.I,
+    ),
+    "codex_identity": re.compile(r"\byou are codex\b", re.I),
+    "agent_role_request": re.compile(
+        r"\bact as (?:an? )?(?:ai|coding) (?:assistant|agent)\b",
+        re.I,
+    ),
+    "prompt_role_header": re.compile(
+        r"^\s*(?:system|developer|assistant)\s+(?:message|prompt)\s*:",
+        re.I,
+    ),
+    "prompt_instruction_heading": re.compile(
+        r"^\s*#{1,6}\s*(?:system|developer|agent|assistant)\s+(?:prompt|instructions)\b",
+        re.I,
+    ),
+    "prompt_role_block": re.compile(
+        r"^\s*\[(?:system|developer|assistant)\]\s*$",
+        re.I,
+    ),
+    "agent_control_tag": re.compile(
+        r"<(?:collaboration_mode|multi_agent_mode|permissions instructions)>",
+        re.I,
+    ),
+    "prompt_injection_instruction": re.compile(
+        r"\bignore (?:all |any )?(?:previous|prior) instructions\b",
+        re.I,
     ),
 }
 
@@ -107,6 +165,24 @@ def should_skip(path: Path) -> bool:
     if any(part in SKIP_DIRS for part in path.parts):
         return True
     return path.suffix.lower() in SKIP_SUFFIXES
+
+
+def agent_prompt_path_reason(path: Path) -> str | None:
+    """Explain why a path looks like a local agent instruction artifact."""
+    lowered_parts = {part.casefold() for part in path.parts}
+    if lowered_parts & PROHIBITED_AGENT_PROMPT_DIRS:
+        return "local agent configuration directory"
+
+    lowered_name = path.name.casefold()
+    if lowered_name in PROHIBITED_AGENT_PROMPT_NAMES:
+        return "reserved agent instruction filename"
+    if ".prompt." in lowered_name or lowered_name.endswith(".prompt"):
+        return "prompt-file extension"
+
+    normalized_stem = re.sub(r"[- .]+", "_", path.stem.casefold())
+    if any(marker in normalized_stem for marker in PROHIBITED_AGENT_PROMPT_STEM_MARKERS):
+        return "agent prompt filename marker"
+    return None
 
 
 def is_probably_text(path: Path) -> bool:
@@ -182,6 +258,17 @@ def scan_file(path: Path, local_terms: list[str]) -> list[Finding]:
                     )
                 )
 
+        for prompt_kind, pattern in AGENT_PROMPT_CONTENT_PATTERNS.items():
+            if pattern.search(line):
+                findings.append(
+                    Finding(
+                        "agent_prompt_content",
+                        path,
+                        line_number,
+                        f"possible {prompt_kind.replace('_', ' ')} instruction",
+                    )
+                )
+
         for category, pattern in GENERIC_PATTERNS.items():
             for match in pattern.finditer(line):
                 value = match.group(0)
@@ -215,6 +302,17 @@ def main() -> int:
     scanned_count = 0
     findings: list[Finding] = []
     for path in candidates:
+        prompt_path_reason = agent_prompt_path_reason(path)
+        if prompt_path_reason:
+            findings.append(
+                Finding(
+                    "agent_prompt_file",
+                    path,
+                    None,
+                    prompt_path_reason,
+                )
+            )
+            continue
         if is_probably_text(path):
             scanned_count += 1
             findings.extend(scan_file(path, local_terms))

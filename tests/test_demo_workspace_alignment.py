@@ -56,6 +56,34 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         self.assertEqual(set(self.jobs_by_role), {"Data Analyst", "Machine Learning Intern", "Senior Data Scientist"})
         self.assertNotIn("Sample Job", set(self.jobs_by_role))
 
+    def test_local_ml_signal_is_attached_without_changing_canonical_decisions(self) -> None:
+        signal = {
+            "available": True,
+            "probability": 0.73,
+            "label": "Supporting",
+            "threshold": 0.5,
+            "model_version": "test-v1",
+            "reason": "Test signal",
+        }
+        with patch.object(
+            dashboard,
+            "predict_relevance_batch",
+            side_effect=lambda pairs: [dict(signal) for _ in pairs],
+        ) as predict_batch:
+            jobs = load_demo_jobs()
+
+        self.assertEqual(len(predict_batch.call_args.args[0]), 3)
+        self.assertTrue(all(job["ml_relevance"] == signal for job in jobs))
+        expected_decisions = {
+            str(job["role"]): (job["score"], job["eligibility"]["status"], job["recommendation"])
+            for job in self.jobs
+        }
+        actual_decisions = {
+            str(job["role"]): (job["score"], job["eligibility"]["status"], job["recommendation"])
+            for job in jobs
+        }
+        self.assertEqual(actual_decisions, expected_decisions)
+
     def test_fictional_candidate_is_complete_and_has_no_personal_identifiers(self) -> None:
         candidate = DEMO_CANDIDATE.read_text(encoding="utf-8")
         for evidence in ["Bachelor's degree in Data Science", "Python", "SQL", "scikit-learn", "cross-validation"]:

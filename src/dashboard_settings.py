@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from ml.inference import local_model_status
 from workspace import (
     SUPPORTED_COVER_LETTER_TEMPLATE_EXTENSIONS,
     SUPPORTED_EXPERIENCE_BANK_EXTENSIONS,
@@ -54,7 +55,24 @@ def safety_notes_tab(services: SettingsPageServices) -> None:
             - **Observed coverage** measures only the requirements the parser recognized.
             - **Confidence** tells you whether the JD and candidate evidence are complete enough to trust the score.
             - **Eligibility** is a separate hard-constraint review and can override a high fit score.
+            - **JD quality** classifies the posting text, not the candidate, using completeness, requirements, truncation, and boilerplate signals.
             - JSearch is the preferred source for full job descriptions; Adzuna and Jooble search results remain provisional when they contain snippets.
+            """
+        )
+    with st.expander("Optional local ML signal", expanded=False):
+        model_status = local_model_status()
+        if model_status["available"]:
+            st.success("Local relevance model artifact found; compatibility is checked when it is used.")
+        else:
+            st.info("Local relevance model is not trained; the toolkit continues with deterministic scoring.")
+        st.markdown(
+            """
+            - The model is an experimental second opinion trained offline on synthetic candidate/job pairs.
+            - Evaluation holds out complete jobs so the test set contains unseen job postings.
+            - Requirement evidence retrieval maps JD statements to exact resume lines; low-similarity lines are rejected from cover-letter use.
+            - Collapsed real-world batches are hidden instead of being rounded into misleading 0% values.
+            - The signal never changes Role Fit, eligibility, ranking, or recommendation.
+            - Training data, fitted models, and generated evaluation reports remain local and are ignored by Git.
             """
         )
     with st.expander("Privacy & Safety", expanded=True):

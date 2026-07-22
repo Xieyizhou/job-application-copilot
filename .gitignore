@@ -30,6 +30,30 @@ private_screenshots/
 *.sqlite
 *.sqlite3
 
+# Local automation instructions and configuration artifacts
+.agents/
+.agent/
+.codex/
+.claude/
+.cursor/
+.prompts/
+prompts/
+**/AGENTS.md
+**/CLAUDE.md
+**/GEMINI.md
+**/SKILL.md
+**/copilot-instructions.md
+*.prompt
+*.prompt.md
+*.prompt.txt
+*.prompt.json
+*.prompt.yaml
+*.prompt.yml
+*agent_prompt*
+*assistant_prompt*
+*developer_prompt*
+*system_prompt*
+
 # Local user data
 data/local_workspace/
 data/resume/resume_source.md
@@ -57,3 +81,11 @@ data/job_descriptions/adzuna/
 data/job_descriptions/jooble/
 data/job_descriptions/private/
 data/job_descriptions/**/*.log
+
+# Local ML datasets and artifacts
+data/ml/raw/
+data/ml/cache/
+data/ml/processed/
+data/ml/models/
+models/
+reports/ml/

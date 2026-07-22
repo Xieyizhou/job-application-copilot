@@ -30,6 +30,26 @@ EXPECTED_ZIP_NAMES = {
 
 
 class DemoPackageTests(unittest.TestCase):
+    def test_fit_page_renders_requirement_evidence_map(self) -> None:
+        app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
+        app.session_state["workspace_mode"] = "Demo"
+        app.session_state["selected_review_tab"] = "Fit"
+        app.run(timeout=30)
+        app.radio[0].set_value("Review Jobs").run(timeout=30)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertIn(
+            "Requirement-to-resume evidence map",
+            [expander.label for expander in app.expander],
+        )
+        similarity_captions = [
+            str(caption.value)
+            for caption in app.caption
+            if "Similarity" in str(caption.value)
+        ]
+        self.assertTrue(similarity_captions)
+        self.assertTrue(any("Direct support" in caption for caption in similarity_captions))
+
     def test_demo_docx_files_are_valid_and_neutral(self) -> None:
         expected_text = {
             "cover_letter.docx": [

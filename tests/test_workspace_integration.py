@@ -73,6 +73,11 @@ Company Evidence: Confirmed during sanitized test setup.
             self.assertNotIn("resume_docx_path", summary)
             self.assertFalse((summary["package_dir"] / "tailored_resume.md").exists())
             self.assertFalse((summary["package_dir"] / "tailored_resume.docx").exists())
+            cover_letter_text = summary["cover_letter_path"].read_text(encoding="utf-8")
+            notes_text = summary["cover_letter_notes_path"].read_text(encoding="utf-8")
+            self.assertIn("Python, SQL, pandas, and data visualization", cover_letter_text)
+            self.assertIn("Requirement-to-Resume Evidence Map", notes_text)
+            self.assertIn("Direct support", notes_text)
             self.assertTrue(workspace.tracker_database_path and workspace.tracker_database_path.is_file())
             self.assertIsInstance(summary["tracker_id"], int)
 
