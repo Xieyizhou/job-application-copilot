@@ -13,6 +13,10 @@ from typing import Any
 
 QUALITY_SCHEMA_VERSION = 1
 
+
+class JDQualityError(ValueError):
+    """Raised when employer-facing output is requested from an incomplete JD."""
+
 _SECTION_PATTERNS = {
     "responsibilities": re.compile(
         r"(?im)^\s*(?:#+\s*)?(?:responsibilities|what you(?:'|’)ll do|the role|duties)\s*:?[ \t]*$"
@@ -81,7 +85,7 @@ def _source_hints(job_text: str, word_count: int) -> tuple[bool, bool, bool]:
     explicit_full = (
         "full_jd" in description_source
         or fetch_status in {"complete", "full", "full_jd"}
-        or source in {"jsearch", "manual", "company website", "company_site"}
+        or source in {"jsearch", "company website", "company_site"}
     )
     explicit_snippet = (
         "snippet" in description_source
@@ -218,3 +222,26 @@ def classify_jd_quality(job_text: str) -> dict[str, Any]:
         "reasons": reasons[:4],
         "next_action": next_action,
     }
+
+
+def jd_quality_warning_messages(job_text: str) -> list[str]:
+    """Return concise warnings derived from the canonical JD classifier."""
+    quality = classify_jd_quality(job_text)
+    if quality["reliable_scoring_ready"]:
+        return []
+    warnings = [
+        f"Job description quality: {quality['display_label']}. {quality['next_action']}"
+    ]
+    warnings.extend(str(reason) for reason in quality["reasons"][:2])
+    return warnings
+
+
+def assert_cover_letter_jd_ready(job_text: str) -> dict[str, Any]:
+    """Require a complete, scoring-ready JD before generating employer-facing text."""
+    quality = classify_jd_quality(job_text)
+    if quality["reliable_scoring_ready"]:
+        return quality
+    raise JDQualityError(
+        "Cover letter generation requires a scoring-ready full job description. "
+        f"Current JD quality: {quality['display_label']}. {quality['next_action']}"
+    )

@@ -22,6 +22,12 @@ from company_verification import (
     normalize_company_name,
 )
 from output_paths import safe_slug
+from fetch_history import read_markdown_field
+from ml.jd_quality import (
+    classify_jd_quality,
+    extract_description_body,
+    jd_quality_warning_messages,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -379,6 +385,8 @@ def build_manual_job_markdown(record: dict[str, Any]) -> str:
             f"Salary Range: {markdown_escape_value(record.get('salary_range', ''))}",
             f"Visa Note: {markdown_escape_value(record.get('visa_note', ''))}",
             f"Status: {markdown_escape_value(record.get('status', 'Saved'))}",
+            f"Description Source: {markdown_escape_value(record.get('description_source', 'manual_input'))}",
+            f"JD Fetch Status: {markdown_escape_value(record.get('jd_fetch_status', 'user_provided'))}",
             f"Created At: {markdown_escape_value(record.get('created_at', ''))}",
             f"Updated At: {markdown_escape_value(record.get('updated_at', ''))}",
             f"Source Upload Filename: {markdown_escape_value(record.get('source_upload_filename', ''))}",
@@ -386,6 +394,16 @@ def build_manual_job_markdown(record: dict[str, Any]) -> str:
     ]
     for field_name, value in verification_metadata.items():
         metadata_lines.append(f"{field_name}: {markdown_escape_value(value)}")
+    for field_name, record_key in [
+        ("JD Enriched By", "jd_enriched_by"),
+        ("JD Enriched At", "jd_enriched_at"),
+        ("JD Enrichment Match", "jd_enrichment_match"),
+        ("JD Enrichment Source Job ID", "jd_enrichment_source_job_id"),
+        ("JD Enrichment Source URL", "jd_enrichment_source_url"),
+    ]:
+        value = str(record.get(record_key, "") or "").strip()
+        if value:
+            metadata_lines.append(f"{field_name}: {markdown_escape_value(value)}")
     return "\n".join(
         [
             *metadata_lines,
@@ -479,6 +497,7 @@ def save_manual_job(
         },
     )
 
+    initial_quality = classify_jd_quality(job_description)
     record = {
         "id": job_id,
         "company": company_fields["company_normalized"] or company.strip(),
@@ -493,6 +512,12 @@ def save_manual_job(
         "status": status.strip() or "Saved",
         "notes": notes.strip(),
         "job_description": job_description.strip(),
+        "description_source": (
+            "full_jd_manual" if initial_quality["reliable_scoring_ready"] else "manual_input"
+        ),
+        "jd_fetch_status": (
+            "complete" if initial_quality["reliable_scoring_ready"] else "partial"
+        ),
         "created_at": now,
         "updated_at": now,
         "source_upload_filename": saved_upload_filename,
@@ -535,6 +560,36 @@ def update_manual_job(record_id: str, *, status: str, notes: str) -> dict[str, A
             markdown_path.write_text(build_manual_job_markdown(record), encoding="utf-8")
         break
 
+    if updated_record is not None:
+        write_manual_jobs(records)
+    return updated_record
+
+
+def sync_manual_job_from_markdown(record_id: str, markdown_path: Path) -> dict[str, Any] | None:
+    """Copy an enriched Markdown JD back into its manual JSONL record."""
+    if not markdown_path.exists():
+        return None
+    markdown_text = markdown_path.read_text(encoding="utf-8")
+    records = load_manual_jobs()
+    updated_record: dict[str, Any] | None = None
+    metadata_fields = {
+        "description_source": "Description Source",
+        "jd_fetch_status": "JD Fetch Status",
+        "jd_enriched_by": "JD Enriched By",
+        "jd_enriched_at": "JD Enriched At",
+        "jd_enrichment_match": "JD Enrichment Match",
+        "jd_enrichment_source_job_id": "JD Enrichment Source Job ID",
+        "jd_enrichment_source_url": "JD Enrichment Source URL",
+    }
+    for record in records:
+        if record.get("id") != record_id:
+            continue
+        record["job_description"] = extract_description_body(markdown_text)
+        for record_key, field_name in metadata_fields.items():
+            record[record_key] = read_markdown_field(markdown_text, field_name)
+        record["updated_at"] = utc_timestamp()
+        updated_record = record
+        break
     if updated_record is not None:
         write_manual_jobs(records)
     return updated_record
@@ -2165,15 +2220,9 @@ def job_description_quality_warnings(
         warnings.append("Location is empty.")
     if not url.strip():
         warnings.append("Job URL was not found in the upload. Please paste the original job link manually if available.")
-    if len(job_description.split()) < 80:
-        warnings.append("Job description is very short; the screenshot or extraction may be incomplete.")
+    warnings.extend(jd_quality_warning_messages(job_description))
     if any(fragment in job_description.lower() for fragment in UI_NOISE_FRAGMENTS) or any(
         looks_like_noise_line(line) for line in job_description.splitlines()
     ):
         warnings.append("Job description may still contain OCR/UI noise.")
-    if not any(
-        keyword in job_description.lower()
-        for keyword in ["requirements", "responsibilities", "qualifications", "about the job", "what you will do"]
-    ):
-        warnings.append("Job description may be incomplete because no Requirements, Responsibilities, Qualifications, or About the job section was found.")
     return warnings

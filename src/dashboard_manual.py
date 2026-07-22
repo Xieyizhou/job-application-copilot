@@ -13,6 +13,8 @@ from apply_package import create_application_package
 from company_verification import verification_status_label
 from dashboard_regions import normalize_location
 from dashboard_titles import display_title_from_value
+from fetch_jobs import jsearch_configured
+from jd_enrichment import enrich_saved_job_description
 from manual_jobs import (
     SOURCE_OPTIONS,
     STATUS_OPTIONS,
@@ -25,8 +27,10 @@ from manual_jobs import (
     normalize_job_title,
     parse_job_description_suggestions,
     save_manual_job,
+    sync_manual_job_from_markdown,
     update_manual_job,
 )
+from ml.jd_quality import classify_jd_quality
 from output_cleanup import delete_directory_tree
 
 
@@ -610,9 +614,29 @@ def generate_package_for_manual_record(
     fields = services.render_manual_company_confirmation(record, key_prefix=f"{button_key}_manual_company")
     if not services.company_generation_allowed(fields):
         st.info(
-            "Company name needs confirmation before generating a cover letter. "
-            "This prevents using the wrong company name in your application."
+            "Company name needs confirmation before looking up a full JD or generating a cover letter. "
+            "This prevents using the wrong employer in your application."
         )
+        return
+
+    jd_quality = classify_jd_quality(markdown_path.read_text(encoding="utf-8"))
+    if not jd_quality["reliable_scoring_ready"]:
+        st.warning(
+            f"A full JD is required before generating a cover letter. "
+            f"Current quality: {jd_quality['display_label']}."
+        )
+        st.caption(str(jd_quality["next_action"]))
+        if jsearch_configured():
+            if st.button("Find and verify full JD", key=f"{button_key}_find_full_jd", type="primary"):
+                result = enrich_saved_job_description(markdown_path)
+                if result.get("updated"):
+                    sync_manual_job_from_markdown(str(record["id"]), markdown_path)
+                    st.success(str(result["message"]))
+                    st.rerun()
+                else:
+                    st.warning(str(result.get("message", "No safe full-JD match was found.")))
+        else:
+            st.info("Configure JSEARCH_API_KEY to find the full posting automatically, or paste the complete JD.")
         return
 
     if st.button("Generate Cover Letter", key=button_key, type="primary"):
@@ -627,6 +651,7 @@ def generate_package_for_manual_record(
                 location=str(record.get("location", "")).strip(),
                 job_url=str(record.get("url", "")).strip(),
             )
+            sync_manual_job_from_markdown(str(record["id"]), markdown_path)
             update_manual_job(str(record["id"]), status="Cover Letter Generated", notes=str(record.get("notes", "")))
             st.session_state["manual_generated_summary"] = {
                 "match_score": summary["match_score"],
@@ -667,6 +692,137 @@ def prepare_manual_job_session_state() -> None:
         st.session_state["manual_job_description"] = pending_clean_text
 
 
+def render_manual_upload_controls() -> list[Any]:
+    """Render upload and OCR cleanup controls, returning selected files."""
+    st.markdown("**Add / Extract Job**")
+    st.caption("Upload a job screenshot/PDF, or paste the job description below. You can edit extracted text before saving.")
+    uploaded_files = st.file_uploader(
+        "Upload job file",
+        type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"],
+        key=f"manual_upload_{st.session_state.get('manual_upload_key_suffix', 0)}",
+        accept_multiple_files=True,
+    ) or []
+    if uploaded_files:
+        st.caption("Selected uploads: " + ", ".join(f"`{uploaded_file.name}`" for uploaded_file in uploaded_files))
+    if uploaded_files and st.button("Extract Text from Upload"):
+        clear_manual_state_for_new_extraction()
+        st.session_state["manual_source_upload_filenames"] = [item.name for item in uploaded_files]
+        st.session_state["manual_last_extracted_upload_signature"] = " | ".join(
+            f"{item.name}:{item.size}" for item in uploaded_files
+        )
+        raw_text, cleaned_text, messages, filenames, reports = combine_upload_extraction_results(uploaded_files)
+        if messages:
+            st.warning(messages)
+        st.session_state["manual_extraction_reports"] = reports
+        if cleaned_text:
+            st.session_state.update(
+                manual_job_description=cleaned_text,
+                manual_extracted_text=cleaned_text,
+                manual_raw_extracted_text=raw_text,
+                manual_cleaned_extracted_text=cleaned_text,
+                manual_source_upload_filenames=filenames,
+            )
+            suggestions = parse_job_description_suggestions(cleaned_text, manual_source_metadata_from_reports(reports))
+            st.session_state["manual_parser_suggestions"] = suggestions
+            apply_suggestions_to_empty_fields(suggestions)
+            st.success("Extracted and cleaned text added to the editable job description.")
+        elif not messages:
+            st.warning("No text could be extracted. Please paste the job description manually.")
+    if st.session_state.get("manual_job_description") and st.button("Clean OCR Text"):
+        cleaned_text = clean_extracted_job_text(st.session_state.get("manual_job_description", ""))
+        st.session_state["manual_pending_clean_text"] = cleaned_text
+        st.session_state["manual_cleaned_extracted_text"] = cleaned_text
+        st.rerun()
+    render_extraction_reports(st.session_state.get("manual_extraction_reports", []) or [])
+    return uploaded_files
+
+
+def render_manual_job_form() -> dict[str, Any]:
+    """Render editable job fields and return one submission payload."""
+    suggestions = current_manual_suggestions(st.session_state.get("manual_job_description", ""))
+    apply_suggestions_to_empty_fields(suggestions)
+    st.markdown("**Review and Save**")
+    with st.form("manual_job_form"):
+        row1_left, row1_right = st.columns(2)
+        with row1_left:
+            company = st.text_input("Company name", key="manual_company")
+        with row1_right:
+            title = st.text_input("Job title", key="manual_title")
+        row2_left, row2_right = st.columns(2)
+        with row2_left:
+            location = st.text_input("Location", key="manual_location")
+        with row2_right:
+            source = st.selectbox("Job source", SOURCE_OPTIONS, key="manual_source")
+        row3_left, row3_right = st.columns(2)
+        with row3_left:
+            url = st.text_input("Job URL", key="manual_url")
+        with row3_right:
+            salary_range = st.text_input("Salary range, optional", key="manual_salary_range")
+        row4_left, row4_right = st.columns(2)
+        with row4_left:
+            visa_note = st.text_input("Work authorization / visa note, optional", key="manual_visa_note")
+        with row4_right:
+            status = st.selectbox("Status", STATUS_OPTIONS, key="manual_status")
+        notes = st.text_area("Notes", height=90, key="manual_notes")
+        job_description = st.text_area(
+            "Full job description", height=300, key="manual_job_description",
+            placeholder="Paste the full job description here, or extract text from an upload above.",
+        )
+        normalized_title = normalize_job_title(title)
+        suggestions = current_manual_suggestions(job_description)
+        if any([company.strip(), title.strip(), location.strip(), url.strip(), job_description.strip()]):
+            warnings = job_description_quality_warnings(
+                company=company, title=normalized_title, location=location, url=url, job_description=job_description
+            )
+            if warnings:
+                with st.expander("Save-time quality checks", expanded=True):
+                    for warning in warnings:
+                        st.warning(warning)
+        submitted = st.form_submit_button("Save Target Job")
+    return {
+        "submitted": submitted, "company": company, "title": normalized_title, "location": location,
+        "source": source, "url": url, "salary_range": salary_range, "visa_note": visa_note,
+        "status": status, "notes": notes, "job_description": job_description, "suggestions": suggestions,
+    }
+
+
+def save_manual_form_submission(payload: dict[str, Any], uploaded_files: list[Any]) -> None:
+    """Validate and persist one manual-job form submission."""
+    if not payload["submitted"]:
+        return
+    if not payload["title"]:
+        st.error("Job title is required.")
+        return
+    if not str(payload["job_description"]).strip():
+        st.error("Job description is required. Paste text manually or extract it from an upload.")
+        return
+    if not is_valid_url(payload["url"]):
+        st.error("Enter a valid http(s) Job URL, or leave it blank.")
+        return
+    if duplicate_manual_job_exists(payload["company"], payload["title"], payload["url"]):
+        st.error("Duplicate target job found with the same company, title, and URL.")
+        return
+    try:
+        record = save_manual_job(
+            company=payload["company"], title=payload["title"], location=payload["location"],
+            source=payload["source"], url=payload["url"], salary_range=payload["salary_range"],
+            visa_note=payload["visa_note"], status=payload["status"], notes=payload["notes"],
+            job_description=payload["job_description"], extracted_text=st.session_state.get("manual_extracted_text", ""),
+            raw_extracted_text=st.session_state.get("manual_raw_extracted_text", ""),
+            cleaned_extracted_text=st.session_state.get("manual_cleaned_extracted_text", ""),
+            parser_suggestions=payload["suggestions"],
+            upload_files=[(item.name, item.getvalue()) for item in uploaded_files],
+        )
+        st.session_state["manual_generate_selected"] = manual_record_label(record)
+        st.success("Target job saved. Continue to Generate Cover Letter when you are ready.")
+        st.info("Open the Generate Cover Letter tab next. This saved job will be preselected there.")
+        if SHOW_DEBUG_UI:
+            with st.expander("Advanced: raw Markdown path", expanded=False):
+                st.write(f"Saved Markdown: `{record['markdown_path']}`")
+    except Exception as error:  # noqa: BLE001
+        st.error(f"Could not save target job: {error}")
+
+
 def render_manual_add_extract_tab(services: ManualPageServices) -> None:
     """Render the compact add/extract workflow for manual jobs."""
     prepare_manual_job_session_state()
@@ -674,163 +830,17 @@ def render_manual_add_extract_tab(services: ManualPageServices) -> None:
     cleanup_message = st.session_state.pop("manual_cleanup_message", "")
     if cleanup_message:
         st.success(cleanup_message)
-
-    # Two-column layout: the core workflow stays in the wide left column while
-    # At a Glance remains a stable helper panel in the narrow right column.
     left_col, right_col = st.columns([0.72, 0.28], gap="large")
-    uploaded_files: list[Any] = []
-    current_suggestions: dict[str, Any] = {}
-
     with left_col:
-        st.markdown("**Add / Extract Job**")
-        st.caption("Upload a job screenshot/PDF, or paste the job description below. You can edit extracted text before saving.")
-        uploaded_files = st.file_uploader(
-            "Upload job file",
-            type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"],
-            key=f"manual_upload_{st.session_state.get('manual_upload_key_suffix', 0)}",
-            accept_multiple_files=True,
-        )
-        uploaded_files = uploaded_files or []
-
-        if uploaded_files:
-            st.caption("Selected uploads: " + ", ".join(f"`{uploaded_file.name}`" for uploaded_file in uploaded_files))
-
-        if uploaded_files and st.button("Extract Text from Upload"):
-            clear_manual_state_for_new_extraction()
-            st.session_state["manual_source_upload_filenames"] = [uploaded_file.name for uploaded_file in uploaded_files]
-            st.session_state["manual_last_extracted_upload_signature"] = " | ".join(
-                f"{uploaded_file.name}:{uploaded_file.size}" for uploaded_file in uploaded_files
-            )
-            raw_text, cleaned_text, messages, filenames, reports = combine_upload_extraction_results(uploaded_files)
-            if messages:
-                st.warning(messages)
-            st.session_state["manual_extraction_reports"] = reports
-            if cleaned_text:
-                st.session_state["manual_job_description"] = cleaned_text
-                st.session_state["manual_extracted_text"] = cleaned_text
-                st.session_state["manual_raw_extracted_text"] = raw_text
-                st.session_state["manual_cleaned_extracted_text"] = cleaned_text
-                st.session_state["manual_source_upload_filenames"] = filenames
-                suggestions = parse_job_description_suggestions(
-                    cleaned_text,
-                    manual_source_metadata_from_reports(reports),
-                )
-                st.session_state["manual_parser_suggestions"] = suggestions
-                apply_suggestions_to_empty_fields(suggestions)
-                st.success("Extracted and cleaned text added to the editable job description.")
-            elif not messages:
-                st.warning("No text could be extracted. Please paste the job description manually.")
-
-        if st.session_state.get("manual_job_description") and st.button("Clean OCR Text"):
-            cleaned_text = clean_extracted_job_text(st.session_state.get("manual_job_description", ""))
-            st.session_state["manual_pending_clean_text"] = cleaned_text
-            st.session_state["manual_cleaned_extracted_text"] = cleaned_text
-            st.rerun()
-        render_extraction_reports(st.session_state.get("manual_extraction_reports", []) or [])
-
-        current_text = st.session_state.get("manual_job_description", "")
-        current_suggestions = current_manual_suggestions(current_text)
-        apply_suggestions_to_empty_fields(current_suggestions)
-
-        st.markdown("**Review and Save**")
-        with st.form("manual_job_form"):
-            row1_left, row1_right = st.columns(2)
-            with row1_left:
-                company = st.text_input("Company name", key="manual_company")
-            with row1_right:
-                title = st.text_input("Job title", key="manual_title")
-
-            row2_left, row2_right = st.columns(2)
-            with row2_left:
-                location = st.text_input("Location", key="manual_location")
-            with row2_right:
-                source = st.selectbox("Job source", SOURCE_OPTIONS, key="manual_source")
-
-            row3_left, row3_right = st.columns(2)
-            with row3_left:
-                url = st.text_input("Job URL", key="manual_url")
-            with row3_right:
-                salary_range = st.text_input("Salary range, optional", key="manual_salary_range")
-
-            row4_left, row4_right = st.columns(2)
-            with row4_left:
-                visa_note = st.text_input("Work authorization / visa note, optional", key="manual_visa_note")
-            with row4_right:
-                status = st.selectbox("Status", STATUS_OPTIONS, key="manual_status")
-
-            notes = st.text_area("Notes", height=90, key="manual_notes")
-            job_description = st.text_area(
-                "Full job description",
-                height=300,
-                key="manual_job_description",
-                placeholder="Paste the full job description here, or extract text from an upload above.",
-            )
-
-            normalized_title = normalize_job_title(title)
-            current_suggestions = current_manual_suggestions(job_description)
-            quality_warnings = []
-            if any([company.strip(), title.strip(), location.strip(), url.strip(), job_description.strip()]):
-                quality_warnings = job_description_quality_warnings(
-                    company=company,
-                    title=normalized_title,
-                    location=location,
-                    url=url,
-                    job_description=job_description,
-                )
-            if quality_warnings:
-                with st.expander("Save-time quality checks", expanded=True):
-                    for warning in quality_warnings:
-                        st.warning(warning)
-
-            submitted = st.form_submit_button("Save Target Job")
-
+        uploaded_files = render_manual_upload_controls()
+        payload = render_manual_job_form()
     with right_col:
         with st.container(border=True):
             render_compact_at_a_glance(
-                current_suggestions,
-                job_description=st.session_state.get("manual_job_description", ""),
+                payload["suggestions"], job_description=st.session_state.get("manual_job_description", ""),
                 reports=st.session_state.get("manual_extraction_reports", []) or [],
             )
-
-    if not submitted:
-        return
-
-    if not normalized_title:
-        st.error("Job title is required.")
-    elif not job_description.strip():
-        st.error("Job description is required. Paste text manually or extract it from an upload.")
-    elif not is_valid_url(url):
-        st.error("Enter a valid http(s) Job URL, or leave it blank.")
-    elif duplicate_manual_job_exists(company, normalized_title, url):
-        st.error("Duplicate target job found with the same company, title, and URL.")
-    else:
-        try:
-            upload_files = [(uploaded_file.name, uploaded_file.getvalue()) for uploaded_file in uploaded_files]
-            record = save_manual_job(
-                company=company,
-                title=normalized_title,
-                location=location,
-                source=source,
-                url=url,
-                salary_range=salary_range,
-                visa_note=visa_note,
-                status=status,
-                notes=notes,
-                job_description=job_description,
-                extracted_text=st.session_state.get("manual_extracted_text", ""),
-                raw_extracted_text=st.session_state.get("manual_raw_extracted_text", ""),
-                cleaned_extracted_text=st.session_state.get("manual_cleaned_extracted_text", ""),
-                parser_suggestions=current_suggestions,
-                upload_files=upload_files,
-            )
-            st.session_state["manual_generate_selected"] = manual_record_label(record)
-            st.success("Target job saved. Continue to Generate Cover Letter when you are ready.")
-            st.info("Open the Generate Cover Letter tab next. This saved job will be preselected there.")
-            if SHOW_DEBUG_UI:
-                with st.expander("Advanced: raw Markdown path", expanded=False):
-                    st.write(f"Saved Markdown: `{record['markdown_path']}`")
-        except Exception as error:  # noqa: BLE001
-            st.error(f"Could not save target job: {error}")
+    save_manual_form_submission(payload, uploaded_files)
 
 
 def render_saved_manual_jobs_tab(services: ManualPageServices) -> None:

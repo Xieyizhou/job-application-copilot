@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "dataset_id": "semantic-evidence-real-derived-v1",
+  "source": {
+    "name": "0xnbk/resume-ats-score-v1-en",
+    "source_split": "validation",
+    "construction": "Short resume and job fragments were manually selected, de-identified, and lightly normalized. Whole documents, names, employers, contact details, and locations are not included.",
+    "label_type": "human-reviewed evidence support",
+    "limitations": "The source corpus is public and its ATS labels are algorithmic. These case labels assess sentence-level evidence support only, not hiring outcomes or candidate quality."
+  },
+  "cases": [
+    {
+      "case_id": "real-sem-001",
+      "requirement": "Build and maintain SQL data pipelines using ETL or ELT workflows.",
+      "evidence": "Built SQL ETL workflows that integrated data from several operational systems.",
+      "expected_accepted": true,
+      "review_tag": "direct-technical"
+    },
+    {
+      "case_id": "real-sem-002",
+      "requirement": "At least eight years of Java and JEE development experience is required.",
+      "evidence": "Developed Java, Spring MVC, and J2EE services for nine years.",
+      "expected_accepted": true,
+      "review_tag": "numeric-constraint-supported"
+    },
+    {
+      "case_id": "real-sem-003",
+      "requirement": "Deploy services with AWS, Kubernetes, Docker, and continuous integration tools.",
+      "evidence": "Deployed containerized services to AWS with Kubernetes, Docker, and GitHub Actions.",
+      "expected_accepted": true,
+      "review_tag": "direct-technical"
+    },
+    {
+      "case_id": "real-sem-004",
+      "requirement": "Advanced Excel skills including PivotTables and VLOOKUP are required.",
+      "evidence": "Prepared financial reports with Excel PivotTables and VLOOKUP.",
+      "expected_accepted": true,
+      "review_tag": "direct-tooling"
+    },
+    {
+      "case_id": "real-sem-005",
+      "requirement": "Provide customer service and manage sales relationships.",
+      "evidence": "Managed customer relationships and sales accounts while maintaining positive client feedback.",
+      "expected_accepted": true,
+      "review_tag": "direct-business"
+    },
+    {
+      "case_id": "real-sem-006",
+      "requirement": "Develop Python and SQL services with REST APIs.",
+      "evidence": "Developed Python and SQL applications and implemented RESTful APIs.",
+      "expected_accepted": true,
+      "review_tag": "direct-technical"
+    },
+    {
+      "case_id": "real-sem-007",
+      "requirement": "Coordinate project plans, timelines, and stakeholder communication.",
+      "evidence": "Coordinated project schedules, documented milestones, and presented updates to stakeholders.",
+      "expected_accepted": true,
+      "review_tag": "direct-delivery"
+    },
+    {
+      "case_id": "real-sem-008",
+      "requirement": "Clearly communicate platform capabilities and limitations to customers.",
+      "evidence": "Presented technical constraints and implementation options to client stakeholders.",
+      "expected_accepted": true,
+      "review_tag": "semantic-communication"
+    },
+    {
+      "case_id": "real-sem-009",
+      "requirement": "Build production data pipelines.",
+      "evidence": "Automated ETL workflows for multi-source operational data.",
+      "expected_accepted": true,
+      "review_tag": "semantic-etl"
+    },
+    {
+      "case_id": "real-sem-010",
+      "requirement": "Create business intelligence dashboards for recurring reporting.",
+      "evidence": "Created Tableau visualizations and recurring management reports.",
+      "expected_accepted": true,
+      "review_tag": "semantic-dashboard"
+    },
+    {
+      "case_id": "real-sem-011",
+      "requirement": "At least eight years of Java and JEE development experience is required.",
+      "evidence": "Lists Java, Spring MVC, and J2EE among technical skills.",
+      "expected_accepted": false,
+      "review_tag": "missing-numeric-constraint"
+    },
+    {
+      "case_id": "real-sem-012",
+      "requirement": "Deploy cloud services with AWS, Kubernetes, and Docker.",
+      "evidence": "Prepared monthly accounting reconciliations and Excel reports.",
+      "expected_accepted": false,
+      "review_tag": "unrelated-domain"
+    },
+    {
+      "case_id": "real-sem-013",
+      "requirement": "Build SQL data integration and ETL workflows.",
+      "evidence": "Provided customer service and maintained sales relationships.",
+      "expected_accepted": false,
+      "review_tag": "unrelated-domain"
+    },
+    {
+      "case_id": "real-sem-014",
+      "requirement": "Design solutions on the Salesforce platform.",
+      "evidence": "Analyzed research data with Python and statistical methods.",
+      "expected_accepted": false,
+      "review_tag": "unrelated-platform"
+    },
+    {
+      "case_id": "real-sem-015",
+      "requirement": "Perform accounting and financial analysis.",
+      "evidence": "Developed Java backend services and database integrations.",
+      "expected_accepted": false,
+      "review_tag": "unrelated-domain"
+    },
+    {
+      "case_id": "real-sem-016",
+      "requirement": "Deploy machine learning models to production services.",
+      "evidence": "Presented historical research findings to a student seminar.",
+      "expected_accepted": false,
+      "review_tag": "unrelated-evidence"
+    },
+    {
+      "case_id": "real-sem-017",
+      "requirement": "A four-year degree in computer science is required.",
+      "evidence": "Lists software development and organizational skills.",
+      "expected_accepted": false,
+      "review_tag": "missing-degree-evidence"
+    },
+    {
+      "case_id": "real-sem-018",
+      "requirement": "Current work authorization is required.",
+      "evidence": "Available to begin work immediately.",
+      "expected_accepted": false,
+      "review_tag": "missing-eligibility-evidence"
+    },
+    {
+      "case_id": "real-sem-019",
+      "requirement": "Five years of production software delivery experience is required.",
+      "evidence": "Completed an academic software project using Python.",
+      "expected_accepted": false,
+      "review_tag": "missing-numeric-and-scope"
+    },
+    {
+      "case_id": "real-sem-020",
+      "requirement": "Demonstrate excellent written and oral communication skills.",
+      "evidence": "Used Microsoft Word, Excel, and Outlook.",
+      "expected_accepted": false,
+      "review_tag": "unsupported-soft-skill"
+    },
+    {
+      "case_id": "real-sem-021",
+      "requirement": "Operate Kubernetes and Docker-based deployment environments.",
+      "evidence": "Used Git for source control on a small project.",
+      "expected_accepted": false,
+      "review_tag": "insufficient-tool-overlap"
+    },
+    {
+      "case_id": "real-sem-022",
+      "requirement": "Build Tableau dashboards for executive reporting.",
+      "evidence": "Worked with data in several assignments.",
+      "expected_accepted": false,
+      "review_tag": "generic-evidence"
+    },
+    {
+      "case_id": "real-sem-023",
+      "requirement": "Own project budgets and coordinate delivery schedules.",
+      "evidence": "Coordinated delivery schedules for a small team.",
+      "expected_accepted": false,
+      "review_tag": "partial-compound-requirement"
+    },
+    {
+      "case_id": "real-sem-024",
+      "requirement": "Use SQL, NoSQL databases, and continuous integration tools.",
+      "evidence": "Built recurring SQL reports from a relational database.",
+      "expected_accepted": false,
+      "review_tag": "partial-compound-requirement"
+    }
+  ]
+}

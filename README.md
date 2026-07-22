@@ -37,6 +37,8 @@ The walkthrough uses only fictional and sanitized data:
   - a final recommendation
 - Detects incomplete job descriptions, calibrates narrow matches toward a neutral prior,
   and labels the result provisional instead of presenting misleading confidence.
+- Can replace a discovery snippet with a strictly matched JSearch posting; ambiguous or
+  incomplete matches fail closed and never overwrite the saved record.
 - Classifies JD quality from completeness, requirements, truncation, boilerplate, and source
   provenance before presenting experimental comparisons.
 - Uses one current scoring result across Dashboard summaries, Review Jobs,
@@ -56,7 +58,7 @@ The walkthrough uses only fictional and sanitized data:
 - Separates fictional Demo data from ignored Personal files, API keys,
   generated outputs, and the local SQLite tracker.
 - Includes regression, integration, extraction, document-export, privacy,
-  and Streamlit runtime tests.
+  Streamlit runtime tests, and anonymous real-derived semantic-evidence validation.
 
 ## Product Walkthrough
 
@@ -82,6 +84,8 @@ The walkthrough uses only fictional and sanitized data:
 flowchart LR
     A["Job APIs or manual input"] --> B["Normalize and deduplicate"]
     B --> C["JD completeness gate"]
+    C -->|"Incomplete"| X["Strict full-JD lookup"]
+    X --> C
     C --> D["Requirement extraction"]
     R["Uploaded resume · read-only"] --> E["Evidence matching"]
     D --> E
@@ -95,7 +99,8 @@ flowchart LR
     G --> I
     H --> I
     I --> J["Human review"]
-    R --> K["Resume-grounded cover letter"]
+    C -->|"Scoring-ready"| K["Resume-grounded cover letter"]
+    R --> K
     J --> K
     K --> L["DOCX and evidence bundle"]
     J --> M["Local SQLite tracker"]
@@ -111,9 +116,10 @@ submitted automatically.
 2. Review normalized company, role, location, and job-description fields.
 3. Compare the job requirements with the active candidate profile.
 4. Review Role Fit, eligibility, scoring confidence, and missing evidence.
-5. Generate a resume-grounded cover letter.
-6. Review and export the generated files.
-7. Update the local application tracker manually.
+5. Complete the JD manually or through strict JSearch matching when the record is incomplete.
+6. Generate a resume-grounded cover letter only after the JD passes the completeness gate.
+7. Review and export the generated files.
+8. Update the local application tracker manually.
 
 ## Quick Start
 
@@ -213,7 +219,10 @@ Search behavior includes:
 
 JSearch is preferred for scoring because it returns detailed job descriptions. Adzuna and
 Jooble remain useful discovery sources, but their official search APIs return description
-snippets; those records stay provisional until a full JD is available.
+snippets; those records stay provisional until a full JD is available. From Review Jobs,
+**Find Full JD** searches JSearch using the saved company, role, and location. The result is
+written only when company and title similarity are strong, the result is unambiguous, and the
+retrieved description independently passes the same JD-quality gate.
 
 ## Role Fit Assessment
 
@@ -295,6 +304,8 @@ A generated bundle may include:
 The cover-letter bundle generator:
 
 - uses the uploaded resume as the only source for employer-facing candidate claims
+- refuses to create employer-facing files from snippets, ambiguous matches, or other
+  descriptions that are not scoring-ready
 - preserves the canonical company and role
 - includes eligibility and scoring-confidence information
 - records the generation-time analysis
@@ -372,6 +383,7 @@ Run the complete automated test suite:
 python -m py_compile main.py scripts/privacy_audit.py scripts/evaluate_scoring.py src/*.py
 python -m unittest discover -s tests -v
 python scripts/evaluate_scoring.py
+python scripts/ml/evaluate_real_validation.py
 python -m pip check
 python scripts/privacy_audit.py
 ```
@@ -388,8 +400,14 @@ The release checks cover:
 - privacy scanning
 - dependency consistency
 - Streamlit runtime behavior
+- anonymous semantic-evidence agreement and real-data domain-shift diagnostics
 
 A `48/48` benchmark result means that the current rules agree with all 48 expected outcomes in this curated regression set. It is not model accuracy, a hiring-success rate, or validation on real applicants.
+
+The semantic-evidence manifest contains 24 de-identified, manually reviewed
+requirement/evidence pairs derived from the public ATS corpus. A `24/24` result means
+agreement with that small curated set only. The hash-only real relevance holdout detects
+domain collapse; its source ATS labels are weak labels and are not hiring ground truth.
 
 ## Project Structure
 

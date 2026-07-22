@@ -69,6 +69,12 @@ after duplicate removal and local filtering. Configure JSearch for automatic
 full job descriptions. Adzuna and Jooble are treated as discovery-only sources
 because their official search APIs return snippets.
 
+When a saved record contains only a snippet, open **Review Jobs → JD** and choose
+**Find and verify full JD**. The toolkit searches JSearch using the saved company,
+role, and location. It updates the local Markdown file only when one result is an
+unambiguous company/title match and its description passes the canonical JD-quality
+check. Otherwise the original record is preserved for manual replacement.
+
 JSearch command-line example:
 
 ```bash
@@ -115,6 +121,11 @@ The report includes matched evidence, missing keywords, risk notes, a score,
 and a recommendation based on deterministic rules.
 
 ## Generate a Cover Letter Bundle
+
+Cover Letter generation is available only for a scoring-ready full JD. The dashboard
+offers the full-JD lookup first when JSearch is configured. The command-line workflow
+also attempts the same safe lookup before generation and exits without creating
+employer-facing files if no verified complete posting is available.
 
 After Personal workspace setup, run:
 

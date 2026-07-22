@@ -21,6 +21,8 @@ from analyze_job import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARN
 from company_verification import assert_cover_letter_company_verified, parse_bool
 from export_documents import export_application_package
 from generate_cover_letter import generate_cover_letter
+from jd_enrichment import ensure_saved_job_description_ready
+from ml.jd_quality import JDQualityError, assert_cover_letter_jd_ready
 from output_paths import application_package_dir, safe_slug, timestamp_slug
 from tracker import add_application
 from workspace import Workspace, WorkspaceError, personal_workspace
@@ -208,6 +210,12 @@ def create_application_package(
             },
         },
     )
+    enrichment = ensure_saved_job_description_ready(job_description_path)
+    job_text = job_description_path.read_text(encoding="utf-8")
+    try:
+        assert_cover_letter_jd_ready(job_text)
+    except JDQualityError as error:
+        raise JDQualityError(f"{error} Full-JD lookup result: {enrichment['message']}") from error
     family = safe_slug(f"{company}_{role}")
     package_dir = application_package_dir(workspace.generated_dir, family, timestamp_slug())
 
@@ -247,6 +255,7 @@ def create_application_package(
         "export_warnings": export_warnings,
         "tracker_id": tracker_id,
         "uk_review_notes": uk_review_notes,
+        "jd_enrichment": enrichment,
     }
 
 

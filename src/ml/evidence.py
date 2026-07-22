@@ -35,7 +35,7 @@ CONCEPT_ALIASES = {
     ),
     "dashboard_reporting": (
         "dashboard", "dashboards", "reporting", "business intelligence", "bi report",
-        "visualization", "visualisation",
+        "visualization", "visualisation", "tableau",
     ),
     "automation": ("automate", "automated", "automation", "workflow automation"),
     "machine_learning": (
@@ -54,9 +54,17 @@ CONCEPT_ALIASES = {
         "production system", "production systems", "deployed", "deployment", "api",
         "service", "services", "software development",
     ),
+    "delivery_automation": (
+        "continuous integration", "continuous delivery", "ci cd", "cicd", "ci/cd",
+        "github actions", "build pipeline", "build pipelines",
+    ),
     "database": ("sql", "database", "databases", "postgres", "mysql", "warehouse"),
     "python": ("python", "pandas", "numpy"),
     "cloud": ("aws", "azure", "gcp", "cloud platform", "cloud services"),
+    "java_enterprise": ("java", "j2ee", "jee", "spring mvc", "spring framework"),
+    "spreadsheet_analysis": (
+        "excel", "pivot table", "pivot tables", "pivottable", "pivottables", "vlookup",
+    ),
     "collaboration": (
         "collaborated", "collaboration", "cross-functional", "cross functional", "teamwork",
     ),
@@ -71,6 +79,18 @@ COVER_LETTER_EXCLUDED_TERMS = (
     "permanent residency", "security clearance", "bachelor", "master", "phd", "ph.d",
     "doctorate", "degree required",
 )
+YEAR_WORDS = {
+    "one": 1.0,
+    "two": 2.0,
+    "three": 3.0,
+    "four": 4.0,
+    "five": 5.0,
+    "six": 6.0,
+    "seven": 7.0,
+    "eight": 8.0,
+    "nine": 9.0,
+    "ten": 10.0,
+}
 
 
 def clean_source_line(raw_line: str) -> str:
@@ -87,15 +107,15 @@ def clean_source_line(raw_line: str) -> str:
 def useful_tokens(text: str) -> set[str]:
     """Return specific lexical terms used by the transparent similarity layer."""
     return {
-        token
+        token.strip(".-")
         for token in USEFUL_TOKEN_PATTERN.findall(text.lower())
-        if token not in STOPWORDS
+        if token.strip(".-") and token.strip(".-") not in STOPWORDS
     }
 
 
 def concept_tags(text: str) -> set[str]:
     """Map common job/resume paraphrases to reviewable canonical concepts."""
-    normalized = " " + re.sub(r"[^a-z0-9+#.-]+", " ", text.lower()).strip() + " "
+    normalized = " " + re.sub(r"[^a-z0-9+#]+", " ", text.lower()).strip() + " "
     return {
         concept
         for concept, aliases in CONCEPT_ALIASES.items()
@@ -107,6 +127,21 @@ def requirement_allowed_in_cover_letter(requirement: str) -> bool:
     """Keep eligibility and sensitive personal-status claims out of CL prose."""
     lowered = requirement.lower()
     return not any(term in lowered for term in COVER_LETTER_EXCLUDED_TERMS)
+
+
+def stated_years(text: str) -> list[float]:
+    """Extract numeric or short word-form years-of-experience statements."""
+    lowered = text.lower()
+    values = [
+        float(value)
+        for value in re.findall(r"\b(\d+(?:\.\d+)?)\+?\s*(?:years|yrs)\b", lowered)
+    ]
+    values.extend(
+        number
+        for word, number in YEAR_WORDS.items()
+        if re.search(rf"\b{word}\s+(?:years|yrs)\b", lowered)
+    )
+    return values
 
 
 def extract_requirement_records(job_text: str) -> list[dict[str, str]]:
@@ -226,7 +261,23 @@ def _score_evidence_pair(
     similarity = min(1.0, 0.5 * lexical_signal + 0.4 * concept_coverage + concrete_bonus)
     if not shared_tokens and not shared_concepts:
         similarity = min(similarity, 0.24)
-    accepted = similarity >= MIN_ACCEPTED_SIMILARITY and bool(shared_tokens or shared_concepts)
+    required_years = stated_years(requirement)
+    evidence_years = stated_years(evidence)
+    numeric_constraint_supported = (
+        not required_years
+        or bool(evidence_years) and max(evidence_years) >= max(required_years)
+    )
+    compound_requirement_supported = not (
+        len(requirement_concepts) >= 2
+        and concept_coverage < 0.75
+        and requirement_coverage < 0.5
+    )
+    accepted = (
+        similarity >= MIN_ACCEPTED_SIMILARITY
+        and bool(shared_tokens or shared_concepts)
+        and numeric_constraint_supported
+        and compound_requirement_supported
+    )
     if accepted and (len(shared_tokens) >= 2 or requirement_coverage >= 0.5):
         match_type = "Direct support"
     elif accepted and shared_concepts:
@@ -240,6 +291,8 @@ def _score_evidence_pair(
         "shared_terms": sorted(shared_tokens),
         "shared_concepts": sorted(shared_concepts),
         "model_similarity": round(model_similarity, 4) if model_similarity is not None else None,
+        "numeric_constraint_supported": numeric_constraint_supported,
+        "compound_requirement_supported": compound_requirement_supported,
     }
 
 

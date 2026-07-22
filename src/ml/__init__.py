@@ -8,7 +8,12 @@ from ml.inference import (
     predict_relevance_batch,
     suppress_collapsed_relevance_signals,
 )
-from ml.jd_quality import classify_jd_quality
+from ml.jd_quality import (
+    JDQualityError,
+    assert_cover_letter_jd_ready,
+    classify_jd_quality,
+    jd_quality_warning_messages,
+)
 
 __all__ = [
     "local_model_status",
@@ -18,4 +23,7 @@ __all__ = [
     "predict_relevance_batch",
     "suppress_collapsed_relevance_signals",
     "classify_jd_quality",
+    "assert_cover_letter_jd_ready",
+    "jd_quality_warning_messages",
+    "JDQualityError",
 ]

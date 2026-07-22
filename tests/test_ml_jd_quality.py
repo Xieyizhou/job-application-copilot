@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import unittest
 
-from ml.jd_quality import classify_jd_quality, extract_description_body
+from ml.jd_quality import (
+    JDQualityError,
+    assert_cover_letter_jd_ready,
+    classify_jd_quality,
+    extract_description_body,
+    jd_quality_warning_messages,
+)
 
 
 class JobDescriptionQualityTests(unittest.TestCase):
@@ -103,6 +109,21 @@ JD Fetch Status: complete
 
         self.assertEqual(result["label"], "empty_or_unreadable")
         self.assertEqual(result["quality_score"], 0)
+
+    def test_manual_source_does_not_make_a_short_jd_complete(self) -> None:
+        job = """# Data Analyst
+Source: Manual
+
+## Job Description
+Use Python and SQL for reporting.
+"""
+        result = classify_jd_quality(job)
+
+        self.assertFalse(result["explicit_full_source"])
+        self.assertFalse(result["reliable_scoring_ready"])
+        self.assertTrue(jd_quality_warning_messages(job))
+        with self.assertRaises(JDQualityError):
+            assert_cover_letter_jd_ready(job)
 
     def test_boilerplate_does_not_create_scoring_readiness(self) -> None:
         boilerplate = " ".join(

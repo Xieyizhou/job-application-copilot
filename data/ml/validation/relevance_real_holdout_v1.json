@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "dataset_id": "relevance-real-hash-holdout-v1",
+  "source": {
+    "name": "0xnbk/resume-ats-score-v1-en",
+    "source_split": "validation",
+    "construction": "Records are referenced only by SHA-256 resume and job hashes. No resume text, job text, names, employers, contact details, or row-level predictions are committed.",
+    "label_type": "external algorithmic weak label",
+    "limitations": "Good Fit, Potential Fit, and No Fit are weak labels from the source dataset. They are useful for domain-shift diagnostics but are not hiring outcomes or human ground truth."
+  },
+  "cases": [
+    {"case_id":"real-rel-001","resume_sha256":"1b122a2f077462a9ffe91c86b67f259446b2609deb8c0c52da73cc0a335fbee5","job_sha256":"21774748621b2f7d9b46acd7a704f0f68352a5bc052615732cefdbdc20c3066c","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-002","resume_sha256":"27399fb4647c9808cf458e08952b8d846671d9b892f17591de1ef8d01e179315","job_sha256":"05047d4faa8119aef4035195ea57a4f16642cc78ffa3dd9f82e377f1e8a7fcca","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-003","resume_sha256":"316faa6d58d03a29943bc19029300846038121bba6247431da4673d47f016b1f","job_sha256":"cdedec68258b9a0336977092f31a1106af859453d1a81e48b858af0adb15c542","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-004","resume_sha256":"583e9936103908170c64e72983a8d6437678f7ce863d205fe7fbe47a0c47fbcd","job_sha256":"751fe49259981eecb0df49889232bb2d3264af6427e1c7e7691167f06605f05a","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-005","resume_sha256":"5cc8856d186c6060621c349e96953d96190c61a752d202b44c7f0193aacfa59a","job_sha256":"00e928ee8c8e5031564d5f544b3f1bcdecf471874677c8afc81c82ea37ddd697","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-006","resume_sha256":"a874fa6cda152635c862c45d9d32a1708899d8572ec8952f7781d24c4d07a59d","job_sha256":"0498f48c782d3b9492f313f49b05ca0ac0402dbdea6417cd6c9d198c360ce100","source_label":"Good Fit","ats_score":89.9},
+    {"case_id":"real-rel-007","resume_sha256":"492fc88afca25af42f09ae4c5881d52eb1e7f964d5e38d2a38fd8e7826af3b8e","job_sha256":"61924d9f5cde2f20286e4981cca1600330014b75ff50d907730f8389d29c9519","source_label":"Good Fit","ats_score":89.8},
+    {"case_id":"real-rel-008","resume_sha256":"ebe4f1fe89ff514ab4d9aae77d64006b3606fdc9eab2a68c1f970203d18f925f","job_sha256":"f343637fc4c8db3f6a8a1d12bfbf90a897b2c2f1f0fd94f960b9be289e117329","source_label":"Good Fit","ats_score":89.8},
+    {"case_id":"real-rel-009","resume_sha256":"5d1cc00e1711c370d9d83088a18e694d775553592078f0010c6b5e6bd420d748","job_sha256":"63658ef9fe3861aa6d8812c61b608a69bd6f194e2a6f23b7a48d4e304ce35b35","source_label":"No Fit","ats_score":19.86},
+    {"case_id":"real-rel-010","resume_sha256":"23d62349a67b7641b784664ca70c9c671b5caa135e378d8fc5a00c4e62d6f823","job_sha256":"cb5816f5899e232a6c28dd767a1b906d24f288cb1c9cbceb75a7fd949853a518","source_label":"No Fit","ats_score":20.0},
+    {"case_id":"real-rel-011","resume_sha256":"6fd29973e7329bda4cd95d50638f7310e4865b9eba3b53f10a14f20c0af36d5d","job_sha256":"11a9055b5d73755433129f17191bb92b475e46ec2d39cc70df7dd8bfe822b4b9","source_label":"No Fit","ats_score":20.0},
+    {"case_id":"real-rel-012","resume_sha256":"cf215d7871daa72eb4549bbe23ea85228aa5ddc134d37088116d21e4970dfcbe","job_sha256":"7d1c34bd217dc3c218d42c019399ff1fe4c72fbf2ed2d6daa95949ab19835142","source_label":"No Fit","ats_score":20.0},
+    {"case_id":"real-rel-013","resume_sha256":"d3c2b22cc6ac742ba6b1e4fb05d7107c4ea3ca6a73d1f286fd3dfb26ca87e5a1","job_sha256":"1d4ac7c6ec1252e87c7b39706c553eb5a2d195f7d5de1f9038276585a1f47d53","source_label":"No Fit","ats_score":20.0},
+    {"case_id":"real-rel-014","resume_sha256":"facbd3fc8be6e29ee280f5797e17416c93434f0040553c831352aee3a41cf8cd","job_sha256":"9eca3f021a252e29f47f52fbf0fc09d60a1bcfff8aed0c5b2dfc865a725526aa","source_label":"No Fit","ats_score":20.0},
+    {"case_id":"real-rel-015","resume_sha256":"1ca07cf52d1ef28b685441f4e00f07441d922899322dfd3cd1b7810d4707da24","job_sha256":"769d97cfe603d175fb234b18e2561524bfb769d442e858a5ede72bab48d3c2da","source_label":"No Fit","ats_score":20.1},
+    {"case_id":"real-rel-016","resume_sha256":"49670208decb6a8bb90c6facac1a713b5da0734daa128a308d7ad0c7e2bee4d1","job_sha256":"86cd43cbf5c5b1a5a321041b8be597fd0d9919e8684b924bdb6781507259b386","source_label":"No Fit","ats_score":20.1},
+    {"case_id":"real-rel-017","resume_sha256":"29ee04fbd03d9c8189faab6146fd932339a58eb18e3f713c856a56f81cd1fc0b","job_sha256":"4bca554e6a72f1d4b17485616bb4ef413d1563ee6c092fad01c23eb299904963","source_label":"Potential Fit","ats_score":59.9},
+    {"case_id":"real-rel-018","resume_sha256":"441ed4f1e156041ad575c2f857a5eded68da54a6ebaddbe2672a6a0c28551ae3","job_sha256":"d15c2028abdc8824647afcec0c19c80abf9a52bde5bd2be1e7919a57e181bf46","source_label":"Potential Fit","ats_score":59.9},
+    {"case_id":"real-rel-019","resume_sha256":"7de4266e695a4dc4ebac0a8f695e5d1978ee980f01312dc584939c7e0e197991","job_sha256":"9a5487a6b46c53fe560e92576ebc0930b2ae474f5216e1d7053d3d0547f1c11a","source_label":"Potential Fit","ats_score":59.9},
+    {"case_id":"real-rel-020","resume_sha256":"8455db1236f541d84e697f61f3e1831d32e89117abaade418d31f30beed75183","job_sha256":"cd6d1c4a4fa5ae9f8be6404a824d43af8db9e336e554eb88ac8213b3d0bcd6b8","source_label":"Potential Fit","ats_score":59.9},
+    {"case_id":"real-rel-021","resume_sha256":"2d1e38e1358435d9fca1ab52bbd4893cb5ff2797b4ca5b64efde05cd4a18944e","job_sha256":"0ca37233403eb9307fe78515fda83687961110cd8c284109f7dc1a07bcce810f","source_label":"Potential Fit","ats_score":59.8},
+    {"case_id":"real-rel-022","resume_sha256":"753f0047483b4dc234f4d751fdb2e8c45ca50c536d7bcc9799f3c558a2a2f5f2","job_sha256":"7672d0e3ee43be696c2baaf7b11dca794fc2a7bbacf6a222ff09cb79f6cea40c","source_label":"Potential Fit","ats_score":59.8}
+  ]
+}

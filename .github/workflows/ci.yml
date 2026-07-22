@@ -26,5 +26,7 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Run scoring benchmark
         run: python scripts/evaluate_scoring.py
+      - name: Run anonymous semantic-evidence validation
+        run: python scripts/ml/evaluate_real_validation.py --semantic-only
       - name: Run privacy audit
         run: python scripts/privacy_audit.py

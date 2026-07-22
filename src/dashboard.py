@@ -32,7 +32,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 12
 MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
-DASHBOARD_SCORING_VERSION = "canonical-v4-jd-quality"
+DASHBOARD_SCORING_VERSION = "canonical-v5-full-jd-gate"
 SCREENING_KEYWORDS = {
     "python": 8,
     "pandas": 8,
@@ -99,6 +99,8 @@ from export_documents import (  # noqa: E402
     parse_job_metadata_from_package,
 )
 from fetch_history import latest_successful_fetch_run, load_fetch_runs  # noqa: E402
+from fetch_jobs import jsearch_configured  # noqa: E402
+from jd_enrichment import enrich_saved_job_description  # noqa: E402
 import manual_jobs as manual_jobs_module  # noqa: E402
 from manual_jobs import confirm_manual_job_company  # noqa: E402
 from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
@@ -708,15 +710,21 @@ def job_duplicate_key(job: dict[str, Any]) -> tuple[str, str, str, str]:
     )
 
 
-def job_description_preference(job: dict[str, Any]) -> tuple[int, int]:
-    """Prefer verified full-description sources when duplicate listings disagree."""
-    source = str(job.get("source", "")).lower()
-    source_quality = 2 if (
-        str(job.get("jd_fetch_status", "")).lower() == "complete"
-        or str(job.get("description_source", "")).lower() == "full_jd_api"
-        or source in {"manual", "company website", "jsearch"}
-    ) else 1
-    return source_quality, int(job.get("description_word_count", 0) or 0)
+def job_description_preference(job: dict[str, Any]) -> tuple[int, int, int]:
+    """Prefer duplicate records using the canonical JD-quality result."""
+    quality = dict(job.get("jd_quality", {}) or {})
+    readiness = (
+        2
+        if quality.get("reliable_scoring_ready", False)
+        else 1
+        if quality.get("provisional_scoring_ready", False)
+        else 0
+    )
+    return (
+        readiness,
+        int(quality.get("quality_score", 0) or 0),
+        int(job.get("description_word_count", 0) or 0),
+    )
 
 
 def deduplicate_dashboard_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1690,6 +1698,8 @@ def review_page_services() -> ReviewPageServices:
         default_review_inbox_view=default_review_inbox_view,
         demo_mode_enabled=demo_mode_enabled,
         go_to_page=go_to_page,
+        enrich_saved_job_description=enrich_saved_job_description,
+        jsearch_configured=jsearch_configured,
         key_requirements_from_text=key_requirements_from_text,
         load_package_notes=load_package_notes,
         load_screened_jobs=load_screened_jobs,

@@ -84,12 +84,35 @@ precision, recall, F1, a confusion matrix, and mean per-job average precision ov
 sampled candidate pools. Any published metric must also name the synthetic dataset,
 unseen-job protocol, negative-sampling ratio, and sampled-pool limitation.
 
+## Anonymous real-derived validation
+
+Two committed manifests add a separate domain-shift and evidence-quality check without
+publishing resumes or job descriptions:
+
+- `semantic_evidence_real_v1.json` contains 24 short, manually reviewed sentence pairs
+  derived from the public ATS corpus, with names, employers, contacts, locations, and
+  whole-document context removed.
+- `relevance_real_holdout_v1.json` contains only SHA-256 resume/job references and the
+  source dataset's weak labels. It resolves against the ignored local
+  `canonical_pairs.parquet` file and never commits source text or row-level predictions.
+
+The semantic set tests whether a requirement is supported by one factual resume statement.
+The relevance set is diagnostic only: its ATS labels are algorithmic weak labels, not human
+ground truth or recruiting outcomes. The current synthetic relevance artifact collapses on
+this real-data holdout, so the dashboard continues to hide that experimental signal for
+collapsed batches. The holdout must not be used for threshold selection or retraining.
+
+The 24/24 semantic result is curated validation-set agreement, not model accuracy or proof
+that the retriever generalizes to all resumes and job descriptions.
+
 ## Commands
 
 ```bash
 python -m pip install -r requirements.txt -r requirements-ml.txt
 
 python scripts/ml/train_relevance_baseline.py
+
+python scripts/ml/evaluate_real_validation.py
 ```
 
 For a quick implementation check, add `--max-jobs 30 --max-features 1000`. A capped
@@ -98,6 +121,7 @@ run is not the evaluated model.
 ## Local artifacts and privacy
 
 Raw data, caches, processed pairs, fitted models, and evaluation reports are ignored
-under `data/ml/` and `reports/ml/`. The release audit and pre-push hook also block local
+under `data/ml/` and `reports/ml/`; only the de-identified validation manifests are tracked.
+The release audit and pre-push hook also block local
 automation-instruction artifacts and personal candidate data. Do not commit raw resumes,
 raw job text, fitted models, or row-level predictions.
