@@ -9,6 +9,7 @@ import streamlit as st
 
 from dashboard_review import tracker_age_days, tracker_follow_up_due, tracker_next_action
 from dashboard_titles import display_title_from_value
+from scoring_types import TrackerRow
 from tracker import VALID_STATUSES, delete_application, update_status
 from workspace import WorkspaceError
 
@@ -19,7 +20,7 @@ class TrackerPageServices:
 
     current_workspace: Callable[[], Any]
     demo_mode_enabled: Callable[[], bool]
-    load_tracker_rows: Callable[..., list[dict[str, Any]]]
+    load_tracker_rows: Callable[..., list[TrackerRow]]
     render_action_callout: Callable[..., None]
     render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]

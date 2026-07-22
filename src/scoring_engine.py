@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any, Literal
 
 from ml.jd_quality import classify_jd_quality, extract_description_body
 from scoring_config import (
@@ -24,6 +25,18 @@ from scoring_extraction import (
     parse_job_description,
 )
 from scoring_matching import demand_type_for_keyword, match_strength_for_keyword
+from scoring_types import (
+    CandidateProfile,
+    EligibilityResult,
+    ParsedJob,
+    Penalty,
+    RoleAlignment,
+    RoleFocusAdjustment,
+    ScoreBreakdownItem,
+    ScoreCalibration,
+    ScoringConfidence,
+    ScoringResult,
+)
 
 
 def score_note(
@@ -44,16 +57,16 @@ def score_note(
 
 
 def calculate_score_breakdown(
-    parsed_job: dict[str, object],
+    parsed_job: ParsedJob,
     resume_keywords: list[str],
-    candidate_profile: dict[str, object] | None = None,
-) -> list[dict[str, object]]:
+    candidate_profile: CandidateProfile | None = None,
+) -> list[ScoreBreakdownItem]:
     """Calculate demand-aware weighted category scores."""
     resume_keyword_set = set(resume_keywords)
     required_skills = set(parsed_job["required_skills"])
     preferred_skills = set(parsed_job["preferred_skills"])
     experience_level = set(parsed_job["experience_level"])
-    breakdown = []
+    breakdown: list[ScoreBreakdownItem] = []
 
     for category_name, category in SCORE_CATEGORIES.items():
         keywords = category["keywords"]
@@ -131,10 +144,10 @@ def calculate_score_breakdown(
     return breakdown
 
 
-def find_penalties(job_text: str) -> list[dict[str, object]]:
+def find_penalties(job_text: str) -> list[Penalty]:
     """Find configured score penalties."""
     normalized = normalize_text(job_text)
-    penalties = []
+    penalties: list[Penalty] = []
     for rule in PENALTY_RULES:
         if any(re.search(pattern, normalized) for pattern in rule["patterns"]):
             penalties.append({"name": rule["name"], "points": rule["points"]})
@@ -142,15 +155,15 @@ def find_penalties(job_text: str) -> list[dict[str, object]]:
 
 
 def calculate_match_score(
-    score_breakdown: list[dict[str, object]],
-    penalties: list[dict[str, object]],
+    score_breakdown: list[ScoreBreakdownItem],
+    penalties: list[Penalty],
 ) -> int:
     """Calculate the normalized final score after active categories and penalties."""
     active_items = [item for item in score_breakdown if item["earned"] is not None]
     if not active_items:
         return 0
 
-    earned_points = sum(float(item["earned"]) for item in active_items)
+    earned_points = sum(float(item["earned"] or 0.0) for item in active_items)
     possible_points = sum(float(item["possible"]) for item in active_items)
     raw_score = (earned_points / possible_points) * 100
     total_penalty = sum(int(item["points"]) for item in penalties)
@@ -163,7 +176,7 @@ def extract_job_description_body(job_text: str) -> str:
     return extract_description_body(job_text)
 
 
-def assess_job_description_quality(job_text: str) -> dict[str, object]:
+def assess_job_description_quality(job_text: str) -> dict[str, Any]:
     """Return the explainable local JD-quality classification."""
     return classify_jd_quality(job_text)
 
@@ -177,7 +190,7 @@ def extract_saved_job_title(job_text: str) -> str:
     return role_field.group(1).strip() if role_field is not None else ""
 
 
-def evaluate_role_focus_alignment(job_text: str, candidate_text: str) -> dict[str, object]:
+def evaluate_role_focus_alignment(job_text: str, candidate_text: str) -> RoleAlignment:
     """Check whether candidate evidence supports the core domain named in the job title."""
     title = extract_saved_job_title(job_text)
     normalized_candidate = normalize_text(candidate_text)
@@ -205,8 +218,8 @@ def evaluate_role_focus_alignment(job_text: str, candidate_text: str) -> dict[st
 
 def apply_role_focus_adjustment(
     coverage_score: int,
-    role_alignment: dict[str, object],
-) -> tuple[int, dict[str, object]]:
+    role_alignment: RoleAlignment,
+) -> tuple[int, RoleFocusAdjustment]:
     """Blend reliable title focus into observed fit without raising requirement coverage."""
     if not role_alignment.get("detected"):
         return coverage_score, {
@@ -228,12 +241,20 @@ def apply_role_focus_adjustment(
 
 def calibrate_score_for_evidence(
     observed_score: int,
-    confidence: dict[str, object],
-) -> tuple[int, dict[str, object]]:
+    confidence: ScoringConfidence,
+) -> tuple[int, ScoreCalibration]:
     """Shrink unsupported high coverage toward neutral without lifting weak scores."""
     active_count = int(confidence.get("active_requirement_count", 0) or 0)
     quality = dict(confidence.get("job_description_quality", {}) or {})
-    role_alignment = dict(confidence.get("role_alignment", {}) or {})
+    role_alignment = confidence.get("role_alignment")
+    if role_alignment is None:
+        role_alignment = {
+            "detected": False,
+            "focus": "",
+            "title": "",
+            "score": None,
+            "matched_evidence": [],
+        }
     role_signal_count = int(bool(role_alignment.get("detected")))
     effective_count = active_count + role_signal_count
     if quality.get("appears_incomplete"):
@@ -283,9 +304,9 @@ def recommendation_for_score(score: int) -> str:
 def calculate_scoring_confidence(
     job_text: str,
     candidate_text: str,
-    score_breakdown: list[dict[str, object]],
-    candidate_profile: dict[str, object],
-) -> dict[str, object]:
+    score_breakdown: list[ScoreBreakdownItem],
+    candidate_profile: CandidateProfile,
+) -> ScoringConfidence:
     """Describe deterministic evidence coverage independently from role fit."""
     active_count = sum(len(item["active_terms"]) for item in score_breakdown)
     candidate_evidence_count = len(find_keywords(candidate_text)) + len(candidate_profile.get("evidence", []))
@@ -304,7 +325,7 @@ def calculate_scoring_confidence(
         reasons.append("No usable candidate evidence was extracted.")
 
     if reasons:
-        level = "low"
+        level: Literal["low", "medium", "high"] = "low"
     elif active_count >= 8:
         level = "high"
         reasons.append("At least eight scored requirements and candidate evidence were extracted.")
@@ -320,7 +341,7 @@ def calculate_scoring_confidence(
     }
 
 
-def final_recommendation(score: int, eligibility: dict[str, object], confidence: dict[str, object]) -> str:
+def final_recommendation(score: int, eligibility: EligibilityResult, confidence: ScoringConfidence) -> str:
     """Apply eligibility and confidence gates to the calibrated score label."""
     if eligibility["status"] == "failed":
         return "Skip / Not Eligible"
@@ -332,8 +353,8 @@ def final_recommendation(score: int, eligibility: dict[str, object], confidence:
 def explain_final_decision(
     score: int,
     recommendation: str,
-    eligibility: dict[str, object],
-    confidence: dict[str, object],
+    eligibility: EligibilityResult,
+    confidence: ScoringConfidence,
 ) -> str:
     """Explain the recommendation using role fit, eligibility, and confidence."""
     reasons = eligibility.get("reasons", [])
@@ -359,7 +380,7 @@ def explain_final_decision(
     )
 
 
-def score_job_texts(job_text: str, candidate_text: str) -> dict[str, object]:
+def score_job_texts(job_text: str, candidate_text: str) -> ScoringResult:
     """Run the deterministic scoring pipeline without file or network access."""
     job_keywords = find_keywords(job_text)
     resume_keywords = find_keywords(candidate_text)

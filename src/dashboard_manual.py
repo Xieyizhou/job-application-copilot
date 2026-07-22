@@ -96,7 +96,9 @@ def clear_manual_job_session_state(clear_upload: bool = True) -> None:
     keys_to_clear.update(
         key
         for key in st.session_state.keys()
-        if key != "manual_upload_key_suffix" and key.startswith(MANUAL_SELECTION_STATE_KEY_PREFIXES)
+        if isinstance(key, str)
+        and key != "manual_upload_key_suffix"
+        and key.startswith(MANUAL_SELECTION_STATE_KEY_PREFIXES)
     )
     if clear_upload:
         current_suffix = int(st.session_state.get("manual_upload_key_suffix", 0) or 0)
@@ -454,7 +456,8 @@ def render_compact_at_a_glance(
 
     responsibilities = split_suggestion_lines(suggestions.get("responsibilities", ""))
     requirements = split_suggestion_lines(suggestions.get("requirements", ""))
-    keywords = suggestions.get("keywords") if isinstance(suggestions.get("keywords"), list) else []
+    raw_keywords = suggestions.get("keywords")
+    keywords: list[Any] = list(raw_keywords) if isinstance(raw_keywords, list) else []
     warnings = build_manual_red_flags(
         suggestions,
         url=str(st.session_state.get("manual_url", "")),
@@ -611,7 +614,7 @@ def generate_package_for_manual_record(
         st.error("Saved Markdown file was not found for this target job.")
         return
 
-    fields = services.render_manual_company_confirmation(record, key_prefix=f"{button_key}_manual_company")
+    fields = services.render_manual_company_confirmation(record, f"{button_key}_manual_company")
     if not services.company_generation_allowed(fields):
         st.info(
             "Company name needs confirmation before looking up a full JD or generating a cover letter. "
@@ -716,11 +719,13 @@ def render_manual_upload_controls() -> list[Any]:
         st.session_state["manual_extraction_reports"] = reports
         if cleaned_text:
             st.session_state.update(
-                manual_job_description=cleaned_text,
-                manual_extracted_text=cleaned_text,
-                manual_raw_extracted_text=raw_text,
-                manual_cleaned_extracted_text=cleaned_text,
-                manual_source_upload_filenames=filenames,
+                {
+                    "manual_job_description": cleaned_text,
+                    "manual_extracted_text": cleaned_text,
+                    "manual_raw_extracted_text": raw_text,
+                    "manual_cleaned_extracted_text": cleaned_text,
+                    "manual_source_upload_filenames": filenames,
+                }
             )
             suggestions = parse_job_description_suggestions(cleaned_text, manual_source_metadata_from_reports(reports))
             st.session_state["manual_parser_suggestions"] = suggestions
@@ -912,7 +917,7 @@ def render_saved_manual_jobs_tab(services: ManualPageServices) -> None:
             services=services,
         )
     with verification_tab:
-        services.render_manual_company_confirmation(selected_record, key_prefix=f"manual_saved_{record_id}")
+        services.render_manual_company_confirmation(selected_record, f"manual_saved_{record_id}")
     with jd_tab:
         render_manual_record_long_details(selected_record)
     with notes_tab:

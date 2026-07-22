@@ -15,6 +15,7 @@ from scoring_config import (
     UK_HPI_MANUAL_REVIEW_WARNING,
     UK_HPI_NOTE,
 )
+from scoring_types import CandidateProfile, ParsedJob
 
 
 def normalize_text(text: str) -> str:
@@ -66,13 +67,13 @@ def add_unique(items: list[str], item: str) -> None:
 
 def all_scored_keywords() -> set[str]:
     """Return every keyword that belongs to a scoring category."""
-    keywords = set()
+    keywords: set[str] = set()
     for category in SCORE_CATEGORIES.values():
         keywords.update(category["keywords"])
     return keywords
 
 
-def infer_candidate_experience_profile(candidate_text: str) -> dict[str, object]:
+def infer_candidate_experience_profile(candidate_text: str) -> CandidateProfile:
     """Infer a conservative experience profile from explicit candidate text."""
     normalized = normalize_text(candidate_text)
     lowered = candidate_text.lower()
@@ -214,7 +215,7 @@ def find_red_flags(job_text: str, resume_text: str) -> list[str]:
     return red_flags
 
 
-def parse_job_description(job_text: str, resume_text: str) -> dict[str, object]:
+def parse_job_description(job_text: str, resume_text: str) -> ParsedJob:
     """Extract transparent, demand-aware facts from the job description."""
     required_skills: list[str] = []
     preferred_skills: list[str] = []

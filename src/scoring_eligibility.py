@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from scoring_config import DEGREE_RANK
 from scoring_extraction import (
@@ -12,9 +13,10 @@ from scoring_extraction import (
     normalize_text,
     split_job_description_lines,
 )
+from scoring_types import CandidateProfile, EligibilityReason, EligibilityResult
 
 
-def _eligibility_reason(code: str, message: str, evidence: str) -> dict[str, str]:
+def _eligibility_reason(code: str, message: str, evidence: str) -> EligibilityReason:
     return {"code": code, "message": message, "evidence": evidence}
 
 
@@ -72,11 +74,11 @@ def _hard_seniority_requirement(job_text: str) -> tuple[bool, str]:
 def evaluate_eligibility(
     job_text: str,
     candidate_text: str,
-    candidate_profile: dict[str, object] | None = None,
-) -> dict[str, object]:
+    candidate_profile: CandidateProfile | None = None,
+) -> EligibilityResult:
     """Evaluate explicit gating constraints separately from role-fit scoring."""
     profile = candidate_profile or infer_candidate_experience_profile(candidate_text)
-    reasons: list[dict[str, str]] = []
+    reasons: list[EligibilityReason] = []
     failed = False
     manual_review = False
     level = str(profile.get("career_level", "unknown"))
@@ -210,5 +212,7 @@ def evaluate_eligibility(
                 )
             )
 
-    status = "failed" if failed else "manual_review" if manual_review else "passed"
+    status: Literal["passed", "manual_review", "failed"] = (
+        "failed" if failed else "manual_review" if manual_review else "passed"
+    )
     return {"status": status, "reasons": reasons}

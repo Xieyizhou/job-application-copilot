@@ -377,16 +377,42 @@ See `privacy_terms.local.example.txt` for the expected format.
 
 ## Validation
 
-Run the complete automated test suite:
+Install the reproducible development checks once:
 
 ```bash
-python -m py_compile main.py scripts/privacy_audit.py scripts/evaluate_scoring.py src/*.py
-python -m unittest discover -s tests -v
-python scripts/evaluate_scoring.py
-python scripts/ml/evaluate_real_validation.py
-python -m pip check
-python scripts/privacy_audit.py
+python -m pip install -r requirements-dev.txt
 ```
+
+Run the complete automated test suite and quality gates:
+
+```bash
+python -m compileall -q main.py scripts src
+python -m ruff check main.py run_dashboard.py scripts src tests
+PYTHONPATH=src python -m mypy
+PYTHONPATH=src python -m coverage run --source=src --omit='src/ml/*' scripts/run_test_group.py core
+python -m coverage report --fail-under=68
+python -m coverage report --include='src/manual_jobs.py' --fail-under=70
+python -m coverage report --include='src/dashboard_manual.py' --fail-under=45
+python -m coverage report --include='src/dashboard_fetch.py' --fail-under=70
+python -m coverage report --include='src/tracker.py,src/dashboard_tracker.py' --fail-under=80
+python scripts/evaluate_scoring.py
+python scripts/privacy_audit.py
+python -m pip install -r requirements-ml.txt
+PYTHONPATH=src python -m coverage run --source=src/ml scripts/run_test_group.py ml
+python -m coverage report --fail-under=80
+python scripts/ml/evaluate_real_validation.py --semantic-only
+python -m pip check
+```
+
+CI separates static quality checks, core tests, and ML tests. Core coverage is
+held at 68% and ML module coverage at 80%. Manual-job persistence, the manual-entry
+Dashboard, Fetch UI, and Tracker also have module-level regression floors so total
+coverage cannot hide a workflow-specific drop. These thresholds are regression
+floors, not claims that every user workflow is fully exercised.
+The mypy boundary covers scoring contracts, JD enrichment, cover-letter generation,
+manual-job persistence, tracker behavior, the extracted Dashboard fit/review/region/
+manual/fetch modules, and all ML modules. Shared scoring and Dashboard payloads use
+explicit `TypedDict` contracts rather than unconstrained dictionaries.
 
 The release checks cover:
 
@@ -447,6 +473,9 @@ job-application-copilot/
 ├── tests/
 ├── .env.example
 ├── main.py
+├── pyproject.toml
+├── requirements-dev.txt
+├── requirements-ml.txt
 ├── requirements.txt
 ├── run_dashboard.py
 └── README.md

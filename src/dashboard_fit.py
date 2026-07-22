@@ -4,20 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
+from scoring_types import DashboardJob, FitPresentation, RequirementSummary
+
 
 def _append_unique(items: list[str], value: str) -> None:
     if value and value not in items:
         items.append(value)
 
 
-def summarize_analysis_requirements(analysis: dict[str, Any]) -> dict[str, Any]:
+def summarize_analysis_requirements(analysis: dict[str, Any]) -> RequirementSummary:
     """Group recognized terms by requirement type and match strength."""
     parsed = dict(analysis.get("parsed_job", {}))
     required_terms = list(parsed.get("required_skills", [])) + list(parsed.get("experience_level", []))
     preferred_terms = list(parsed.get("preferred_skills", []))
     required_set = set(required_terms)
     preferred_set = set(preferred_terms)
-    summary: dict[str, Any] = {
+    summary: RequirementSummary = {
         "matched_required": [],
         "matched_preferred": [],
         "partial_required": [],
@@ -37,14 +39,17 @@ def summarize_analysis_requirements(analysis: dict[str, Any]) -> dict[str, Any]:
             term = str(term)
             _append_unique(active_order, term)
             requirement_type = "preferred" if term in preferred_set and term not in required_set else "required"
+            matched_bucket = summary["matched_preferred"] if requirement_type == "preferred" else summary["matched_required"]
+            partial_bucket = summary["partial_preferred"] if requirement_type == "preferred" else summary["partial_required"]
+            missing_bucket = summary["missing_preferred"] if requirement_type == "preferred" else summary["missing_required"]
             if term in matched:
-                _append_unique(summary[f"matched_{requirement_type}"], term)
+                _append_unique(matched_bucket, term)
                 _append_unique(matched_count_terms, term)
             elif term in partial_map:
-                _append_unique(summary[f"partial_{requirement_type}"], partial_map[term])
+                _append_unique(partial_bucket, partial_map[term])
                 _append_unique(matched_count_terms, term)
             elif term in missing:
-                _append_unique(summary[f"missing_{requirement_type}"], term)
+                _append_unique(missing_bucket, term)
     summary["active_requirement_count"] = len(active_order)
     summary["matched_requirement_count"] = len(matched_count_terms)
     return summary
@@ -57,13 +62,13 @@ def confidence_level(value: Any) -> str:
     return str(value or "low").lower()
 
 
-def eligibility_status(job: dict[str, Any]) -> str:
+def eligibility_status(job: DashboardJob | dict[str, Any]) -> str:
     """Normalize a job's eligibility status."""
     eligibility = job.get("eligibility", {})
     return str(eligibility.get("status", "manual_review") if isinstance(eligibility, dict) else eligibility).lower()
 
 
-def build_fit_presentation(job: dict[str, Any]) -> dict[str, Any]:
+def build_fit_presentation(job: DashboardJob | dict[str, Any]) -> FitPresentation:
     """Build one presentation model for cards, summaries, and Fit Analysis."""
     analysis = dict(job.get("analysis_result", {}) or {})
     available = bool(analysis.get("analysis_available", job.get("analysis_available", False)))
@@ -89,8 +94,9 @@ def build_fit_presentation(job: dict[str, Any]) -> dict[str, Any]:
         role_fit = "Not available"
         card_status = "Manual Review · Low confidence"
     else:
-        role_fit = f"{int(score)}/100"
-        card_status = f"{int(score)}/100 · {recommendation} · {level.title()} confidence"
+        score_value = int(score or 0)
+        role_fit = f"{score_value}/100"
+        card_status = f"{score_value}/100 · {recommendation} · {level.title()} confidence"
     eligibility_state = str(eligibility.get("status", "manual_review"))
     reasons = eligibility.get("reasons", [])
     if eligibility_state != "passed" and isinstance(reasons, list) and reasons:
@@ -110,9 +116,9 @@ def build_fit_presentation(job: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def apply_canonical_analysis(job: dict[str, Any], analysis: dict[str, Any]) -> dict[str, Any]:
+def apply_canonical_analysis(job: DashboardJob, analysis: dict[str, Any]) -> DashboardJob:
     """Copy current analyzer values onto an in-memory job record."""
-    updated = dict(job)
+    updated = job.copy()
     updated["analysis_result"] = analysis
     updated["analysis_available"] = bool(analysis.get("analysis_available", False))
     updated["score"] = analysis.get("score") if updated["analysis_available"] else None

@@ -93,7 +93,7 @@ def main() -> None:
         test_probabilities,
     )
     trained_at = datetime.now(timezone.utc).isoformat()
-    metadata = {
+    metadata: dict[str, object] = {
         "model_version": "synthetic-unseen-job-v1",
         "trained_at": trained_at,
         "training_source": "candidate_matching_synthetic",

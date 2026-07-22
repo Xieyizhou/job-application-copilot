@@ -263,7 +263,6 @@ def score_experience(experience: dict[str, Any], detected_themes: list[str], job
             matched_themes.append(theme)
             score += 3
 
-    evidence_text = " ".join(str(item) for item in experience.get("evidence", []))
     for tag in tags:
         readable_tag = tag.replace("_", " ")
         if contains_phrase(job_text, readable_tag):

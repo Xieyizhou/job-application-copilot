@@ -13,7 +13,6 @@ from typing import Literal
 
 from candidate_document import (
     CandidateDocumentError,
-    CandidateDocumentResult,
     SUPPORTED_CANDIDATE_EXTENSIONS,
     parse_candidate_document,
 )

@@ -717,7 +717,7 @@ def join_unique_warnings(warnings: list[str]) -> str:
 def extract_pdf_with_pdfplumber(file_bytes: bytes) -> ExtractionResult:
     """Extract all pages with pdfplumber when available."""
     try:
-        import pdfplumber  # type: ignore[import-not-found]
+        import pdfplumber
     except ImportError:
         return ExtractionResult(
             "",
@@ -739,7 +739,7 @@ def extract_pdf_with_pdfplumber(file_bytes: bytes) -> ExtractionResult:
 def extract_pdf_with_pymupdf(file_bytes: bytes) -> ExtractionResult:
     """Extract all pages with PyMuPDF/fitz when available."""
     try:
-        import fitz  # type: ignore[import-not-found]
+        import fitz
     except ImportError:
         return ExtractionResult(
             "",
@@ -771,9 +771,9 @@ def extract_pdf_with_pymupdf_ocr(file_bytes: bytes) -> ExtractionResult:
         )
 
     try:
-        import fitz  # type: ignore[import-not-found]
+        import fitz
         from PIL import Image
-        import pytesseract  # type: ignore[import-not-found]
+        import pytesseract
     except ImportError:
         return ExtractionResult(
             "",
@@ -877,7 +877,7 @@ def extract_text_from_image(file_bytes: bytes) -> ExtractionResult:
 
     try:
         from PIL import Image
-        import pytesseract  # type: ignore[import-not-found]
+        import pytesseract
     except ImportError:
         return ExtractionResult(
             "",
@@ -967,7 +967,7 @@ def extract_role_title_phrases(text: str) -> list[str]:
         r"manager|specialist|associate|opportunities?)(?:\s*\([^)]+\))?)\b",
         flags=re.IGNORECASE,
     )
-    phrases = []
+    phrases: list[str] = []
     for match in title_pattern.finditer(normalized_text):
         phrase = normalize_job_title(match.group(1))
         if phrase and is_plausible_job_title_line(phrase) and phrase.lower() not in {item.lower() for item in phrases}:
@@ -1111,7 +1111,7 @@ def infer_field_from_labeled_line(text: str, labels: list[str]) -> str:
 
 def normalize_heading_text(line: str) -> str:
     """Normalize candidate section headings for alias matching."""
-    line = line.strip().strip("#:-–—")
+    line = line.strip().strip("#:-–—").strip()
     line = re.sub(r"\s+", " ", line)
     return line.lower()
 
@@ -1496,7 +1496,7 @@ def infer_company_from_source_clues(text: str) -> tuple[str, str, str]:
 
 def infer_company_from_body(text: str) -> tuple[str, str, str]:
     """Infer company from repeated organization-like mentions in PDF body text."""
-    evidence_lines = []
+    evidence_lines: list[str] = []
     candidate_counts: dict[str, int] = {}
     org_suffixes = r"(?:Research|Labs?|AI|Technologies|Systems|Capital|Investment|Inc\.?|LLC|LP|Ltd\.?|Corporation)"
     patterns = [

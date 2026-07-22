@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
 
 from output_paths import safe_slug
+from scoring_types import DashboardJob, RegionOption
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -97,7 +97,7 @@ def region_option_key(option_type: str, value: str) -> str:
     return f"{option_type}:{safe_slug(value)}"
 
 
-def region_label(option: dict[str, Any], include_count: bool = True) -> str:
+def region_label(option: RegionOption, include_count: bool = True) -> str:
     """Build display text while keeping option keys stable internally."""
     if option["type"] == "all":
         base = "all"
@@ -108,7 +108,7 @@ def region_label(option: dict[str, Any], include_count: bool = True) -> str:
     return f"{base} ({option['count']})" if include_count else base
 
 
-def region_search_blob(option: dict[str, Any]) -> str:
+def region_search_blob(option: RegionOption) -> str:
     """Return searchable text including aliases such as UK."""
     aliases = []
     value = str(option.get("value", ""))
@@ -131,9 +131,9 @@ def load_recent_region_keys() -> list[str]:
     return [str(item) for item in data if isinstance(item, str)][:10] if isinstance(data, list) else []
 
 
-def build_region_options(jobs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def build_region_options(jobs: list[DashboardJob]) -> dict[str, RegionOption]:
     """Build all searchable region options from currently loaded jobs."""
-    options: dict[str, dict[str, Any]] = {
+    options: dict[str, RegionOption] = {
         "all": {"key": "all", "label": "all", "type": "all", "value": "all", "count": len(jobs)}
     }
     for job in jobs:
@@ -151,7 +151,7 @@ def build_region_options(jobs: list[dict[str, Any]]) -> dict[str, dict[str, Any]
     return options
 
 
-def default_region_option_keys(options_by_key: dict[str, dict[str, Any]]) -> list[str]:
+def default_region_option_keys(options_by_key: dict[str, RegionOption]) -> list[str]:
     """Return the short default region list before the user searches."""
     keys = ["all", *[key for key in load_recent_region_keys() if key in options_by_key][:5]]
     for region in COMMON_HIGH_LEVEL_REGIONS:
@@ -168,7 +168,7 @@ def default_region_option_keys(options_by_key: dict[str, dict[str, Any]]) -> lis
     return list(dict.fromkeys(key for key in keys if key in options_by_key))
 
 
-def filtered_region_option_keys(options_by_key: dict[str, dict[str, Any]], query: str) -> list[str]:
+def filtered_region_option_keys(options_by_key: dict[str, RegionOption], query: str) -> list[str]:
     """Search all region options by label, value, and common aliases."""
     cleaned_query = " ".join(query.lower().split())
     if not cleaned_query:
@@ -182,7 +182,7 @@ def filtered_region_option_keys(options_by_key: dict[str, dict[str, Any]], query
     return [option["key"] for option in matches] or ["all"]
 
 
-def job_matches_region_option(job: dict[str, Any], selected_option: dict[str, Any]) -> bool:
+def job_matches_region_option(job: DashboardJob, selected_option: RegionOption) -> bool:
     """Filter jobs by exact normalized location or inferred high-level region."""
     if selected_option["type"] == "all":
         return True
@@ -207,7 +207,7 @@ def source_display_name(source: str) -> str:
     return aliases.get(cleaned.lower(), cleaned.title() if cleaned else "Unknown")
 
 
-def dynamic_source_options(jobs: list[dict[str, Any]]) -> list[str]:
+def dynamic_source_options(jobs: list[DashboardJob]) -> list[str]:
     """Build source filter options from the currently loaded jobs."""
     discovered = sorted({source_display_name(str(job.get("source", ""))) for job in jobs})
     preferred = ["LinkedIn", "Jooble", "Adzuna", "Company Website", "Indeed", "Handshake", "Manual"]

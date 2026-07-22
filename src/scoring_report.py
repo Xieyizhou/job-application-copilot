@@ -14,6 +14,15 @@ from scoring_matching import (
     resume_suggestions_for_keywords,
     short_evidence_snippets,
 )
+from scoring_types import (
+    EligibilityResult,
+    ParsedJob,
+    Penalty,
+    RoleAlignment,
+    ScoreBreakdownItem,
+    ScoringConfidence,
+    StructuredAnalysis,
+)
 from workspace import Workspace
 
 
@@ -43,7 +52,7 @@ def format_inline_list(items: object) -> str:
     return ", ".join(str(item) for item in items)
 
 
-def format_score_breakdown(score_breakdown: list[dict[str, object]]) -> str:
+def format_score_breakdown(score_breakdown: list[ScoreBreakdownItem]) -> str:
     """Format weighted category scores for the report."""
     lines = []
     for item in score_breakdown:
@@ -60,7 +69,7 @@ def format_score_breakdown(score_breakdown: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
-def format_penalties(penalties: list[dict[str, object]]) -> str:
+def format_penalties(penalties: list[Penalty]) -> str:
     """Format score penalties for the report."""
     if not penalties:
         return "- None found"
@@ -70,21 +79,21 @@ def format_penalties(penalties: list[dict[str, object]]) -> str:
 def build_markdown_report(
     job_description_path: Path,
     resume_source_path: Path,
-    parsed_job: dict[str, object],
+    parsed_job: ParsedJob,
     matched_skills: list[str],
     partial_matches: list[str],
     missing_skills: list[str],
     themes: list[str],
-    score_breakdown: list[dict[str, object]],
-    penalties: list[dict[str, object]],
+    score_breakdown: list[ScoreBreakdownItem],
+    penalties: list[Penalty],
     red_flags: list[str],
     resume_evidence: list[str],
     score: int,
     coverage_score: int,
-    role_alignment: dict[str, object],
+    role_alignment: RoleAlignment,
     recommendation: str,
-    eligibility: dict[str, object],
-    confidence: dict[str, object],
+    eligibility: EligibilityResult,
+    confidence: ScoringConfidence,
 ) -> str:
     """Build the Markdown report saved for human review."""
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -172,7 +181,7 @@ def build_markdown_report(
 def explain_overall_score(
     score: int,
     recommendation: str,
-    penalties: list[dict[str, object]],
+    penalties: list[Penalty],
     red_flags: list[str],
 ) -> str:
     """Write a short plain-English explanation for the final score."""
@@ -187,13 +196,11 @@ def explain_overall_score(
     return explanation
 
 
-def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = "") -> dict[str, object]:
+def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = "") -> StructuredAnalysis:
     """Return structured, dependency-light fit analysis for UI display."""
     result = score_job_texts(job_text, resume_text)
     job_keywords = result["job_keywords"]
-    resume_keywords = result["resume_keywords"]
     parsed_job = result["parsed_job"]
-    themes = choose_relevant_themes(job_keywords, resume_keywords)
     score_breakdown = result["score_breakdown"]
     matched_keywords, partial_matches, missing_keywords = collect_report_matches(score_breakdown)
     red_flags = list(parsed_job["red_flags"])
@@ -221,7 +228,7 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         matched_strengths.append("No strong keyword overlap was detected; review manually.")
 
     weak_areas = [f"Missing or unclear evidence for: {keyword}." for keyword in missing_keywords[:6]]
-    role_alignment = dict(result.get("role_alignment", {}) or {})
+    role_alignment = result["role_alignment"]
     if role_alignment.get("detected"):
         focus = str(role_alignment.get("focus", "the title's core domain"))
         if role_alignment.get("score") == 100:
@@ -242,14 +249,19 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     return {
         "score": score,
         "coverage_score": result["coverage_score"],
+        "observed_score": result["observed_score"],
         "score_calibration": result["score_calibration"],
         "role_alignment": result["role_alignment"],
+        "role_focus_adjustment": result["role_focus_adjustment"],
         "recommendation": recommendation,
         "score_breakdown": score_breakdown,
         "eligibility": result["eligibility"],
         "confidence": result["confidence"],
         "candidate_profile": result["candidate_profile"],
         "parsed_job": parsed_job,
+        "job_keywords": result["job_keywords"],
+        "resume_keywords": result["resume_keywords"],
+        "penalties": result["penalties"],
         "matched_skills": matched_keywords,
         "partial_matches": partial_matches,
         "missing_skills": missing_keywords,

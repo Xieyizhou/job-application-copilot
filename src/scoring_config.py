@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from scoring_types import PenaltyRule, RoleFocusRule, ScoreCategoryConfig
+
 REQUIRED_REQUIREMENT_WEIGHT = 1.0
 PREFERRED_REQUIREMENT_WEIGHT = 0.5
 DIRECT_MATCH_STRENGTH = 1.0
@@ -63,7 +65,7 @@ KEYWORD_CATALOG = {
     "NumPy": ["numpy"],
 }
 
-SCORE_CATEGORIES = {
+SCORE_CATEGORIES: dict[str, ScoreCategoryConfig] = {
     "Core technical skills": {
         "points": 40,
         "keywords": [
@@ -102,7 +104,7 @@ SCORE_CATEGORIES = {
     },
 }
 
-PENALTY_RULES: list[dict[str, object]] = []
+PENALTY_RULES: list[PenaltyRule] = []
 
 RED_FLAG_RULES = [
     {
@@ -157,7 +159,7 @@ EXPERIENCE_THEMES = {
 # Ordered from narrow/specialized titles to broader role families. Title focus is
 # a separate signal from requirement coverage: it can reduce a superficially high
 # keyword match, but it never fills an explicitly missing requirement.
-ROLE_FOCUS_RULES = [
+ROLE_FOCUS_RULES: list[RoleFocusRule] = [
     {
         "name": "Physics",
         "title_patterns": [r"\bphysics\b"],

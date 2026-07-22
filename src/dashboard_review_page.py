@@ -321,8 +321,12 @@ def render_review_filter_controls(
     services: ReviewPageServices,
 ) -> dict[str, Any]:
     """Render review filters and return their current values plus reset callbacks."""
-    clear_filters = lambda: reset_review_filters(state["default_inbox_view"], state["is_demo"])
-    show_all = lambda: reset_review_filters(state["default_inbox_view"], state["is_demo"], show_all=True)
+    def clear_filters() -> None:
+        reset_review_filters(state["default_inbox_view"], state["is_demo"])
+
+    def show_all() -> None:
+        reset_review_filters(state["default_inbox_view"], state["is_demo"], show_all=True)
+
     inbox_view = st.segmented_control(
         "Job inbox view", state["inbox_options"], key="review_inbox_view", selection_mode="single"
     ) or state["default_inbox_view"]

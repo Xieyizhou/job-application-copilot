@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status
+from scoring_types import DashboardJob, TrackerRow
 
 
 RECOMMENDATION_RANK = {
@@ -24,7 +25,7 @@ def is_ignored_tracker_status(status: str) -> bool:
 
 
 def review_inbox_view_matches(
-    job: dict[str, Any],
+    job: DashboardJob,
     inbox_view: str,
     tracker_status: str,
     package_status: str,
@@ -65,7 +66,7 @@ def review_inbox_view_matches(
     return True
 
 
-def review_job_sort_key(job: dict[str, Any], sort_by: str) -> tuple[Any, ...]:
+def review_job_sort_key(job: DashboardJob, sort_by: str) -> tuple[Any, ...]:
     """Sort Review Jobs rows by the selected user-facing option."""
     score = int(job.get("score", 0) or 0)
     newest = str(job.get("last_seen_at", "") or job.get("first_seen_at", ""))
@@ -85,7 +86,7 @@ def review_job_sort_key(job: dict[str, Any], sort_by: str) -> tuple[Any, ...]:
     return (score, newest, recommendation_rank)
 
 
-def is_strong_match(job: dict[str, Any]) -> bool:
+def is_strong_match(job: DashboardJob) -> bool:
     """Return True only for a confident, eligible canonical Apply result."""
     return (
         bool(job.get("analysis_available"))
@@ -96,7 +97,7 @@ def is_strong_match(job: dict[str, Any]) -> bool:
     )
 
 
-def is_current_recommendation(job: dict[str, Any]) -> bool:
+def is_current_recommendation(job: DashboardJob) -> bool:
     """Return True for current eligible recommendations shown on Dashboard."""
     return (
         bool(job.get("analysis_available"))
@@ -106,7 +107,7 @@ def is_current_recommendation(job: dict[str, Any]) -> bool:
     )
 
 
-def sorted_review_jobs(jobs: list[dict[str, Any]], sort_by: str) -> list[dict[str, Any]]:
+def sorted_review_jobs(jobs: list[DashboardJob], sort_by: str) -> list[DashboardJob]:
     """Return Review Jobs sorted for inbox display."""
     reverse = sort_by != "Company A-Z"
     return sorted(jobs, key=lambda job: review_job_sort_key(job, sort_by), reverse=reverse)
@@ -128,7 +129,7 @@ def parse_local_datetime(value: object) -> datetime | None:
         return None
 
 
-def tracker_age_days(row: dict[str, Any]) -> int | None:
+def tracker_age_days(row: TrackerRow | dict[str, Any]) -> int | None:
     """Return days since application, or since tracking when not yet applied."""
     reference = parse_local_datetime(row.get("applied_date") or row.get("created_at"))
     if reference is None:
@@ -136,7 +137,7 @@ def tracker_age_days(row: dict[str, Any]) -> int | None:
     return max(0, (datetime.now() - reference).days)
 
 
-def tracker_next_action(row: dict[str, Any]) -> str:
+def tracker_next_action(row: TrackerRow | dict[str, Any]) -> str:
     """Translate tracker state into the most useful user action."""
     status = str(row.get("status", "saved") or "saved").lower()
     age_days = tracker_age_days(row)
@@ -156,13 +157,13 @@ def tracker_next_action(row: dict[str, Any]) -> str:
     return "No immediate action; this record is archived."
 
 
-def tracker_follow_up_due(row: dict[str, Any]) -> bool:
+def tracker_follow_up_due(row: TrackerRow | dict[str, Any]) -> bool:
     """Return True when an applied role has had no stage update for at least a week."""
     age_days = tracker_age_days(row)
     return str(row.get("status", "")).lower() == "applied" and age_days is not None and age_days >= 7
 
 
-def job_needs_full_jd(job: dict[str, Any]) -> bool:
+def job_needs_full_jd(job: DashboardJob) -> bool:
     """Return whether low confidence is specifically caused by incomplete job text."""
     direct_quality = dict(job.get("jd_quality", {}) or {})
     if "reliable_scoring_ready" in direct_quality:
@@ -177,7 +178,7 @@ def job_needs_full_jd(job: dict[str, Any]) -> bool:
 
 
 def review_job_next_action(
-    job: dict[str, Any],
+    job: DashboardJob,
     tracker_status: str = "Not tracked",
     package_status: str = "No cover letter",
 ) -> str:
@@ -201,7 +202,7 @@ def review_job_next_action(
     return "Open the tracker and record the latest outcome."
 
 
-def job_evidence_label(job: dict[str, Any]) -> str:
+def job_evidence_label(job: DashboardJob) -> str:
     """Summarize evidence count, observed coverage, and JD completeness."""
     presentation = build_fit_presentation(job)
     confidence = dict(job.get("confidence", {}) or {})

@@ -134,6 +134,8 @@ def add_application(args: argparse.Namespace, database_path: Path) -> int:
         )
         connection.commit()
 
+    if cursor.lastrowid is None:
+        raise RuntimeError("Tracker insert did not return an application id.")
     application_id = int(cursor.lastrowid)
     print(f"Added application #{application_id}: {args.company} - {args.role}")
     return application_id

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Sequence
+from typing import TypeVar
 
 TOKEN_PATTERN = re.compile(r"(?u)\b[\w+#.-]{2,}\b")
 FEATURE_NAMES = (
@@ -17,13 +18,15 @@ FEATURE_NAMES = (
     "log_job_tokens",
 )
 
+FeatureToken = TypeVar("FeatureToken")
+
 
 def lexical_tokens(text: str) -> tuple[str, ...]:
     """Return normalized lexical tokens without retaining source text."""
     return tuple(TOKEN_PATTERN.findall(str(text).lower()))
 
 
-def _jaccard(first: set[object], second: set[object]) -> float:
+def _jaccard(first: set[FeatureToken], second: set[FeatureToken]) -> float:
     union = first | second
     return len(first & second) / len(union) if union else 0.0
 

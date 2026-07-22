@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+  quality:
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: src
@@ -19,14 +19,67 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt -r requirements-ml.txt
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Compile Python files
         run: python -m compileall -q main.py scripts src
-      - name: Run tests
-        run: python -m unittest discover -s tests -v
+      - name: Lint
+        run: python -m ruff check main.py run_dashboard.py scripts src tests
+      - name: Type check JD, cover-letter, and ML modules
+        run: python -m mypy
+
+  core-tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run core tests with coverage
+        run: >-
+          python -m coverage run
+          --source=src
+          --omit='src/ml/*'
+          scripts/run_test_group.py core
+      - name: Enforce core coverage baseline
+        run: python -m coverage report --fail-under=68
+      - name: Enforce workflow coverage baselines
+        run: |
+          python -m coverage report --include='src/manual_jobs.py' --fail-under=70
+          python -m coverage report --include='src/dashboard_manual.py' --fail-under=45
+          python -m coverage report --include='src/dashboard_fetch.py' --fail-under=70
+          python -m coverage report --include='src/tracker.py,src/dashboard_tracker.py' --fail-under=80
       - name: Run scoring benchmark
         run: python scripts/evaluate_scoring.py
-      - name: Run anonymous semantic-evidence validation
-        run: python scripts/ml/evaluate_real_validation.py --semantic-only
       - name: Run privacy audit
         run: python scripts/privacy_audit.py
+      - name: Check dependency consistency
+        run: python -m pip check
+
+  ml-tests:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-ml.txt -r requirements-dev.txt
+      - name: Run ML tests with coverage
+        run: >-
+          python -m coverage run
+          --source=src/ml
+          scripts/run_test_group.py ml
+      - name: Enforce ML coverage baseline
+        run: python -m coverage report --fail-under=80
+      - name: Run anonymous semantic-evidence validation
+        run: python scripts/ml/evaluate_real_validation.py --semantic-only
+      - name: Check dependency consistency
+        run: python -m pip check

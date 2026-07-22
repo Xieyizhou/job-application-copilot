@@ -1498,7 +1498,6 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
     scoring_confidence = dict(analysis.get("confidence", {}))
     jd_quality = dict(analysis.get("jd_quality", {}) or job.get("jd_quality", {}) or {})
     level = confidence_level(scoring_confidence)
-    score = analysis.get("score")
     decision_cols = st.columns(3)
     decision_cols[0].metric("Recommendation", analysis.get("recommendation", "Manual Review"))
     decision_cols[1].metric("Eligibility", str(eligibility.get("status", "manual_review")).replace("_", " ").title())

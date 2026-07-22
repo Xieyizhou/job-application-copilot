@@ -9,3 +9,12 @@ fi
 
 echo "Running repository privacy and restricted-instruction guard..."
 "$PYTHON_BIN" scripts/privacy_audit.py
+
+if ! "$PYTHON_BIN" -c "import coverage, mypy, ruff" >/dev/null 2>&1; then
+    echo "Development checks require: $PYTHON_BIN -m pip install -r requirements-dev.txt" >&2
+    exit 1
+fi
+
+echo "Running lint and type checks..."
+"$PYTHON_BIN" -m ruff check main.py run_dashboard.py scripts src tests
+PYTHONPATH=src "$PYTHON_BIN" -m mypy
