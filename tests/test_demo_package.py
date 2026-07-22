@@ -30,7 +30,7 @@ EXPECTED_ZIP_NAMES = {
 
 
 class DemoPackageTests(unittest.TestCase):
-    def test_fit_page_renders_requirement_evidence_map(self) -> None:
+    def test_fit_page_prioritizes_top_evidence_and_collapses_diagnostics(self) -> None:
         app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
         app.session_state["workspace_mode"] = "Demo"
         app.session_state["selected_review_tab"] = "Fit"
@@ -38,14 +38,13 @@ class DemoPackageTests(unittest.TestCase):
         app.radio[0].set_value("Review Jobs").run(timeout=30)
 
         self.assertEqual(list(app.exception), [])
-        self.assertIn(
-            "Requirement-to-resume evidence map",
-            [expander.label for expander in app.expander],
-        )
+        expander_labels = [expander.label for expander in app.expander]
+        self.assertIn("Advanced analysis", expander_labels)
+        self.assertNotIn("Requirement-to-resume evidence map", expander_labels)
         similarity_captions = [
             str(caption.value)
             for caption in app.caption
-            if "Similarity" in str(caption.value)
+            if "similarity" in str(caption.value).lower()
         ]
         self.assertTrue(similarity_captions)
         self.assertTrue(any("Direct support" in caption for caption in similarity_captions))
@@ -112,9 +111,9 @@ class DemoPackageTests(unittest.TestCase):
             {button.label for button in app.get("download_button")},
             {
                 "Download Cover Letter DOCX",
-                "Download Match Report",
-                "Download Internal Notes",
-                "Download Cover Letter Bundle ZIP",
+                "Match Report",
+                "Internal Notes",
+                "Bundle ZIP",
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)

@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, Mock, patch
 
 import dashboard_manual
+import dashboard_manual_entry
 from manual_jobs import ExtractionResult
 
 
@@ -37,44 +38,6 @@ class DashboardManualHelperTests(unittest.TestCase):
             self.assertEqual(state["manual_company"], "Accepted Company")
             self.assertEqual(state["manual_title"], "Data Analyst")
             self.assertNotIn("manual_source", state)
-            self.assertTrue(dashboard_manual.form_field_needs_suggestion("manual_title", "Other"))
-            dashboard_manual.apply_suggestion_to_form_field("manual_location", " Remote ")
-            self.assertEqual(state["manual_location"], "Remote")
-
-    def test_readiness_and_red_flags_reflect_accepted_state(self) -> None:
-        long_jd = " ".join(["Python SQL analytics requirement"] * 25)
-        suggestions = {
-            "title": "Data Analyst",
-            "job_title_confidence": "high",
-            "company": "Example",
-            "location": "Remote",
-            "location_options": ["Remote"],
-            "visa_note": "",
-        }
-        state = {
-            "manual_company": "Example",
-            "manual_title": "Data Analyst",
-            "manual_location": "Remote",
-            "manual_url": "https://jobs.example.test/7",
-            "manual_visa_note": "",
-        }
-        with patch.object(dashboard_manual.st, "session_state", state):
-            warnings = dashboard_manual.build_manual_red_flags(
-                suggestions,
-                url=state["manual_url"],
-                job_description=long_jd,
-                reports=[],
-            )
-            self.assertEqual(warnings, [])
-            self.assertEqual(
-                dashboard_manual.match_readiness_for(suggestions, warnings, long_jd),
-                ("Ready to save", ""),
-            )
-            state["manual_url"] = ""
-            self.assertEqual(
-                dashboard_manual.match_readiness_for(suggestions, [], long_jd)[0],
-                "Needs review",
-            )
 
     def test_metadata_labels_and_upload_combination(self) -> None:
         reports = [
@@ -88,10 +51,6 @@ class DashboardManualHelperTests(unittest.TestCase):
         )
         record = {"company": "Example", "title": "Analyst", "created_at": "2026", "id": "7"}
         self.assertEqual(dashboard_manual.manual_record_label(record), "Example | Analyst | 2026 | 7")
-        self.assertEqual(dashboard_manual.compact_location_value("Multiple offices: A; B"), "Multiple offices")
-        self.assertEqual(dashboard_manual.format_confidence("MEDIUM"), "medium")
-        self.assertEqual(dashboard_manual.split_suggestion_lines("A\n\nB"), ["A", "B"])
-
         uploads = [UploadedFile("one.txt", b"Easy Apply\nRole: Analyst"), UploadedFile("two.txt", b"SQL required")]
         results = [
             ExtractionResult("Easy Apply\nRole: Analyst", warning="Review", report={"method": "text"}),
@@ -280,23 +239,6 @@ class DashboardManualHelperTests(unittest.TestCase):
         )]
         ui.expander.return_value = MagicMock()
         ui.button.return_value = False
-        suggestions = {
-            "company": "Parser Company",
-            "company_confidence": "medium",
-            "company_evidence": "Parser Company careers",
-            "title": "Data Analyst",
-            "job_title_confidence": "high",
-            "job_title_evidence": "Data Analyst",
-            "location": "Remote",
-            "location_confidence": "high",
-            "location_evidence": "Remote",
-            "visa_note": "Sponsorship available",
-            "visa_confidence": "medium",
-            "visa_evidence": "Sponsorship may be available",
-            "responsibilities": ["Build reporting pipelines"],
-            "requirements": ["Python", "SQL"],
-            "keywords": ["Python", "SQL"],
-        }
         full_jd = " ".join(["Python SQL analytics requirement"] * 25)
         report = {
             "file_name": "job.pdf",
@@ -313,12 +255,10 @@ class DashboardManualHelperTests(unittest.TestCase):
             "url": "https://jobs.example.test/7",
             "job_description": full_jd,
         }
+        with patch.object(dashboard_manual_entry, "st", ui):
+            quality = dashboard_manual_entry.render_jd_quality(full_jd)
+        self.assertEqual(quality["word_count"], 100)
         with patch.object(dashboard_manual, "st", ui):
-            dashboard_manual.render_compact_at_a_glance(
-                suggestions,
-                job_description=full_jd,
-                reports=[],
-            )
             dashboard_manual.render_extraction_reports([report])
             ui.selectbox.return_value = dashboard_manual.manual_record_label(record)
             self.assertEqual(dashboard_manual.select_manual_record([record], "selected"), record)

@@ -40,7 +40,7 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         cls.jobs_by_role = {str(job["role"]): job for job in cls.jobs}
 
     def test_demo_defaults_to_all_jobs_and_personal_keeps_recommended(self) -> None:
-        self.assertEqual(dashboard.default_review_inbox_view(self.jobs, [], demo=True), "All Jobs")
+        self.assertEqual(dashboard.default_review_inbox_view(self.jobs, [], demo=True), "All")
         with (
             patch.object(dashboard, "tracker_status_for_job", return_value="Not tracked"),
             patch.object(dashboard, "package_status_for_job", return_value="No cover letter"),

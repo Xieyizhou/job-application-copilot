@@ -114,6 +114,7 @@ from dashboard_fit import (  # noqa: E402
     eligibility_status,
     summarize_analysis_requirements,
 )
+from dashboard_fit_sections import render_fit_analysis_sections as render_compact_fit_sections  # noqa: E402
 from dashboard_fetch import (  # noqa: E402
     ADZUNA_SUPPORTED_COUNTRIES,
     DEFAULT_FETCH_LIMIT_PER_SOURCE,
@@ -1046,7 +1047,7 @@ def package_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any
 def default_review_inbox_view(jobs: list[dict[str, Any]], tracker_rows: list[dict[str, Any]], *, demo: bool) -> str:
     """Choose the initial Review Jobs view without changing filtering rules."""
     if demo:
-        return "All Jobs"
+        return "All"
     if any(
         review_inbox_view_matches(
             job,
@@ -1060,14 +1061,14 @@ def default_review_inbox_view(jobs: list[dict[str, Any]], tracker_rows: list[dic
     if any(
         review_inbox_view_matches(
             job,
-            "Needs Review",
+            "Needs attention",
             tracker_status_for_job(job, tracker_rows),
             package_status_for_job(job, tracker_rows),
         )
         for job in jobs
     ):
-        return "Needs Review"
-    return "All Jobs"
+        return "Needs attention"
+    return "All"
 
 
 def mark_job_not_interested(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> tuple[int | None, str]:
@@ -1315,6 +1316,7 @@ def dashboard_tab() -> None:
         HomePageServices(
             count_generated_packages=count_generated_packages,
             demo_mode_enabled=demo_mode_enabled,
+            go_to_page=go_to_page,
             load_screened_jobs=load_screened_jobs,
             load_tracker_rows=load_tracker_rows,
             render_page_header=render_page_header,
@@ -1489,122 +1491,14 @@ def render_keyword_list(label: str, keywords: list[Any], empty_text: str = "None
 
 
 def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
-    """Render explainable job fit analysis for the selected job."""
-    analysis = structured_fit_analysis(job, job_text)
-    presentation = build_fit_presentation(apply_canonical_analysis(job, analysis))
-    terms = presentation["terms"]
-    st.markdown("**Decision summary**")
-    eligibility = dict(analysis.get("eligibility", {}))
-    scoring_confidence = dict(analysis.get("confidence", {}))
-    jd_quality = dict(analysis.get("jd_quality", {}) or job.get("jd_quality", {}) or {})
-    level = confidence_level(scoring_confidence)
-    decision_cols = st.columns(3)
-    decision_cols[0].metric("Recommendation", analysis.get("recommendation", "Manual Review"))
-    decision_cols[1].metric("Eligibility", str(eligibility.get("status", "manual_review")).replace("_", " ").title())
-    decision_cols[2].metric("Confidence", level.title())
-    st.write(f"Why: {sanitize_fit_text(analysis.get('main_reason', 'Review manually.'))}")
-    st.write(f"Risk: {sanitize_fit_text(analysis.get('main_risk', 'Review the full job description manually.'))}")
-    role_alignment = dict(analysis.get("role_alignment", {}) or {})
-    if role_alignment.get("detected"):
-        role_focus = sanitize_fit_text(role_alignment.get("focus", "Not detected"))
-        role_support = "Supported" if role_alignment.get("score") == 100 else "Candidate evidence not found"
-        st.caption(f"Role focus: {role_focus} · {role_support}")
-    if jd_quality:
-        st.caption(
-            f"JD quality: {jd_quality.get('display_label', 'Needs review')} · "
-            f"{jd_quality.get('next_action', 'Verify the complete posting.')}"
-        )
-
-    learned_signal = dict(job.get("ml_relevance", {}) or {})
-    if (
-        learned_signal.get("available")
-        and learned_signal.get("displayable", True)
-        and jd_quality.get("reliable_scoring_ready", False)
-    ):
-        probability = float(learned_signal.get("probability", 0.0))
-        st.info(
-            f"Experimental local relevance signal: {probability:.0%}. "
-            "It is trained on synthetic candidate/job pairs and is shown only as a second opinion; "
-            "it does not change Role Fit, eligibility, ranking, or recommendation."
-        )
-
-    if level == "low":
-        if int(scoring_confidence.get("candidate_evidence_count", 0) or 0) > 0:
-            st.info(
-                "Candidate evidence is loaded, but this job posting yielded too few "
-                "recognized requirements for a reliable score. The provisional Role Fit "
-                "has been evidence-calibrated; the coverage value below describes only the "
-                "extracted terms. Paste the full job description before making an application decision."
-            )
-        evidence_cols = st.columns(3)
-        evidence_cols[0].metric("Recognized", terms["active_requirement_count"])
-        evidence_cols[1].metric("Matched", terms["matched_requirement_count"])
-        coverage_score = presentation.get("coverage_score")
-        evidence_cols[2].metric("Observed coverage", f"{int(coverage_score)}%" if coverage_score is not None else "—")
-
-    strengths_col, gaps_col = st.columns(2, gap="large")
-    with strengths_col:
-        st.markdown("**Supported strengths**")
-        for item in list(analysis.get("matched_strengths", []))[:5] or ["No supported strengths extracted yet."]:
-            st.write(f"- {sanitize_fit_text(item)}")
-    with gaps_col:
-        st.markdown("**Gaps / weak evidence**")
-        for item in list(analysis.get("weak_areas", []))[:5] or ["No major gap detected in the recognized requirements."]:
-            st.write(f"- {sanitize_fit_text(item)}")
-
-    semantic_evidence = dict(analysis.get("semantic_evidence", {}) or {})
-    semantic_matches = list(semantic_evidence.get("matches", []) or [])
-    if semantic_matches:
-        with st.expander("Requirement-to-resume evidence map", expanded=True):
-            st.caption(
-                f"{semantic_evidence.get('accepted_count', 0)} of "
-                f"{semantic_evidence.get('requirement_count', 0)} requirements have evidence above the "
-                f"{float(semantic_evidence.get('threshold', 0.0)):.0%} threshold · "
-                f"{semantic_evidence.get('method', 'local evidence retrieval')}"
-            )
-            for match in semantic_matches[:8]:
-                demand = str(match.get("demand", "required")).title()
-                st.markdown(f"**{demand}: {sanitize_fit_text(match.get('requirement', 'Requirement'))}**")
-                if match.get("accepted"):
-                    st.write(f"Resume evidence: “{sanitize_fit_text(match.get('evidence', ''))}”")
-                    st.caption(
-                        f"Similarity {float(match.get('similarity', 0.0)):.0%} · "
-                        f"{match.get('match_type', 'Evidence support')} · "
-                        f"Section: {sanitize_fit_text(match.get('section_evidence', 'Resume'))}"
-                    )
-                else:
-                    st.caption("Insufficient evidence · no resume statement passed the acceptance threshold")
-
-    with st.expander("Recognized requirement details", expanded=False):
-        if not terms["active_requirement_count"]:
-            st.write("Requirements could not be extracted reliably. Review the full job description manually.")
-        else:
-            render_keyword_list("Matched required", terms["matched_required"], empty_text="None")
-            render_keyword_list("Matched preferred", terms["matched_preferred"], empty_text="None")
-            render_keyword_list("Missing required", terms["missing_required"], empty_text="None among recognized terms")
-            render_keyword_list("Missing preferred", terms["missing_preferred"], empty_text="None")
-            render_keyword_list("Partial required", terms["partial_required"], empty_text="None")
-            render_keyword_list("Partial preferred", terms["partial_preferred"], empty_text="None")
-
-    with st.expander("Resume tailoring suggestions", expanded=False):
-        for item in list(analysis.get("resume_suggestions", []))[:5] or ["Not available yet."]:
-            st.write(f"- {sanitize_fit_text(item)}")
-
-    jd_evidence = list(analysis.get("jd_evidence", []))
-    profile_evidence = list(analysis.get("profile_evidence", []))
-    with st.expander("Source evidence", expanded=False):
-        if jd_evidence:
-            st.caption("Job description evidence")
-            for item in jd_evidence[:3]:
-                st.write(f"- {sanitize_fit_text(item)}")
-        if profile_evidence:
-            st.caption("Candidate-profile evidence" if not demo_mode_enabled() else "Demo-profile evidence")
-            for item in profile_evidence[:3]:
-                st.write(f"- {sanitize_fit_text(item)}")
-
-    if analysis.get("raw_analysis"):
-        with st.expander("Full analysis", expanded=False):
-            st.markdown(sanitize_fit_text(analysis["raw_analysis"]))
+    """Render decision evidence with diagnostics collapsed by default."""
+    render_compact_fit_sections(
+        job,
+        job_text,
+        analyze=structured_fit_analysis,
+        sanitize=sanitize_fit_text,
+        demo_mode=demo_mode_enabled(),
+    )
 
 
 def render_generation_success(summary: dict[str, Any]) -> None:

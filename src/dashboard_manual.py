@@ -11,6 +11,7 @@ import streamlit as st
 
 from apply_package import create_application_package
 from company_verification import verification_status_label
+from dashboard_manual_entry import render_jd_capture, render_jd_quality, render_verification_form
 from dashboard_regions import normalize_location
 from dashboard_titles import display_title_from_value
 from fetch_jobs import jsearch_configured
@@ -22,9 +23,7 @@ from manual_jobs import (
     duplicate_manual_job_exists,
     extract_text_from_upload,
     is_valid_url,
-    job_description_quality_warnings,
     load_manual_jobs,
-    normalize_job_title,
     parse_job_description_suggestions,
     save_manual_job,
     sync_manual_job_from_markdown,
@@ -208,20 +207,6 @@ def apply_suggestions_to_empty_fields(suggestions: dict[str, Any]) -> None:
         st.session_state[state_key] = suggested_value
 
 
-def apply_suggestion_to_form_field(state_key: str, value: Any) -> None:
-    """Apply one suggestion to the Streamlit form state before widgets render."""
-    clean_value = str(value or "").strip()
-    if clean_value:
-        st.session_state[state_key] = clean_value
-
-
-def form_field_needs_suggestion(state_key: str, suggested_value: Any) -> bool:
-    """Return True when a visible Use action would change the form value."""
-    suggested = str(suggested_value or "").strip()
-    current = str(st.session_state.get(state_key, "") or "").strip()
-    return bool(suggested) and current != suggested
-
-
 def current_manual_suggestions(current_text: str) -> dict[str, Any]:
     """Use one shared parser suggestion object for summary, actions, and save."""
     if not current_text.strip():
@@ -230,13 +215,6 @@ def current_manual_suggestions(current_text: str) -> dict[str, Any]:
     suggestions = parse_job_description_suggestions(current_text, current_manual_source_metadata())
     st.session_state["manual_parser_suggestions"] = suggestions
     return suggestions
-
-
-def split_suggestion_lines(value: Any) -> list[str]:
-    """Convert parser values to displayable lines."""
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return [line.strip() for line in str(value or "").splitlines() if line.strip()]
 
 
 def manual_source_metadata_from_reports(reports: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -252,240 +230,6 @@ def manual_source_metadata_from_reports(reports: list[dict[str, Any]]) -> dict[s
 def current_manual_source_metadata() -> dict[str, list[str]]:
     """Return parser metadata for the current extracted upload."""
     return manual_source_metadata_from_reports(st.session_state.get("manual_extraction_reports", []) or [])
-
-
-def format_confidence(confidence: Any) -> str:
-    """Normalize parser confidence for display."""
-    value = str(confidence or "").strip().lower()
-    return value if value in {"high", "medium", "low"} else "unknown"
-
-
-def accepted_manual_value(state_key: str, fallback: str = "Needs manual input") -> str:
-    """Read the accepted form value used by both At a Glance and the form."""
-    value = str(st.session_state.get(state_key, "") or "").strip()
-    return value or fallback
-
-
-def compact_location_value(location: str) -> str:
-    """Keep multi-office locations readable in the one-line summary strip."""
-    if location.lower().startswith("multiple offices:"):
-        return "Multiple offices"
-    return location
-
-
-def build_manual_red_flags(
-    suggestions: dict[str, Any],
-    *,
-    url: str,
-    job_description: str,
-    reports: list[dict[str, Any]],
-) -> list[str]:
-    """Create user-facing warnings from parser confidence and extraction state."""
-    warnings = []
-    title_confidence = format_confidence(suggestions.get("job_title_confidence"))
-    if not suggestions.get("title"):
-        warnings.append("Job title was not confidently detected.")
-    elif title_confidence != "high":
-        warnings.append(f"Job title is a {title_confidence}-confidence suggestion; review before saving.")
-    if not suggestions.get("company"):
-        warnings.append("Company was not detected.")
-    if not suggestions.get("location"):
-        warnings.append("Location was not detected.")
-    location_options = suggestions.get("location_options")
-    if isinstance(location_options, list) and len(location_options) > 1:
-        warnings.append("Multiple office locations detected.")
-    visa_note = str(suggestions.get("visa_note", "") or "").lower()
-    if "no visa sponsorship" in visa_note:
-        warnings.append("No visa sponsorship indicated.")
-    if not url.strip():
-        warnings.append("Missing official job URL.")
-    if len(job_description.split()) < 80 and job_description.strip():
-        warnings.append("Job description is short; extraction may be incomplete.")
-    for report in reports:
-        for warning in report.get("warnings") or []:
-            if warning and str(warning) not in warnings:
-                warnings.append(str(warning))
-    return warnings[:6]
-
-
-def match_readiness_for(suggestions: dict[str, Any], warnings: list[str], job_description: str) -> tuple[str, str]:
-    """Return a compact readiness label and one short reason."""
-    title_confidence = format_confidence(suggestions.get("job_title_confidence"))
-    if not job_description.strip() or len(job_description.split()) < 80:
-        return "Missing key info", "job description is short or empty."
-    if not st.session_state.get("manual_company"):
-        return "Missing key info", "company is missing."
-    if not st.session_state.get("manual_title"):
-        return "Missing key info", "title is missing."
-    if not st.session_state.get("manual_location"):
-        return "Missing key info", "location is missing."
-    if title_confidence == "medium":
-        return "Needs review", "title may need confirmation."
-    location_options = suggestions.get("location_options")
-    if isinstance(location_options, list) and len(location_options) > 1:
-        return "Needs review", "multiple locations detected."
-    if not st.session_state.get("manual_url"):
-        return "Needs review", "job URL is missing."
-    visa_note = str(st.session_state.get("manual_visa_note", "") or "").lower()
-    if "no visa sponsorship" in visa_note:
-        return "Needs review", "visa sponsorship restriction detected."
-    if warnings:
-        return "Needs review", "one or more fields may need confirmation."
-    return "Ready to save", ""
-
-
-def render_suggestion_action(label: str, state_key: str, suggested_value: Any, button_label: str | None = None) -> None:
-    """Render a concise Use button when a parser suggestion differs from the form."""
-    if not form_field_needs_suggestion(state_key, suggested_value):
-        return
-    clean_value = str(suggested_value or "").strip()
-    action_left, action_right = st.columns([3, 2])
-    with action_left:
-        st.caption(f"{label}: {clean_value}")
-    with action_right:
-        if st.button(button_label or "Use", key=f"use_{state_key}", help=f"Apply suggested {label.lower()} to the form."):
-            apply_suggestion_to_form_field(state_key, clean_value)
-            st.rerun()
-
-
-def render_suggestion_actions(suggestions: dict[str, Any]) -> None:
-    """Show visible form-sync actions for suggestions that are not yet applied."""
-    actions = [
-        ("Company", "manual_company", suggestions.get("company"), None),
-        ("Job title", "manual_title", suggestions.get("title"), "Use suggested title"),
-        ("Location", "manual_location", suggestions.get("location"), None),
-        ("Visa note", "manual_visa_note", suggestions.get("visa_note"), None),
-    ]
-    visible_actions = [
-        (label, state_key, value, button_label)
-        for label, state_key, value, button_label in actions
-        if form_field_needs_suggestion(state_key, value)
-    ]
-    if not visible_actions:
-        return
-    st.caption("Suggested fields not applied yet")
-    for label, state_key, value, button_label in visible_actions:
-        render_suggestion_action(label, state_key, value, button_label)
-
-
-def render_suggestion_details(
-    suggestions: dict[str, Any],
-    *,
-    responsibilities: list[str],
-    requirements: list[str],
-    keywords: list[Any],
-) -> None:
-    """Keep parser suggestions and evidence out of the main At a Glance strip."""
-    has_unapplied = any(
-        form_field_needs_suggestion(state_key, value)
-        for _, state_key, value, _ in [
-            ("Company", "manual_company", suggestions.get("company"), None),
-            ("Job title", "manual_title", suggestions.get("title"), "Use suggested title"),
-            ("Location", "manual_location", suggestions.get("location"), None),
-            ("Visa note", "manual_visa_note", suggestions.get("visa_note"), None),
-        ]
-    )
-    if has_unapplied:
-        with st.expander("Suggestions not applied", expanded=False):
-            render_suggestion_actions(suggestions)
-            if st.button("Use Suggestions for Empty Fields", key="manual_use_all_suggestions"):
-                apply_suggestions_to_empty_fields(suggestions)
-                st.rerun()
-
-    has_evidence = any(
-        suggestions.get(key)
-        for key in [
-            "company_confidence",
-            "company_evidence",
-            "job_title_confidence",
-            "job_title_evidence",
-            "location_confidence",
-            "location_evidence",
-            "visa_confidence",
-            "visa_evidence",
-        ]
-    )
-    if has_evidence:
-        with st.expander("Why this was detected", expanded=False):
-            for label, confidence_key, evidence_key in [
-                ("Company", "company_confidence", "company_evidence"),
-                ("Title", "job_title_confidence", "job_title_evidence"),
-                ("Location", "location_confidence", "location_evidence"),
-                ("Visa", "visa_confidence", "visa_evidence"),
-            ]:
-                confidence = suggestions.get(confidence_key)
-                evidence = suggestions.get(evidence_key)
-                if confidence or evidence:
-                    st.caption(f"{label} confidence: {format_confidence(confidence)}")
-                    if evidence:
-                        st.write(evidence)
-
-    if keywords:
-        with st.expander("Keywords", expanded=False):
-            st.caption(", ".join(str(keyword) for keyword in keywords[:5]))
-
-    if responsibilities or requirements:
-        with st.expander("Responsibilities / requirements", expanded=False):
-            if responsibilities:
-                st.caption(f"Top responsibilities: {len(responsibilities)} detected")
-                for line in responsibilities[:5]:
-                    st.write(f"- {line}")
-            if requirements:
-                st.caption(f"Top requirements: {len(requirements)} detected")
-                for line in requirements[:5]:
-                    st.write(f"- {line}")
-
-    parsed_sections = suggestions.get("parsed_sections")
-    if SHOW_DEBUG_UI and isinstance(parsed_sections, dict) and parsed_sections:
-        with st.expander("Advanced: parser details", expanded=False):
-            st.json(parsed_sections)
-
-
-def render_compact_at_a_glance(
-    suggestions: dict[str, Any],
-    *,
-    job_description: str = "",
-    reports: list[dict[str, Any]] | None = None,
-) -> None:
-    """Render a compact summary strip from accepted form state, not raw suggestions."""
-    reports = reports or []
-    st.markdown("**At a Glance**")
-    if not job_description.strip():
-        st.caption("Extract or paste a job description to see a summary.")
-        return
-
-    responsibilities = split_suggestion_lines(suggestions.get("responsibilities", ""))
-    requirements = split_suggestion_lines(suggestions.get("requirements", ""))
-    raw_keywords = suggestions.get("keywords")
-    keywords: list[Any] = list(raw_keywords) if isinstance(raw_keywords, list) else []
-    warnings = build_manual_red_flags(
-        suggestions,
-        url=str(st.session_state.get("manual_url", "")),
-        job_description=job_description,
-        reports=reports,
-    )
-    readiness, reason = match_readiness_for(suggestions, warnings, job_description)
-
-    company = accepted_manual_value("manual_company")
-    title = accepted_manual_value("manual_title")
-    location = compact_location_value(accepted_manual_value("manual_location"))
-    visa_note = accepted_manual_value("manual_visa_note", "Not detected")
-
-    summary_metrics = st.columns(2)
-    summary_metrics[0].metric("JD words", len(job_description.split()))
-    summary_metrics[1].metric("Requirements found", len(requirements))
-    st.caption(f"Company: {company} | Title: {title} | Location: {location}")
-    st.caption(f"Work authorization: {visa_note}")
-    status_text = readiness if not reason else f"{readiness}: {reason}"
-    st.write(f"Readiness: {status_text}")
-    if readiness != "Ready to save":
-        st.info(f"Next: {reason or 'review the detected fields before saving.'}")
-    render_suggestion_details(
-        suggestions,
-        responsibilities=responsibilities,
-        requirements=requirements,
-        keywords=keywords,
-    )
 
 
 def combine_upload_extraction_results(uploaded_files: list[Any]) -> tuple[str, str, str, list[str], list[dict[str, Any]]]:
@@ -697,8 +441,6 @@ def prepare_manual_job_session_state() -> None:
 
 def render_manual_upload_controls() -> list[Any]:
     """Render upload and OCR cleanup controls, returning selected files."""
-    st.markdown("**Add / Extract Job**")
-    st.caption("Upload a job screenshot/PDF, or paste the job description below. You can edit extracted text before saving.")
     uploaded_files = st.file_uploader(
         "Upload job file",
         type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"],
@@ -743,52 +485,11 @@ def render_manual_upload_controls() -> list[Any]:
 
 
 def render_manual_job_form() -> dict[str, Any]:
-    """Render editable job fields and return one submission payload."""
-    suggestions = current_manual_suggestions(st.session_state.get("manual_job_description", ""))
+    """Render inferred job fields and return one submission payload."""
+    job_description = str(st.session_state.get("manual_job_description", "") or "")
+    suggestions = current_manual_suggestions(job_description)
     apply_suggestions_to_empty_fields(suggestions)
-    st.markdown("**Review and Save**")
-    with st.form("manual_job_form"):
-        row1_left, row1_right = st.columns(2)
-        with row1_left:
-            company = st.text_input("Company name", key="manual_company")
-        with row1_right:
-            title = st.text_input("Job title", key="manual_title")
-        row2_left, row2_right = st.columns(2)
-        with row2_left:
-            location = st.text_input("Location", key="manual_location")
-        with row2_right:
-            source = st.selectbox("Job source", SOURCE_OPTIONS, key="manual_source")
-        row3_left, row3_right = st.columns(2)
-        with row3_left:
-            url = st.text_input("Job URL", key="manual_url")
-        with row3_right:
-            salary_range = st.text_input("Salary range, optional", key="manual_salary_range")
-        row4_left, row4_right = st.columns(2)
-        with row4_left:
-            visa_note = st.text_input("Work authorization / visa note, optional", key="manual_visa_note")
-        with row4_right:
-            status = st.selectbox("Status", STATUS_OPTIONS, key="manual_status")
-        notes = st.text_area("Notes", height=90, key="manual_notes")
-        job_description = st.text_area(
-            "Full job description", height=300, key="manual_job_description",
-            placeholder="Paste the full job description here, or extract text from an upload above.",
-        )
-        normalized_title = normalize_job_title(title)
-        suggestions = current_manual_suggestions(job_description)
-        if any([company.strip(), title.strip(), location.strip(), url.strip(), job_description.strip()]):
-            warnings = job_description_quality_warnings(
-                company=company, title=normalized_title, location=location, url=url, job_description=job_description
-            )
-            if warnings:
-                with st.expander("Save-time quality checks", expanded=True):
-                    for warning in warnings:
-                        st.warning(warning)
-        submitted = st.form_submit_button("Save Target Job")
-    return {
-        "submitted": submitted, "company": company, "title": normalized_title, "location": location,
-        "source": source, "url": url, "salary_range": salary_range, "visa_note": visa_note,
-        "status": status, "notes": notes, "job_description": job_description, "suggestions": suggestions,
-    }
+    return render_verification_form(suggestions=suggestions, job_description=job_description)
 
 
 def save_manual_form_submission(payload: dict[str, Any], uploaded_files: list[Any]) -> None:
@@ -829,23 +530,19 @@ def save_manual_form_submission(payload: dict[str, Any], uploaded_files: list[An
 
 
 def render_manual_add_extract_tab(services: ManualPageServices) -> None:
-    """Render the compact add/extract workflow for manual jobs."""
+    """Render a JD-first, linear target-job workflow."""
     prepare_manual_job_session_state()
-    render_manual_cleanup_controls(services)
     cleanup_message = st.session_state.pop("manual_cleanup_message", "")
     if cleanup_message:
         st.success(cleanup_message)
-    left_col, right_col = st.columns([0.72, 0.28], gap="large")
-    with left_col:
-        uploaded_files = render_manual_upload_controls()
-        payload = render_manual_job_form()
-    with right_col:
-        with st.container(border=True):
-            render_compact_at_a_glance(
-                payload["suggestions"], job_description=st.session_state.get("manual_job_description", ""),
-                reports=st.session_state.get("manual_extraction_reports", []) or [],
-            )
+    uploaded_files = render_jd_capture(render_manual_upload_controls)
+    job_description = str(st.session_state.get("manual_job_description", "") or "")
+    render_jd_quality(job_description)
+    payload = render_manual_job_form()
     save_manual_form_submission(payload, uploaded_files)
+    with st.expander("Maintenance", expanded=False):
+        st.caption("Clear the current form or remove generated bundles. Saved target jobs are retained.")
+        render_manual_cleanup_controls(services)
 
 
 def render_saved_manual_jobs_tab(services: ManualPageServices) -> None:
@@ -1012,7 +709,7 @@ def render_manual_debug_tab() -> None:
 
 
 def manual_job_target_tab(services: ManualPageServices) -> None:
-    """Render the manual target job workflow in compact sub-tabs."""
+    """Render the target-job workflow with JD capture as the primary task."""
     services.render_page_header(
         "Add Target Job",
         "Capture the complete posting once so fit, documents, and interview prep share the same source.",
@@ -1021,17 +718,11 @@ def manual_job_target_tab(services: ManualPageServices) -> None:
         st.info("Demo workspace uses bundled sample jobs. Select Personal to save a new target job locally.")
         return
 
-    # Tab order follows the daily workflow: enter a job, generate a package, then
-    # use saved jobs as history/library. Debug UI stays internal by default.
-    guidance_cols = st.columns(3)
-    guidance_cols[0].info("1 · Paste the full JD or extract it from a file")
-    guidance_cols[1].info("2 · Verify company, title, location, and work authorization")
-    guidance_cols[2].info("3 · Save first; review fit before generating documents")
-    tab_labels = ["1 · Add / Extract", "2 · Generate Cover Letter", "Saved Jobs"]
+    tab_labels = ["Add Job", "Saved Jobs", "Cover Letter"]
     if SHOW_DEBUG_UI:
         tab_labels.append("Advanced / Debug")
     tabs = st.tabs(tab_labels)
-    tab_add, tab_generate, tab_saved = tabs[:3]
+    tab_add, tab_saved, tab_generate = tabs[:3]
     with tab_add:
         render_manual_add_extract_tab(services)
     with tab_generate:

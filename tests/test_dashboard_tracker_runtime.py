@@ -107,7 +107,7 @@ class DashboardTrackerRuntimeTests(unittest.TestCase):
         services = self.services(demo=False, rows=[])
         with patch.object(dashboard_tracker, "st", fake):
             dashboard_tracker.tracker_tab(services)
-        self.assertEqual(fake.metrics["Active pipeline"], 0)
+        self.assertEqual(fake.metrics["Active"], 0)
         self.assertEqual(fake.metrics["Interviews"], 0)
         self.assertEqual(services.load_tracker_rows.call_count, 2)
         self.assertTrue(any("No tracker records" in message for _, message in fake.messages))

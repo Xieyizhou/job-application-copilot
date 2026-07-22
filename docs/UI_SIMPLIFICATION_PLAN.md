@@ -150,6 +150,18 @@ was copied into this document.
 
 ## Delivery sequence
 
+Implementation status (2026-07-22): Phases 1–3 are complete. Review Jobs now uses four
+inbox views, one action per result card, four decision fields, and a decision-first overview.
+Coverage/parser detail, source excerpts, and the experimental local model are available under
+Advanced analysis. Cover Letter now leads with an editable draft and DOCX download; supporting
+artifacts are collapsed. Add Target Job now captures the JD first, reports quality immediately,
+then asks users to verify inferred fields. Optional metadata and maintenance actions are
+collapsed. Component and function-size limits are enforced by tests.
+Dashboard now leads with at most three direct next actions and keeps only Active, Ready to
+apply, and Follow-ups due counters. Tracker puts the application table and stage update ahead
+of stored scores and document metadata. Settings reports health for Workspace, Job sources,
+Scoring, Privacy, and Advanced areas before revealing detailed reference text.
+
 ### Phase 1 — Review Jobs and shared components
 
 - Introduce reusable status badges and one next-action callout.

@@ -18,6 +18,8 @@ RECOMMENDATION_RANK = {
     "Skip / Not Eligible": 0,
 }
 
+REVIEW_INBOX_OPTIONS = ["Recommended", "Needs attention", "Ready", "All"]
+
 
 def is_ignored_tracker_status(status: str) -> bool:
     """Return True for tracker states that intentionally remove a job from consideration."""
@@ -48,7 +50,7 @@ def review_inbox_view_matches(
             and score >= 50
             and not is_ignored
         )
-    if inbox_view == "Needs Review":
+    if inbox_view in {"Needs attention", "Needs Review"}:
         canonical_review_needed = (
             not bool(job.get("analysis_available"))
             or eligibility == "manual_review"
@@ -57,13 +59,13 @@ def review_inbox_view_matches(
         )
         operational_review_needed = tracker_status != "Demo only" and (not has_package or not is_tracked)
         return not is_ignored and (canonical_review_needed or operational_review_needed)
-    if inbox_view == "Cover Letter Ready":
-        return has_package and not is_ignored
+    if inbox_view in {"Ready", "Cover Letter Ready"}:
+        return (has_package or str(tracker_status).lower() == "ready") and not is_ignored
     if inbox_view == "Not Tracked":
         return not is_ignored and not is_tracked
     if inbox_view == "Ignored":
         return is_ignored
-    return True
+    return inbox_view in {"All", "All Jobs"}
 
 
 def review_job_sort_key(job: DashboardJob, sort_by: str) -> tuple[Any, ...]:
@@ -163,7 +165,7 @@ def tracker_follow_up_due(row: TrackerRow | dict[str, Any]) -> bool:
     return str(row.get("status", "")).lower() == "applied" and age_days is not None and age_days >= 7
 
 
-def job_needs_full_jd(job: DashboardJob) -> bool:
+def job_needs_full_jd(job: DashboardJob | dict[str, Any]) -> bool:
     """Return whether low confidence is specifically caused by incomplete job text."""
     direct_quality = dict(job.get("jd_quality", {}) or {})
     if "reliable_scoring_ready" in direct_quality:
@@ -178,7 +180,7 @@ def job_needs_full_jd(job: DashboardJob) -> bool:
 
 
 def review_job_next_action(
-    job: DashboardJob,
+    job: DashboardJob | dict[str, Any],
     tracker_status: str = "Not tracked",
     package_status: str = "No cover letter",
 ) -> str:
@@ -202,7 +204,7 @@ def review_job_next_action(
     return "Open the tracker and record the latest outcome."
 
 
-def job_evidence_label(job: DashboardJob) -> str:
+def job_evidence_label(job: DashboardJob | dict[str, Any]) -> str:
     """Summarize evidence count, observed coverage, and JD completeness."""
     presentation = build_fit_presentation(job)
     confidence = dict(job.get("confidence", {}) or {})

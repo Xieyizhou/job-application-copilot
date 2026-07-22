@@ -1452,6 +1452,8 @@ def looks_like_company_candidate(candidate: str) -> bool:
     lowered = f" {candidate.lower()} "
     if not candidate or len(candidate) > 80 or len(candidate.split()) > 5:
         return False
+    if canonical_section_key(candidate):
+        return False
     if is_linkedin_ui_noise(candidate):
         return False
     if looks_like_date_or_url_line(candidate):

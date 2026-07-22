@@ -10,7 +10,7 @@ import streamlit as st
 
 from apply_package import create_application_package, parse_job_metadata
 from company_verification import normalize_company_name, verification_from_markdown
-from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status
+from dashboard_fit import build_fit_presentation
 from dashboard_regions import (
     build_region_options,
     dynamic_source_options,
@@ -21,11 +21,15 @@ from dashboard_regions import (
     source_display_name,
 )
 from dashboard_review import (
-    job_evidence_label,
-    job_needs_full_jd,
+    REVIEW_INBOX_OPTIONS,
     review_inbox_view_matches,
-    review_job_next_action,
     sorted_review_jobs,
+)
+from dashboard_review_components import (
+    render_job_result_cards as render_compact_job_result_cards,
+    render_review_action_buttons as render_compact_review_actions,
+    render_review_overview_section as render_compact_review_overview,
+    render_selected_review_header as render_compact_review_header,
 )
 from dashboard_titles import get_job_display_title
 from fetch_history import load_fetch_runs
@@ -99,41 +103,14 @@ def render_review_action_buttons(
     key_prefix: str,
     services: ReviewPageServices,
 ) -> None:
-    """Render selected-job actions in the detail panel."""
-    action_package, action_fit, action_track = st.columns([0.44, 0.28, 0.28])
-    with action_package:
-        needs_full_jd = job_needs_full_jd(job)
-        action_label = "Find Full JD" if needs_full_jd else "Prepare Cover Letter"
-        if st.button(action_label, key=f"{key_prefix}_package", type="primary", width="stretch"):
-            set_review_job_selection(job, "JD" if needs_full_jd else "Cover Letter")
-            st.rerun()
-    with action_fit:
-        if st.button("View Fit", key=f"{key_prefix}_fit", width="stretch"):
-            set_review_job_selection(job, "Fit")
-            st.rerun()
-    with action_track:
-        if services.demo_mode_enabled():
-            st.caption("Tracker disabled in Demo workspace.")
-        elif st.button("Track", key=f"{key_prefix}_track", width="stretch"):
-            try:
-                tracker_id, output = services.save_job_to_tracker(job)
-                st.success(f"Saved to tracker #{tracker_id}.")
-                if services.show_debug_ui and output:
-                    with st.expander("Advanced: tracker output", expanded=False):
-                        st.text(output)
-            except Exception as error:  # noqa: BLE001
-                st.error(str(error))
-    if not services.demo_mode_enabled():
-        with st.expander("More actions", expanded=False):
-            if st.button("Ignore", key=f"{key_prefix}_ignore"):
-                try:
-                    tracker_id, output = services.mark_job_not_interested(job, tracker_rows)
-                    st.success(f"Marked tracker #{tracker_id} as not interested.")
-                    if services.show_debug_ui and output:
-                        with st.expander("Advanced: tracker output", expanded=False):
-                            st.text(output)
-                except Exception as error:  # noqa: BLE001
-                    st.error(str(error))
+    """Compatibility wrapper for the compact action component."""
+    render_compact_review_actions(
+        job,
+        tracker_rows,
+        key_prefix,
+        services,
+        set_review_job_selection,
+    )
 
 
 def render_full_jd_recovery(
@@ -173,71 +150,8 @@ def render_job_result_cards(
     tracker_rows: list[dict[str, Any]],
     services: ReviewPageServices,
 ) -> None:
-    """Render shortlist jobs as compact list items."""
-    st.markdown(
-        """
-        <style>
-        .job-card-company {
-            font-size: 0.84rem;
-            font-weight: 700;
-            line-height: 1.2;
-        }
-        .job-card-role {
-            font-size: 0.92rem;
-            font-weight: 500;
-            line-height: 1.25;
-        }
-        .job-card-meta,
-        .job-card-status {
-            color: rgba(49, 51, 63, 0.72);
-            font-size: 0.8rem;
-            line-height: 1.25;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    for index, job in enumerate(jobs, start=1):
-        file_key = safe_slug(str(job["path"]))
-        tracker_status = services.tracker_status_for_job(job, tracker_rows)
-        package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
-        fit_presentation = build_fit_presentation(job)
-        next_action = review_job_next_action(job, tracker_status, package_status)
-        with st.container(border=True):
-            st.markdown(
-                services.card_html(job["company"], "job-card-company")
-                + services.card_html(get_job_display_title(job), "job-card-role")
-                + services.card_html(
-                    f"{job['normalized_location']} | {source_display_name(str(job['source']))}",
-                    "job-card-meta",
-                )
-                + services.card_html(
-                    f"{fit_presentation['card_status']} · {tracker_status} · {package_status}",
-                    "job-card-status",
-                ),
-                unsafe_allow_html=True,
-            )
-            st.caption(job_evidence_label(job))
-            st.caption(f"Next: {next_action}")
-
-            action_view, action_fit, action_package = st.columns(3)
-            with action_view:
-                if st.button("Select", key=f"view_details_{file_key}_{index}", width="stretch"):
-                    set_review_job_selection(job, "Overview")
-                    st.rerun()
-            with action_fit:
-                if st.button("Fit", key=f"view_fit_{file_key}_{index}", width="stretch"):
-                    set_review_job_selection(job, "Fit")
-                    st.rerun()
-            with action_package:
-                if st.button(
-                    "Cover Letter",
-                    key=f"view_package_{file_key}_{index}",
-                    width="stretch",
-                    disabled=services.demo_mode_enabled() and package_status != "Demo cover letter",
-                ):
-                    set_review_job_selection(job, "Cover Letter")
-                    st.rerun()
+    """Compatibility wrapper for compact one-action result cards."""
+    render_compact_job_result_cards(jobs, tracker_rows, services, set_review_job_selection)
 
 
 def initialize_review_state(
@@ -259,7 +173,7 @@ def initialize_review_state(
                 review_hide_degree_required=False,
                 review_hide_current_student_only=False,
             )
-    inbox_options = ["Recommended", "Needs Review", "Cover Letter Ready", "Not Tracked", "Ignored", "All Jobs"]
+    inbox_options = REVIEW_INBOX_OPTIONS
     sort_options = ["Role Fit high to low", "Newest first", "Recommendation", "Company A-Z", "Cover letter status", "Tracker status"]
     recommendation_options = [
         "all", "Apply", "Apply / Maybe Apply", "Maybe Apply", "Manual Review",
@@ -271,6 +185,7 @@ def initialize_review_state(
         "review_sort_by": "Role Fit high to low",
         "review_source_filter": "all",
         "review_recommendation_filter": "all",
+        "review_tracker_filter": "all",
         "review_search_text": "",
         "region_search_query": "",
         "job_tab_shortlist_limit": services.default_recommendation_limit,
@@ -281,6 +196,16 @@ def initialize_review_state(
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+    legacy_inbox_names = {
+        "Needs Review": "Needs attention",
+        "Cover Letter Ready": "Ready",
+        "Not Tracked": "All",
+        "Ignored": "All",
+        "All Jobs": "All",
+    }
+    st.session_state["review_inbox_view"] = legacy_inbox_names.get(
+        st.session_state["review_inbox_view"], st.session_state["review_inbox_view"]
+    )
     if st.session_state["review_inbox_view"] not in inbox_options:
         st.session_state["review_inbox_view"] = default_inbox_view
     if st.session_state["review_sort_by"] not in sort_options:
@@ -303,11 +228,12 @@ def reset_review_filters(default_inbox_view: str, is_demo: bool, *, show_all: bo
     """Reset review widgets to workspace defaults."""
     st.session_state.update(
         review_search_text="",
-        review_inbox_view="All Jobs" if show_all else default_inbox_view,
+        review_inbox_view="All" if show_all else default_inbox_view,
         review_sort_by="Role Fit high to low",
         selected_region_key="all",
         review_source_filter="all",
         review_recommendation_filter="all",
+        review_tracker_filter="all",
         review_minimum_score=0 if show_all or is_demo else 50,
         review_hide_hard_red_flags=False if show_all else not is_demo,
         review_hide_degree_required=False if show_all else not is_demo,
@@ -359,12 +285,16 @@ def render_review_filter_controls(
             )
         selected_region = options_by_key.get(selected_region_key, options_by_key["all"])
         services.save_recent_region_key(selected_region_key)
-        second_left, second_right = st.columns(2)
+        second_left, second_middle, second_right = st.columns(3)
         with second_left:
             source_filter = st.selectbox("Source", state["source_options"], key="review_source_filter")
         with second_right:
             recommendation_filter = st.selectbox(
                 "Recommendation", state["recommendation_options"], key="review_recommendation_filter"
+            )
+        with second_middle:
+            tracker_filter = st.selectbox(
+                "Tracker", ["all", "Not tracked", "Tracked", "Ignored"], key="review_tracker_filter"
             )
         third_left, third_right = st.columns(2)
         with third_left:
@@ -383,7 +313,8 @@ def render_review_filter_controls(
         "inbox_view": inbox_view, "search_text": search_text, "sort_by": sort_by,
         "recommendation_limit": recommendation_limit, "selected_region_key": selected_region_key,
         "selected_region": selected_region, "source_filter": source_filter,
-        "recommendation_filter": recommendation_filter, "minimum_score": minimum_score,
+        "recommendation_filter": recommendation_filter, "tracker_filter": tracker_filter,
+        "minimum_score": minimum_score,
         "hide_hard": hide_hard, "hide_degree": hide_degree, "hide_student": hide_student,
         "clear_filters": clear_filters, "show_all": show_all,
     }
@@ -403,6 +334,18 @@ def review_job_matches_filters(
     if filters["source_filter"] != "all" and source_display_name(str(job["source"])) != filters["source_filter"]:
         return False
     if filters["recommendation_filter"] != "all" and job["recommendation"] != filters["recommendation_filter"]:
+        return False
+    tracker_filter = filters.get("tracker_filter", "all")
+    tracker_is_ignored = str(tracker_status).lower() in {
+        "archived", "ignored", "not interested", "rejected", "skip"
+    }
+    if tracker_filter == "Not tracked" and tracker_status not in {"Not tracked", "Demo only"}:
+        return False
+    if tracker_filter == "Tracked" and tracker_status in {"Not tracked", "Demo only"}:
+        return False
+    if tracker_filter == "Ignored" and not tracker_is_ignored:
+        return False
+    if tracker_filter != "Ignored" and tracker_is_ignored:
         return False
     if job.get("score") is None and filters["minimum_score"] > 0:
         return False
@@ -457,26 +400,14 @@ def review_summary_parts(shortlist: list[dict[str, Any]], filters: dict[str, Any
         filter_summary += f" · {filters['source_filter']}"
     if filters["recommendation_filter"] != "all":
         filter_summary += f" · {filters['recommendation_filter']}"
+    if filters.get("tracker_filter", "all") != "all":
+        filter_summary += f" · {filters['tracker_filter']}"
     sort_label = {
         "Role Fit high to low": "Role Fit", "Newest first": "newest",
         "Recommendation": "recommendation", "Company A-Z": "company",
         "Cover letter status": "cover letter status", "Tracker status": "tracker status",
     }.get(filters["sort_by"], filters["sort_by"].lower())
     return [f"{len(shortlist)} jobs shown", filters["inbox_view"], f"Sorted by {sort_label}", filter_summary]
-
-
-def render_review_metrics(filtered_jobs: list[dict[str, Any]]) -> None:
-    """Render the four operational review counters."""
-    metrics = st.columns(4)
-    metrics[0].metric("Matching filters", len(filtered_jobs))
-    metrics[1].metric(
-        "Reliable scores", sum(1 for job in filtered_jobs if confidence_level(job.get("confidence")) in {"medium", "high"})
-    )
-    metrics[2].metric("Need full JD", sum(1 for job in filtered_jobs if job_needs_full_jd(job)))
-    metrics[3].metric(
-        "Cover letters ready",
-        sum(1 for job in filtered_jobs if str(job.get("package_status", "")).lower() not in {"", "no cover letter", "not generated"}),
-    )
 
 
 def render_empty_review_state(filters: dict[str, Any], services: ReviewPageServices) -> None:
@@ -486,7 +417,7 @@ def render_empty_review_state(filters: dict[str, Any], services: ReviewPageServi
     with left:
         st.button("Clear filters", key="review_empty_clear_filters", on_click=filters["clear_filters"], width="stretch")
     with middle:
-        st.button("Show All Jobs", on_click=filters["show_all"], width="stretch")
+        st.button("Show All", on_click=filters["show_all"], width="stretch")
     with right:
         if st.button("Add Target Job", width="stretch"):
             services.go_to_page("Add Target Job")
@@ -535,48 +466,8 @@ def render_selected_review_header(
     tracker_rows: list[dict[str, Any]],
     services: ReviewPageServices,
 ) -> dict[str, Any]:
-    """Render selected-job identity, fit metrics, and next action."""
-    tracker_status = services.tracker_status_for_job(job, tracker_rows)
-    presentation = build_fit_presentation(job)
-    header_left, header_right = st.columns([0.72, 0.28])
-    with header_left:
-        st.markdown(f"**{job['company']}**")
-        st.write(get_job_display_title(job))
-        st.caption(f"{job['normalized_location']} | {source_display_name(str(job['source']))}")
-    with header_right:
-        st.caption("Recommendation")
-        st.markdown(f"**{job['recommendation']}**")
-        st.caption(f"Tracker: {tracker_status}")
-        st.caption(f"Cover letter: {job.get('package_status') or services.package_status_for_job(job, tracker_rows)}")
-    confidence = dict(job.get("confidence", {}) or {})
-    package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
-    learned_signal = dict(job.get("ml_relevance", {}) or {})
-    jd_quality = dict(job.get("jd_quality", {}) or {})
-    show_learned = bool(
-        learned_signal.get("available") and learned_signal.get("displayable", True)
-        and jd_quality.get("reliable_scoring_ready", False)
-    )
-    metrics = st.columns(5 if show_learned else 4)
-    metrics[0].metric("Role Fit", f"{job['score']}/100" if job.get("score") is not None else "—", help="Evidence-calibrated fit used for ranking.")
-    coverage = presentation.get("coverage_score")
-    metrics[1].metric("Observed coverage", f"{int(coverage)}%" if coverage is not None else "—", help="Coverage among recognized requirements only.")
-    metrics[2].metric("Evidence", f"{int(confidence.get('active_requirement_count', 0) or 0)} reqs")
-    metrics[3].metric("Confidence", confidence_level(confidence).title())
-    if show_learned:
-        metrics[4].metric(
-            "Local ML signal", f"{float(learned_signal.get('probability', 0.0)):.0%}",
-            help="Experimental auxiliary estimate. It does not affect Role Fit, eligibility, sorting, or recommendation.",
-        )
-    if jd_quality:
-        st.caption(f"JD quality: {jd_quality.get('display_label', 'Needs review')}")
-    services.render_action_callout(
-        review_job_next_action(job, tracker_status, package_status),
-        caution=confidence_level(confidence) == "low" or eligibility_status(job) == "failed",
-    )
-    return {
-        "tracker_status": tracker_status, "presentation": presentation,
-        "confidence": confidence, "package_status": package_status, "jd_quality": jd_quality,
-    }
+    """Compatibility wrapper for the four-field decision header."""
+    return render_compact_review_header(job, tracker_rows, services)
 
 
 def render_review_overview_section(
@@ -586,28 +477,15 @@ def render_review_overview_section(
     context: dict[str, Any],
     services: ReviewPageServices,
 ) -> None:
-    """Render the concise decision overview and primary actions."""
-    snippet = services.build_job_snippet(job)
-    if snippet:
-        st.caption(snippet)
-    analysis = dict(job.get("analysis_result", {}))
-    st.write(f"Main reason: {analysis.get('main_reason', context['presentation']['card_status'])}")
-    main_risk = str(analysis.get("main_risk", "")) or (
-        job["red_flags_text"] if job["red_flags_text"] != "-" else job["warnings_text"]
+    """Compatibility wrapper for the decision-first overview."""
+    render_compact_review_overview(
+        job,
+        tracker_rows,
+        selected_path,
+        context,
+        services,
+        set_review_job_selection,
     )
-    if main_risk != "-":
-        st.write(f"Main risk: {main_risk}")
-    st.caption(job_evidence_label(job))
-    render_review_action_buttons(
-        job, tracker_rows, key_prefix=f"overview_actions_{safe_slug(str(selected_path))}", services=services
-    )
-    notes = " | ".join(
-        value for value in [job.get("red_flags_text", "-"), job.get("warnings_text", "-")]
-        if value and value != "-"
-    )
-    if notes and notes != main_risk:
-        with st.expander("Review notes", expanded=False):
-            st.write(notes)
 
 
 def render_review_fit_section(
@@ -736,14 +614,21 @@ def render_selected_review_detail(
     selected_path = Path(job["path"])
     selected_text = services.read_text_file(selected_path)
     selected_tracker_row = services.tracker_row_for_job(job, tracker_rows)
-    sections = ["Overview", "Fit", "JD", "Cover Letter"]
-    if st.session_state.get("selected_review_tab") not in sections:
+    section_labels = {
+        "Overview": "Why this result",
+        "Fit": "Fit evidence",
+        "JD": "JD",
+        "Cover Letter": "Cover Letter",
+    }
+    if st.session_state.get("selected_review_tab") not in section_labels:
         st.session_state["selected_review_tab"] = "Overview"
     context = render_selected_review_header(job, tracker_rows, services)
-    section = st.segmented_control(
-        "Detail section", sections, default=st.session_state["selected_review_tab"],
+    selected_label = section_labels[st.session_state["selected_review_tab"]]
+    selected_section_label = st.segmented_control(
+        "Detail section", list(section_labels.values()), default=selected_label,
         selection_mode="single", label_visibility="collapsed",
-    ) or "Overview"
+    ) or selected_label
+    section = next(key for key, label in section_labels.items() if label == selected_section_label)
     if section != st.session_state["selected_review_tab"]:
         st.session_state["selected_review_tab"] = section
         st.rerun()
@@ -763,7 +648,7 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
     if services.demo_mode_enabled():
         st.info(
             "Demo workspace uses fictional, read-only data. "
-            "All Jobs is shown by default so you can compare different scoring outcomes."
+            "All is shown by default so you can compare different scoring outcomes."
         )
     all_jobs = services.load_screened_jobs()
     if not all_jobs:
@@ -777,17 +662,16 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
     filters = render_review_filter_controls(all_jobs, state, services)
     filtered_jobs = filtered_review_jobs(all_jobs, tracker_rows, fetch_runs_by_id, filters, services)
     shortlist = filtered_jobs[: filters["recommendation_limit"]]
-    render_review_metrics(filtered_jobs)
     if not shortlist:
         render_empty_review_state(filters, services)
         return
     if len(shortlist) == 1 and len(all_jobs) > 1:
-        st.caption("Only 1 job shown. Clear filters or switch to All Jobs to see more.")
+        st.caption("Only 1 job shown. Clear filters or switch to All to see more.")
         left, right = st.columns(2)
         with left:
             st.button("Clear filters", on_click=filters["clear_filters"], width="stretch")
         with right:
-            st.button("Show All Jobs", on_click=filters["show_all"], width="stretch")
+            st.button("Show All", on_click=filters["show_all"], width="stretch")
     selected_job = resolve_selected_review_job(shortlist, services)
     left_col, right_col = st.columns([0.42, 0.58], gap="large")
     with left_col:

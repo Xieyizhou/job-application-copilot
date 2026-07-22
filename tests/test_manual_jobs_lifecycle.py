@@ -172,6 +172,18 @@ class ManualJobLifecycleTests(unittest.TestCase):
         self.assertEqual(company_confidence, "high")
         self.assertIn("repeated", company_evidence)
 
+    def test_section_heading_is_never_inferred_as_company(self) -> None:
+        job_text = """About the role
+Responsibilities
+You will build production data pipelines and maintain dashboards.
+Requirements
+Experience with Python and SQL is required.
+"""
+        suggestions = manual_jobs.parse_job_description_suggestions(job_text)
+        self.assertEqual(suggestions["company"], "")
+        self.assertEqual(suggestions["company_confidence"], "low")
+        self.assertFalse(manual_jobs.looks_like_company_candidate("About the role"))
+
     def test_pdf_formatting_and_fallback_selection(self) -> None:
         formatted = manual_jobs.format_pdf_pages(
             ["1 of 2\n## Responsibilities\nBuild dash-\nboards", "## Requirements\nPython"]
