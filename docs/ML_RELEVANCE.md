@@ -115,6 +115,12 @@ review, and routes disagreement to human adjudication. Anonymous real tasks are 
 connected resume, job, and semantic groups before fitting, validation, or fixed-holdout
 evaluation.
 
+The reviewed-evidence v3 experiment combines the completed human seed with only unanimously
+accepted blind-consensus tasks. It compares TF-IDF, local LSA embeddings, binary support
+classification, and hybrid/pairwise rerankers under semantic/template-grouped evaluation.
+The selected artifact is still an offline experiment: it is not loaded by Dashboard,
+Role Fit, eligibility, recommendation, or cover-letter generation.
+
 ## Commands
 
 ```bash
@@ -123,6 +129,12 @@ python -m pip install -r requirements.txt -r requirements-ml.txt
 python scripts/ml/train_relevance_baseline.py
 
 python scripts/ml/evaluate_real_validation.py
+
+python scripts/ml/build_evidence_training_corpus.py
+
+python scripts/ml/train_evidence_reranker.py
+
+python scripts/ml/evaluate_evidence_reranker.py
 ```
 
 For a quick implementation check, add `--max-jobs 30 --max-features 1000`. A capped

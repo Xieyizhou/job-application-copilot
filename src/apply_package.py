@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from types import SimpleNamespace
+from typing import Any, TypedDict
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from analyze_job import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARNING, UK_HPI_NOTE, analyze_job
@@ -46,6 +46,26 @@ TRACKING_QUERY_PARAMETERS = {
     "app_key",
     "aztt",
 }
+
+
+class ApplicationPackageSummary(TypedDict):
+    """Typed result returned by the CL-only package workflow."""
+
+    company: str
+    role: str
+    location: str
+    job_url: str
+    match_score: int
+    recommendation: str
+    package_dir: Path
+    analysis_path: Path
+    cover_letter_path: Path
+    cover_letter_docx_path: Path
+    cover_letter_notes_path: Path
+    export_warnings: list[str]
+    tracker_id: int
+    uk_review_notes: list[str]
+    jd_enrichment: dict[str, Any]
 
 
 def parse_analysis_summary(report_text: str) -> tuple[int, str]:
@@ -189,7 +209,7 @@ def create_application_package(
     role: str,
     location: str,
     job_url: str,
-) -> dict[str, object]:
+) -> ApplicationPackageSummary:
     """Run the CL-only local workflow and return summary details."""
     workspace.require_writable()
     assert workspace.tracker_database_path is not None
@@ -226,7 +246,7 @@ def create_application_package(
     _, cover_letter_path, _, cover_letter_notes_path = generate_cover_letter(job_description_path, workspace, package_dir)
     cover_letter_docx_path, export_warnings = export_application_package(package_dir, workspace)
 
-    tracker_args = SimpleNamespace(
+    tracker_args = argparse.Namespace(
         company=company,
         role=role,
         location=location,

@@ -16,7 +16,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from company_verification import (
@@ -310,9 +310,15 @@ def clean_text(value: object) -> str:
 
 def normalize_adzuna_job(job: dict[str, object]) -> dict[str, Any]:
     """Convert an Adzuna result into the local normalized job shape."""
-    company = clean_text(job.get("company", {}).get("display_name") if isinstance(job.get("company"), dict) else "")
+    company_data = job.get("company")
+    location_data = job.get("location")
+    company = clean_text(
+        company_data.get("display_name") if isinstance(company_data, dict) else ""
+    )
     role = clean_text(job.get("title"))
-    location = clean_text(job.get("location", {}).get("display_name") if isinstance(job.get("location"), dict) else "")
+    location = clean_text(
+        location_data.get("display_name") if isinstance(location_data, dict) else ""
+    )
     normalized = {
         "source_job_id": clean_text(job.get("id")),
         "company": company,
@@ -917,8 +923,8 @@ def main() -> None:
         )
         return
 
-    saved_paths = list(result["saved_paths"])
-    fetch_run = dict(result["fetch_run"])
+    saved_paths = cast(list[Path], result["saved_paths"])
+    fetch_run = cast(dict[str, Any], result["fetch_run"])
     print(f"Created {len(saved_paths)} job description file(s).")
     print(f"Previously seen {fetch_run.get('duplicate_jobs_count', 0)} job(s).")
     print("")

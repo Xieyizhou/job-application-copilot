@@ -289,6 +289,12 @@ real tasks are split by connected resume, job, and semantic groups, with a check
 holdout that is never used for fitting. Prompts, provider configuration, local annotations,
 review packets, and row-level datasets are ignored and are not part of the repository.
 
+Reviewed human and consensus-gold evidence can be combined into an offline v3 corpus for
+grouped TF-IDF, local LSA embedding, and hybrid/pairwise reranker experiments. The model
+selection report includes retrieval, rejection, classification, and ID-only error analysis.
+The resulting artifact remains disabled in the application until it passes an untouched,
+source-grouped real holdout.
+
 For example, when only one requirement is recognized, the app may show:
 
 ```text

@@ -127,6 +127,7 @@ def personal_workspace(root: Path = LOCAL_WORKSPACE_ROOT) -> Workspace:
     experience_path = _safe_manifest_file(root, manifest.get("experience_bank"), "candidate")
     template_path = _safe_manifest_file(root, manifest.get("cover_letter_template"), "templates")
     missing = () if resume_path else ("candidate source",)
+    pdf_page_count = manifest.get("candidate_pdf_page_count")
     return Workspace(
         mode="personal",
         root=root,
@@ -151,8 +152,8 @@ def personal_workspace(root: Path = LOCAL_WORKSPACE_ROOT) -> Workspace:
             else None
         ),
         candidate_pdf_page_count=(
-            int(manifest["candidate_pdf_page_count"])
-            if isinstance(manifest.get("candidate_pdf_page_count"), int)
+            pdf_page_count
+            if isinstance(pdf_page_count, int)
             else None
         ),
     )

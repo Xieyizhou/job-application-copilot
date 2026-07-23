@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from docx import Document
+from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 
@@ -71,7 +72,7 @@ def clean_duplicated_punctuation(text: str) -> str:
     return text
 
 
-def configure_document_styles(document: Document) -> None:
+def configure_document_styles(document: DocumentType) -> None:
     """Apply cover-letter-safe page settings while preserving template styles."""
     section = document.sections[0]
     section.top_margin = Inches(1)
@@ -88,7 +89,7 @@ def configure_document_styles(document: Document) -> None:
     normal_style.paragraph_format.line_spacing = 1.0
 
 
-def clear_document_body(document: Document) -> None:
+def clear_document_body(document: DocumentType) -> None:
     """Remove template placeholder body content while keeping styles/margins."""
     body = document._element.body
     for child in list(body):
@@ -100,8 +101,8 @@ def clear_document_body(document: Document) -> None:
 def clean_cover_letter_parts(markdown_text: str) -> list[str]:
     """Return body paragraphs without Markdown headings, greeting, or signature."""
     lines = clean_duplicated_punctuation(markdown_text).splitlines()
-    paragraph_lines = []
-    paragraphs = []
+    paragraph_lines: list[str] = []
+    paragraphs: list[str] = []
 
     for raw_line in lines:
         line = raw_line.strip()
@@ -135,7 +136,7 @@ def flush_paragraph_text(paragraphs: list[str], paragraph_lines: list[str]) -> N
 
 
 def add_paragraph(
-    document: Document,
+    document: DocumentType,
     text: str = "",
     *,
     bold: bool = False,
@@ -157,7 +158,7 @@ def add_paragraph(
 
 
 def add_cover_letter_to_template(
-    document: Document,
+    document: DocumentType,
     markdown_text: str,
     metadata: dict[str, str],
 ) -> None:
@@ -191,7 +192,8 @@ def add_cover_letter_to_template(
     add_paragraph(document, "Sincerely,", space_after=6)
     add_paragraph(document, USER_NAME, space_after=0)
 
-def final_document_text(document: Document) -> str:
+
+def final_document_text(document: DocumentType) -> str:
     """Return all non-empty paragraph text from the DOCX object."""
     return "\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
 
@@ -234,12 +236,12 @@ def export_cover_letter_to_docx(
     markdown_text = clean_duplicated_punctuation(markdown_path.read_text(encoding="utf-8"))
     warnings = validate_employer_content(markdown_path.name, markdown_text)
 
-    document = Document(template_path)
+    document = Document(str(template_path))
     configure_document_styles(document)
     clear_document_body(document)
     add_cover_letter_to_template(document, markdown_text, metadata)
     warnings.extend(validate_employer_content("cover_letter.docx", final_document_text(document)))
-    document.save(docx_path)
+    document.save(str(docx_path))
 
     return warnings
 

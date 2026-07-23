@@ -189,6 +189,57 @@ Use real train data only for domain adaptation, real validation only for thresho
 model selection, and the frozen holdout only for final reporting. Do not fit on the
 holdout, then report the same rows as independent evidence.
 
+## Reviewed v3 reranker experiment
+
+After exporting the completed portion of v3 and adjudicating the synthetic expansion,
+combine only human annotations and accepted consensus gold:
+
+```bash
+python scripts/ml/build_evidence_training_corpus.py
+```
+
+Candidate-level consensus labels are preserved. Human-supported tasks continue to use the
+conservative policy: selected strongest evidence is positive, while unselected candidates
+remain unlabeled rather than being converted into false negatives. Producer intent and
+human-review-queue cases are not imported.
+
+Train and compare the local experiment:
+
+```bash
+python scripts/ml/train_evidence_reranker.py
+```
+
+The grouped comparison includes:
+
+- the transparent concept/lexical rule
+- word TF-IDF cosine
+- local word/character LSA embeddings
+- the existing shared-term pair classifier
+- a learned hybrid LSA reranker
+- a lexical-guarded reranker
+- a pairwise hybrid reranker trained from the human-selected strongest evidence
+
+Every fold keeps one semantic or requirement-template group out for testing and uses a
+different mixed-label group for threshold selection. Reports include pair metrics,
+Recall@1, Recall@3, MRR, No-Support rejection, task-decision accuracy, and ID-only error
+analysis.
+
+Model selection is predefined and lexicographic: task-decision accuracy, average precision,
+Recall@1, then No-Support rejection. The selected joblib artifact remains under ignored
+`data/ml/models/` and is marked `experimental_not_used_by_application`.
+
+Run the small external diagnostic:
+
+```bash
+python scripts/ml/evaluate_evidence_reranker.py
+```
+
+This command rejects exact train/evaluation overlap and evaluates the artifact on the
+tracked de-identified 24-case semantic set. The set is too small and too familiar to the
+project to qualify as the fixed real holdout. Its result is diagnostic only; promotion
+still requires at least 40 untouched real tasks with zero resume, job, and semantic-group
+overlap.
+
 ## Export and baseline evaluation
 
 After all repeat conflicts are resolved, export one row per unique task and a

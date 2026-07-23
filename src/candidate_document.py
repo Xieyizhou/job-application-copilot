@@ -126,7 +126,7 @@ def _extract_pdf(content: bytes) -> CandidateDocumentResult:
         if document.needs_pass:
             raise CandidateDocumentError("Password-protected PDFs are not supported.")
         page_count = document.page_count
-        page_text = [page.get_text("text") for page in document]
+        page_text = [document.load_page(index).get_text("text") for index in range(page_count)]
     except CandidateDocumentError:
         raise
     except Exception as error:

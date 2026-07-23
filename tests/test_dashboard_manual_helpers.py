@@ -82,6 +82,45 @@ class DashboardManualHelperTests(unittest.TestCase):
         self.assertNotIn("manual_company", state)
         self.assertNotIn("manual_generate_7", state)
 
+    def test_parser_metadata_sorting_and_empty_selection_helpers(self) -> None:
+        state = {
+            "manual_extraction_reports": [
+                {"metadata_title": "Careers | Analyst"},
+                {"metadata_title": "Careers | Analyst"},
+            ]
+        }
+        suggestions = {"title": "Analyst", "job_title_confidence": "high"}
+        with patch.object(dashboard_manual.st, "session_state", state), patch.object(
+            dashboard_manual,
+            "parse_job_description_suggestions",
+            return_value=suggestions,
+        ) as parser:
+            self.assertEqual(dashboard_manual.current_manual_suggestions(""), {})
+            self.assertEqual(dashboard_manual.current_manual_suggestions("Analyst role"), suggestions)
+        parser.assert_called_once_with(
+            "Analyst role",
+            {"metadata_titles": ["Careers | Analyst"]},
+        )
+        self.assertEqual(state["manual_parser_suggestions"], suggestions)
+
+        records = [
+            {"id": "old", "created_at": "2026-01-01"},
+            {"id": "new", "created_at": "2026-07-01"},
+        ]
+        with patch.object(dashboard_manual, "load_manual_jobs", return_value=records):
+            self.assertEqual(
+                [record["id"] for record in dashboard_manual.sorted_manual_records()],
+                ["new", "old"],
+            )
+        ui = MagicMock()
+        with patch.object(dashboard_manual, "st", ui):
+            self.assertIsNone(dashboard_manual.select_manual_record([], "empty"))
+        ui.info.assert_called_once_with("No target jobs saved yet.")
+
+        with patch.object(dashboard_manual, "clear_manual_job_session_state") as clear:
+            dashboard_manual.clear_manual_state_for_new_extraction()
+        clear.assert_called_once_with(clear_upload=False)
+
     def test_submission_validation_and_successful_save(self) -> None:
         payload = {
             "submitted": True,
@@ -258,7 +297,11 @@ class DashboardManualHelperTests(unittest.TestCase):
         with patch.object(dashboard_manual_entry, "st", ui):
             quality = dashboard_manual_entry.render_jd_quality(full_jd)
         self.assertEqual(quality["word_count"], 100)
-        with patch.object(dashboard_manual, "st", ui):
+        with patch.object(dashboard_manual, "st", ui), patch.object(
+            dashboard_manual,
+            "SHOW_DEBUG_UI",
+            True,
+        ):
             dashboard_manual.render_extraction_reports([report])
             ui.selectbox.return_value = dashboard_manual.manual_record_label(record)
             self.assertEqual(dashboard_manual.select_manual_record([record], "selected"), record)
