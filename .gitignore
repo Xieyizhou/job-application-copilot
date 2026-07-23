@@ -87,5 +87,6 @@ data/ml/raw/
 data/ml/cache/
 data/ml/processed/
 data/ml/models/
+data/ml/annotations/
 models/
 reports/ml/

@@ -105,6 +105,16 @@ collapsed batches. The holdout must not be used for threshold selection or retra
 The 24/24 semantic result is curated validation-set agreement, not model accuracy or proof
 that the retriever generalizes to all resumes and job descriptions.
 
+The standalone local labeling workspace is the path from this small curated check to a
+larger independent gold set. Its queue generation, label definitions, privacy boundaries,
+and evaluation gates are documented in [Requirement–Evidence Annotation](ML_ANNOTATION.md).
+
+Synthetic expansion may be LLM-assisted, but generator intent is never treated as a gold
+label. Provider-neutral local tooling creates strict blind packets, requires candidate-level
+review, and routes disagreement to human adjudication. Anonymous real tasks are isolated by
+connected resume, job, and semantic groups before fitting, validation, or fixed-holdout
+evaluation.
+
 ## Commands
 
 ```bash

@@ -276,6 +276,19 @@ The ATS-score dataset remains local research material only. Its algorithmic weak
 and heavy resume/job overlap are not part of product scoring or a production accuracy
 claim. See [Local ML Relevance](docs/ML_RELEVANCE.md) for details.
 
+To build a human-reviewed requirement-to-resume-evidence dataset, use the separate local
+labeling workspace. It presents one requirement at a time, hides retrieval scores, records
+Direct/Partial/No Support/Uncertain decisions, and adds blind repeats for consistency
+checks. See [Requirement–Evidence Annotation](docs/ML_ANNOTATION.md).
+
+The same local research workflow supports LLM-assisted synthetic data generation with
+human review and real-data validation. Multiple producers cover different semantic
+barriers; strict allow-list blinding removes producer intent before candidate-level review;
+only unanimous independent review or human adjudication can create gold labels. Anonymous
+real tasks are split by connected resume, job, and semantic groups, with a checksummed
+holdout that is never used for fitting. Prompts, provider configuration, local annotations,
+review packets, and row-level datasets are ignored and are not part of the repository.
+
 For example, when only one requirement is recognized, the app may show:
 
 ```text
@@ -530,6 +543,7 @@ available in:
 - [Usage](docs/USAGE.md)
 - [Scoring Method](docs/SCORING_METHOD.md)
 - [Local ML Relevance](docs/ML_RELEVANCE.md)
+- [Requirement–Evidence Annotation](docs/ML_ANNOTATION.md)
 - [UI Simplification Plan](docs/UI_SIMPLIFICATION_PLAN.md)
 
 ## License

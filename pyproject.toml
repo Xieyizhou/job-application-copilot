@@ -48,6 +48,7 @@ files = [
   "src/dashboard_tracker_components.py",
   "src/ml",
   "scripts/ml",
+  "run_annotation.py",
 ]
 ignore_missing_imports = true
 check_untyped_defs = true
