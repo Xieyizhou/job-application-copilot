@@ -8,8 +8,10 @@ import unittest
 from unittest.mock import patch
 
 import dashboard_review_page
+from dashboard_review_filters import reset_review_filters
 from dashboard_fit_sections import accepted_semantic_matches
 from dashboard_review import REVIEW_INBOX_OPTIONS, review_inbox_view_matches
+from dashboard_review import primary_review_action
 from dashboard_review_components import (
     hard_constraint,
     jd_quality_label,
@@ -17,8 +19,12 @@ from dashboard_review_components import (
     strongest_evidence,
     visible_role_fit,
 )
-from dashboard_review_styles import badge_html, decision_field_html
-from dashboard_review_selector import job_picker_label, picked_review_job
+from dashboard_review_styles import action_note_html, decision_field_html
+from dashboard_review_selector import (
+    compact_review_table_row,
+    review_table_row,
+    selected_review_table_job,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -79,7 +85,7 @@ class ReviewHierarchyTests(unittest.TestCase):
     def test_show_all_reset_clears_hidden_operational_filters(self) -> None:
         state: dict[str, object] = {"review_tracker_filter": "Ignored"}
         with patch.object(dashboard_review_page.st, "session_state", state):
-            dashboard_review_page.reset_review_filters("Recommended", False, show_all=True)
+            reset_review_filters("Recommended", False, show_all=True)
         self.assertEqual(state["review_inbox_view"], "All")
         self.assertEqual(state["review_tracker_filter"], "all")
         self.assertEqual(state["review_minimum_score"], 0)
@@ -97,26 +103,131 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertEqual(jd_quality_label(job), "Complete")
         self.assertEqual(len(accepted_semantic_matches(job["analysis_result"])), 3)
 
-    def test_badges_escape_untrusted_values(self) -> None:
-        rendered = badge_html("JD", "<script>alert(1)</script>", "warning")
-        self.assertNotIn("<script>", rendered)
-        self.assertIn("&lt;script&gt;", rendered)
+    def test_decision_fields_escape_untrusted_values(self) -> None:
         decision = decision_field_html("Recommendation", "Manual Review <unsafe>")
         self.assertIn("Manual Review &lt;unsafe&gt;", decision)
+        action = action_note_html("Review <unsafe>", caution=True)
+        self.assertIn("Review &lt;unsafe&gt;", action)
 
-    def test_job_picker_uses_paths_and_compact_labels(self) -> None:
-        first = {"path": "/jobs/one.md", "company": "Example", "role": "Data Analyst", "recommendation": "Apply"}
-        second = {"path": "/jobs/two.md", "company": "Example", "role": "ML Engineer", "recommendation": "Manual Review"}
-        self.assertEqual(picked_review_job([first, second], "/jobs/two.md"), second)
-        self.assertEqual(job_picker_label(second), "Example · ML Engineer — Manual Review")
+    def test_default_header_separates_four_product_signals(self) -> None:
+        source = (
+            PROJECT_ROOT / "src" / "dashboard_review_components.py"
+        ).read_text(encoding="utf-8")
+        fields = source[source.index("decision_fields = [") : source.index(
+            "st.markdown(",
+            source.index("decision_fields = ["),
+        )]
+        self.assertIn('"Role Fit"', fields)
+        self.assertIn('"Eligibility"', fields)
+        self.assertIn('"Confidence"', fields)
+        self.assertIn('"JD Quality"', fields)
+        self.assertNotIn('"Recommendation"', fields)
+
+    def test_review_table_combines_selection_and_four_signals(self) -> None:
+        first = {
+            **sample_job(),
+            "path": "/jobs/one.md",
+            "company": "Example",
+            "role": "Data Analyst",
+        }
+        second = {
+            **sample_job(confidence="low"),
+            "path": "/jobs/two.md",
+            "company": "Example",
+            "role": "ML Engineer",
+        }
+        self.assertIs(selected_review_table_job([first, second], [1], "/jobs/one.md"), second)
+        self.assertIs(selected_review_table_job([first, second], [], "/jobs/two.md"), second)
+        self.assertEqual(
+            review_table_row(second),
+            {
+                "Job": "Example · ML Engineer",
+                "Role Fit": "Not reliable",
+                "Eligibility": "Passed",
+                "Confidence": "Low",
+                "JD Quality": "Complete",
+            },
+        )
+        self.assertEqual(
+            compact_review_table_row(second),
+            {
+                "Job": "Example · ML Engineer",
+                "Signals": "Not reliable · Pass · Low · Complete",
+            },
+        )
+
+    def test_incomplete_jd_controls_the_single_action(self) -> None:
+        job = sample_job(confidence="medium")
+        job["jd_quality"] = {
+            "display_label": "Partial JD",
+            "reliable_scoring_ready": False,
+        }
+        action = primary_review_action(
+            job,
+            "ready",
+            "Cover letter ready",
+        )
+        self.assertEqual(action.label, "Get Full JD")
+        self.assertEqual(action.target_section, "JD")
+        self.assertIn("full job description", action.message)
+        self.assertTrue(action.caution)
+
+        demo_action = primary_review_action(
+            job,
+            "Demo only",
+            "Demo cover letter",
+            demo=True,
+        )
+        self.assertEqual(demo_action.target_section, "JD")
+        self.assertNotIn("tracker", demo_action.message.lower())
+
+    def test_default_review_ui_has_one_master_list_without_duplicate_selectors(self) -> None:
+        source = (
+            PROJECT_ROOT / "src" / "dashboard_review_page.py"
+        ).read_text(encoding="utf-8")
+        selector_source = (
+            PROJECT_ROOT / "src" / "dashboard_review_selector.py"
+        ).read_text(encoding="utf-8")
+        style_source = (
+            PROJECT_ROOT / "src" / "dashboard_desktop_styles.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("Number of recommendations", source)
+        self.assertNotIn("Choose a job", source)
+        self.assertNotIn("Compare {len(jobs)} jobs", source)
+        self.assertIn("render_review_job_table(", source)
+        self.assertIn('st.container(height=420, border=False, key="review_detail_panel")', source)
+        self.assertIn("vertical_alignment=\"top\"", source)
+        self.assertNotIn("st.dataframe(", selector_source)
+        self.assertIn('key="review_job_list"', selector_source)
+        self.assertNotIn("● ", selector_source)
+        self.assertNotIn("review-job-selected-marker", selector_source)
+        self.assertNotIn("review-job-selected-marker", style_source)
+        self.assertIn('type="secondary" if selected else "tertiary"', selector_source)
+        self.assertIn("review-job-row-copy", selector_source)
+        self.assertNotIn("st.caption(row[\"Signals\"])", selector_source)
+        self.assertIn("position:absolute;top:0;right:-6px;bottom:-1px;left:-3px", style_source)
+        self.assertIn("currentColor", style_source)
+        self.assertIn("--primary-color", style_source)
+        self.assertIn("stBaseButton-secondary", style_source)
+        left_panel_start = source.index(
+            'with left_panel, st.container(key="review_job_list_panel")'
+        )
+        detail_panel_start = source.index(
+            'with detail_panel, st.container(key="review_detail_shell")'
+        )
+        header_start = source.index('services.render_page_header(', left_panel_start)
+        self.assertLess(left_panel_start, header_start)
+        self.assertLess(header_start, detail_panel_start)
 
     def test_review_modules_stay_bounded(self) -> None:
-        self.assertLessEqual(source_line_count("src/dashboard_review_page.py"), 700)
+        self.assertLessEqual(source_line_count("src/dashboard_review_page.py"), 520)
+        self.assertLessEqual(source_line_count("src/dashboard_review_filters.py"), 350)
         self.assertLessEqual(source_line_count("src/dashboard_review_components.py"), 250)
         self.assertLessEqual(source_line_count("src/dashboard_fit_sections.py"), 180)
         self.assertLessEqual(source_line_count("src/dashboard_review_styles.py"), 80)
         self.assertLessEqual(largest_top_level_function("src/dashboard_review_components.py"), 60)
         self.assertLessEqual(largest_top_level_function("src/dashboard_fit_sections.py"), 60)
+        self.assertLessEqual(largest_top_level_function("src/dashboard_review_filters.py"), 65)
 
 
 if __name__ == "__main__":

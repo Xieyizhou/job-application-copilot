@@ -22,7 +22,6 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from company_verification import (
     company_verification_fields,
     markdown_metadata_from_verification,
-    normalize_company_name,
 )
 from dotenv import load_dotenv
 from fetch_history import (
@@ -438,24 +437,6 @@ def enrich_job_with_company_verification(job: dict[str, str], *, structured_comp
     return enriched
 
 
-def matches_query(job: dict[str, str], query: str) -> bool:
-    """Return True when a locally fetched job matches the query text."""
-    query = query.strip()
-    if not query:
-        return True
-
-    searchable_text = normalize_text_for_search(
-        " ".join([job.get("role", ""), job.get("description", ""), job.get("location", "")])
-    )
-    query_words = normalize_text_for_search(query).split()
-    return all(word in searchable_text for word in query_words)
-
-
-def normalize_text_for_search(text: str) -> str:
-    """Normalize free text for query filtering."""
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9+#.-]+", " ", text.lower())).strip()
-
-
 def sanitize_error_message(message: str) -> str:
     """Remove credential query parameters from API error messages."""
     message = re.sub(r"app_id=[^&\s)]+", "app_id=[hidden]", message)
@@ -592,66 +573,6 @@ def jooble_region_scope(location: str) -> str:
     if location_slug in {"london", "united_kingdom", "uk", "great_britain"}:
         return "uk"
     return location_slug or "remote"
-
-
-def job_duplicate_key(job: dict[str, str]) -> tuple[str, str, str, str]:
-    """Return duplicate keys for URL and company/role/location fallback."""
-    company = clean_text(job.get("company_normalized") or normalize_company_name(job.get("company", "")) or job.get("company"))
-    role = clean_text(job.get("role"))
-    location = clean_text(job.get("location"))
-    job_url = sanitize_job_url(clean_text(job.get("job_url")))
-    return (
-        normalize_key(job_url),
-        normalize_key(company),
-        normalize_key(role),
-        normalize_key(location),
-    )
-
-
-def normalize_key(value: str) -> str:
-    """Normalize text for duplicate comparisons."""
-    return re.sub(r"\s+", " ", value.strip().lower())
-
-
-def read_markdown_field(markdown_text: str, field_name: str) -> str:
-    """Read a simple 'Field: value' line from Markdown."""
-    prefix = f"{field_name}:"
-    for line in markdown_text.splitlines():
-        if line.lower().startswith(prefix.lower()):
-            value = line.split(":", 1)[1].strip()
-            if value.lower() != "not provided":
-                return value
-    return ""
-
-
-def existing_job_keys() -> tuple[set[str], set[tuple[str, str, str]]]:
-    """Collect duplicate keys from existing Markdown job descriptions."""
-    existing_urls: set[str] = set()
-    existing_company_role_locations: set[tuple[str, str, str]] = set()
-
-    if not JOB_DESCRIPTION_DIR.exists():
-        return existing_urls, existing_company_role_locations
-
-    for markdown_path in JOB_DESCRIPTION_DIR.rglob("*.md"):
-        markdown_text = markdown_path.read_text(encoding="utf-8")
-        job_url = sanitize_job_url(read_markdown_field(markdown_text, "Job URL"))
-        company = read_markdown_field(markdown_text, "Company Normalized") or normalize_company_name(read_markdown_field(markdown_text, "Company")) or read_markdown_field(markdown_text, "Company")
-        role = read_markdown_field(markdown_text, "Role")
-        location = read_markdown_field(markdown_text, "Location")
-
-        normalized_url = normalize_key(job_url)
-        if normalized_url:
-            existing_urls.add(normalized_url)
-
-        fallback_key = (
-            normalize_key(company),
-            normalize_key(role),
-            normalize_key(location),
-        )
-        if all(fallback_key):
-            existing_company_role_locations.add(fallback_key)
-
-    return existing_urls, existing_company_role_locations
 
 
 def unique_output_path(output_dir: Path, base_filename: str) -> Path:

@@ -13,12 +13,6 @@ def safe_slug(value: str) -> str:
     return slug or "unknown"
 
 
-def first_slug_word(value: str) -> str:
-    """Return the first slug word, useful for compact fetched job filenames."""
-    slug = safe_slug(value)
-    return slug.split("_", 1)[0] if slug else "unknown"
-
-
 def timestamp_slug() -> str:
     """Return the current timestamp used for cover-letter bundle folders."""
     return datetime.now().strftime("%Y%m%d_%H%M%S")

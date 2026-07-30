@@ -6,9 +6,13 @@ from collections import Counter
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
+try:
+    from ml.candidate_judgments import has_complete_candidate_labels
+except ModuleNotFoundError:
+    from candidate_judgments import has_complete_candidate_labels  # type: ignore[no-redef]
 
 SCHEMA_VERSION = 1
 SUPPORT_LABELS = ("Direct", "Partial", "No Support", "Uncertain")
@@ -82,6 +86,7 @@ def append_event(
     events_path: Path = DEFAULT_EVENTS_PATH,
     selected_candidate_id: str | None = None,
     support_label: str | None = None,
+    candidate_labels: Mapping[str, str] | None = None,
     cover_letter_safe: bool | None = None,
     note: str = "",
 ) -> dict[str, Any]:
@@ -90,6 +95,21 @@ def append_event(
         raise AnnotationDataError(f"Unsupported annotation action: {action}")
     if action == "label" and support_label not in SUPPORT_LABELS:
         raise AnnotationDataError(f"Unsupported support label: {support_label}")
+    normalized_candidate_labels = (
+        {
+            str(candidate_id): str(candidate_label)
+            for candidate_id, candidate_label in candidate_labels.items()
+        }
+        if candidate_labels is not None
+        else None
+    )
+    if normalized_candidate_labels is not None and any(
+        candidate_label not in SUPPORT_LABELS[:-1]
+        for candidate_label in normalized_candidate_labels.values()
+    ):
+        raise AnnotationDataError(
+            "Candidate labels must be Direct, Partial, or No Support."
+        )
     event = {
         "schema_version": SCHEMA_VERSION,
         "event_id": uuid4().hex,
@@ -97,6 +117,7 @@ def append_event(
         "action": action,
         "selected_candidate_id": selected_candidate_id,
         "support_label": support_label,
+        "candidate_labels": normalized_candidate_labels,
         "cover_letter_safe": cover_letter_safe,
         "note": note.strip(),
         "annotated_at": datetime.now(timezone.utc).isoformat(),
@@ -119,6 +140,25 @@ def latest_task_states(events: Iterable[dict[str, Any]]) -> dict[str, dict[str, 
         elif event.get("action") in {"label", "skip"}:
             states[task_id] = dict(event)
     return states
+
+
+def _decision_signature(state: Mapping[str, Any]) -> tuple[object, ...]:
+    candidate_labels = state.get("candidate_labels")
+    complete_labels = (
+        tuple(
+            sorted(
+                (str(candidate_id), str(label))
+                for candidate_id, label in candidate_labels.items()
+            )
+        )
+        if isinstance(candidate_labels, Mapping) and candidate_labels
+        else ()
+    )
+    return (
+        state.get("support_label"),
+        state.get("selected_candidate_id"),
+        complete_labels,
+    )
 
 
 def annotation_summary(
@@ -154,14 +194,25 @@ def annotation_summary(
             continue
         current = states[task["task_id"]]
         original = states[original_id]
-        repeat_results.append(
-            current.get("support_label") == original.get("support_label")
-            and current.get("selected_candidate_id") == original.get("selected_candidate_id")
-        )
+        repeat_results.append(_decision_signature(current) == _decision_signature(original))
     return {
         "total": len(tasks),
         "completed": len(completed),
         "remaining": len(tasks) - len(completed),
+        "candidate_labels_completed": sum(
+            has_complete_candidate_labels(
+                task,
+                states.get(str(task["task_id"])),
+            )
+            for task in tasks
+        ),
+        "candidate_labels_remaining": sum(
+            not has_complete_candidate_labels(
+                task,
+                states.get(str(task["task_id"])),
+            )
+            for task in tasks
+        ),
         "label_counts": dict(labels),
         "selected_position_counts": dict(selected_positions),
         "repeat_pairs": len(repeat_results),
@@ -184,10 +235,7 @@ def repeat_conflict_task_ids(
             continue
         current = states[task_id]
         original = states[original_id]
-        agrees = (
-            current.get("support_label") == original.get("support_label")
-            and current.get("selected_candidate_id") == original.get("selected_candidate_id")
-        )
+        agrees = _decision_signature(current) == _decision_signature(original)
         if not agrees:
             conflicts.update((original_id, task_id))
     return conflicts

@@ -236,6 +236,14 @@ def score_evidence_pair(
     return _score_evidence_pair(requirement, evidence, model_similarity=model_similarity)
 
 
+def score_transparent_evidence_pair(
+    requirement: str,
+    evidence: str,
+) -> dict[str, Any]:
+    """Score one pair without loading or blending a saved model artifact."""
+    return _score_evidence_pair(requirement, evidence, model_similarity=None)
+
+
 def _score_evidence_pair(
     requirement: str,
     evidence: str,

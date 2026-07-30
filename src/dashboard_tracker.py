@@ -41,7 +41,7 @@ def tracker_tab(services: TrackerPageServices) -> None:
         "Keep application stages current and act on the next follow-up.",
     )
     if services.demo_mode_enabled():
-        st.info("Demo workspace does not read or update the Personal tracker database.")
+        st.caption("Demo does not read or update Personal tracker records.")
         return
 
     status_options = [

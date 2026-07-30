@@ -159,6 +159,57 @@ class AnnotationDatasetTests(unittest.TestCase):
         self.assertEqual(manifest["dataset_name"], "reviewed_v3_seed")
         self.assertFalse(manifest["source_queue_complete"])
 
+    def test_complete_candidate_labels_export_every_hard_negative_and_class(self) -> None:
+        complete_states = {
+            **self.states,
+            "direct": {
+                **self.states["direct"],
+                "candidate_labels": {
+                    "direct-a": "Direct",
+                    "direct-b": "No Support",
+                },
+            },
+            "partial": {
+                **self.states["partial"],
+                "candidate_labels": {
+                    "partial-a": "Partial",
+                    "partial-b": "No Support",
+                },
+            },
+            "none": {
+                **self.states["none"],
+                "candidate_labels": {
+                    "none-a": "No Support",
+                    "none-b": "No Support",
+                },
+            },
+        }
+
+        annotated = build_annotated_tasks(self.tasks, complete_states)
+        pairs = build_training_pairs(annotated)
+        manifest = dataset_manifest(annotated, pairs)
+
+        self.assertEqual(len(pairs), 6)
+        self.assertEqual(
+            [pair["support_label"] for pair in pairs],
+            [
+                "Direct",
+                "No Support",
+                "No Support",
+                "No Support",
+                "Partial",
+                "No Support",
+            ],
+        )
+        self.assertEqual(
+            {pair["label_scope"] for pair in pairs},
+            {"fully_reviewed_candidate_judgment"},
+        )
+        self.assertEqual(
+            manifest["candidate_label_coverage_counts"],
+            {"complete": 3},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

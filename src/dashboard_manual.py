@@ -11,6 +11,7 @@ import streamlit as st
 
 from apply_package import create_application_package
 from company_verification import verification_status_label
+from dashboard_desktop_styles import render_manual_workspace_styles
 from dashboard_manual_entry import render_jd_capture, render_jd_quality, render_verification_form
 from dashboard_regions import normalize_location
 from dashboard_titles import display_title_from_value
@@ -48,6 +49,7 @@ class ManualPageServices:
     render_manual_company_confirmation: Callable[[dict[str, Any], str], dict[str, Any]]
     render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
+    switch_workspace_mode: Callable[[str], None]
 
 
 MANUAL_FORM_STATE_KEYS = {
@@ -520,8 +522,8 @@ def save_manual_form_submission(payload: dict[str, Any], uploaded_files: list[An
             upload_files=[(item.name, item.getvalue()) for item in uploaded_files],
         )
         st.session_state["manual_generate_selected"] = manual_record_label(record)
-        st.success("Target job saved. Continue to Generate Cover Letter when you are ready.")
-        st.info("Open the Generate Cover Letter tab next. This saved job will be preselected there.")
+        st.success("Target job saved. Review its fit before generating a cover letter.")
+        st.caption("Open Review Jobs next. This saved job is ready for evidence review.")
         if SHOW_DEBUG_UI:
             with st.expander("Advanced: raw Markdown path", expanded=False):
                 st.write(f"Saved Markdown: `{record['markdown_path']}`")
@@ -530,19 +532,23 @@ def save_manual_form_submission(payload: dict[str, Any], uploaded_files: list[An
 
 
 def render_manual_add_extract_tab(services: ManualPageServices) -> None:
-    """Render a JD-first, linear target-job workflow."""
+    """Render JD capture and verification side by side on desktop."""
     prepare_manual_job_session_state()
     cleanup_message = st.session_state.pop("manual_cleanup_message", "")
     if cleanup_message:
         st.success(cleanup_message)
-    uploaded_files = render_jd_capture(render_manual_upload_controls)
-    job_description = str(st.session_state.get("manual_job_description", "") or "")
-    render_jd_quality(job_description)
-    payload = render_manual_job_form()
-    save_manual_form_submission(payload, uploaded_files)
-    with st.expander("Maintenance", expanded=False):
-        st.caption("Clear the current form or remove generated bundles. Saved target jobs are retained.")
-        render_manual_cleanup_controls(services)
+    render_manual_workspace_styles()
+    jd_panel, verification_panel = st.columns([0.56, 0.44], gap="large")
+    with jd_panel, st.container(key="manual_jd_panel"):
+        uploaded_files = render_jd_capture(render_manual_upload_controls)
+        job_description = str(st.session_state.get("manual_job_description", "") or "")
+        render_jd_quality(job_description)
+    with verification_panel, st.container(height=540, border=False, key="manual_verify_panel"):
+        payload = render_manual_job_form()
+        save_manual_form_submission(payload, uploaded_files)
+        with st.expander("Maintenance", expanded=False):
+            st.caption("Clear the form or generated bundles. Saved target jobs are retained.")
+            render_manual_cleanup_controls(services)
 
 
 def render_saved_manual_jobs_tab(services: ManualPageServices) -> None:
@@ -644,31 +650,6 @@ def render_saved_manual_jobs_tab(services: ManualPageServices) -> None:
                 st.error("Could not find that target job record.")
 
 
-def render_manual_generate_package_tab(services: ManualPageServices) -> None:
-    """Render package generation for a selected saved manual job."""
-    st.caption("Choose a saved job and generate a resume-grounded cover letter, match report, and evidence trace.")
-    selected_record = select_manual_record(sorted_manual_records(), key="manual_generate_selected")
-    if selected_record is None:
-        return
-    st.write(f"Company: {selected_record.get('company', '')}")
-    st.write(f"Company status: {verification_status_label(selected_record)}")
-    st.write(f"Job title: {display_title_from_value(selected_record.get('title'), fallback='Sample Job')}")
-    st.write(f"Location: {normalize_location(str(selected_record.get('location', ''))) or '-'}")
-    generate_package_for_manual_record(
-        selected_record,
-        button_key=f"manual_generate_{selected_record['id']}",
-        services=services,
-    )
-    if st.session_state.get("manual_generated_summary"):
-        with st.expander("Latest cover-letter generation output", expanded=False):
-            st.json(st.session_state["manual_generated_summary"])
-    if st.session_state.get("manual_generated_backend_output"):
-        with st.expander("Latest technical output (advanced)", expanded=False):
-            st.text(st.session_state["manual_generated_backend_output"])
-    if st.session_state.get("manual_generated_error"):
-        st.error(st.session_state["manual_generated_error"])
-
-
 def render_manual_debug_tab() -> None:
     """Render collapsed OCR and parser debugging details."""
     st.info(
@@ -715,20 +696,27 @@ def manual_job_target_tab(services: ManualPageServices) -> None:
         "Capture the complete posting once so fit, documents, and interview prep share the same source.",
     )
     if services.demo_mode_enabled():
-        st.info("Demo workspace uses bundled sample jobs. Select Personal to save a new target job locally.")
+        st.markdown('<div class="desktop-workspace-marker"></div>', unsafe_allow_html=True)
+        st.caption("Demo uses bundled sample jobs. Personal workspace saves new target jobs locally.")
+        if st.button("Return to Personal Workspace", type="primary"):
+            services.switch_workspace_mode("Personal")
+            st.rerun()
         return
 
-    tab_labels = ["Add Job", "Saved Jobs", "Cover Letter"]
+    tab_labels = ["Add Job", "Saved Jobs"]
     if SHOW_DEBUG_UI:
         tab_labels.append("Advanced / Debug")
-    tabs = st.tabs(tab_labels)
-    tab_add, tab_saved, tab_generate = tabs[:3]
-    with tab_add:
+    selected_view = st.segmented_control(
+        "Target job view",
+        tab_labels,
+        default="Add Job",
+        key="manual_target_view",
+        label_visibility="collapsed",
+    ) or "Add Job"
+    if selected_view == "Add Job":
+        st.markdown('<div class="desktop-workspace-marker"></div>', unsafe_allow_html=True)
         render_manual_add_extract_tab(services)
-    with tab_generate:
-        render_manual_generate_package_tab(services)
-    with tab_saved:
+    elif selected_view == "Saved Jobs":
         render_saved_manual_jobs_tab(services)
-    if SHOW_DEBUG_UI:
-        with tabs[3]:
-            render_manual_debug_tab()
+    else:
+        render_manual_debug_tab()

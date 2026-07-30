@@ -7,6 +7,7 @@ import hashlib
 from typing import Any, Iterable
 
 from ml.annotation_generation import normalize_text
+from ml.candidate_judgments import CANDIDATE_SUPPORT_LABELS
 
 
 CORPUS_SCHEMA_VERSION = 1
@@ -16,6 +17,7 @@ ALLOWED_GOLD_SOURCES = {
     "human_adjudication",
 }
 POSITIVE_SUPPORT_LABELS = {"Direct", "Partial"}
+UNLABELED_CANDIDATE_LABEL = "Unlabeled"
 
 
 class EvidenceCorpusError(ValueError):
@@ -65,33 +67,62 @@ def gold_tasks_to_dataset(
             candidate_label = str(candidate.get("support_label", ""))
             if not candidate_id or not evidence:
                 raise EvidenceCorpusError("Gold candidates require id and evidence.")
-            if candidate_label not in {*POSITIVE_SUPPORT_LABELS, "No Support"}:
+            allowed_labels = {*POSITIVE_SUPPORT_LABELS, "No Support"}
+            if decision_source == "human_adjudication":
+                allowed_labels.add(UNLABELED_CANDIDATE_LABEL)
+            if candidate_label not in allowed_labels:
                 raise EvidenceCorpusError(
                     f"Unsupported candidate gold label: {candidate_label or 'missing'}"
                 )
             normalized_candidates.append(
-                {"candidate_id": candidate_id, "evidence": evidence}
-            )
-            binary_label = int(candidate_label in POSITIVE_SUPPORT_LABELS)
-            pairs.append(
                 {
-                    "schema_version": CORPUS_SCHEMA_VERSION,
-                    "pair_id": _pair_id(task_id, candidate_id, binary_label),
-                    "task_id": task_id,
-                    "role_family": str(gold.get("role_family", "unknown")),
-                    "requirement": str(gold.get("requirement", "")),
+                    "candidate_id": candidate_id,
                     "evidence": evidence,
-                    "binary_label": binary_label,
                     "support_label": candidate_label,
-                    "label_scope": "reviewed_candidate_judgment",
-                    "source_resume_hash": "",
-                    "source_job_hash": "",
-                    "semantic_case_group_id": semantic_group,
-                    "template_group": evaluation_group,
-                    "evaluation_group": evaluation_group,
-                    "review_source": decision_source,
                 }
             )
+            if candidate_label != UNLABELED_CANDIDATE_LABEL:
+                binary_label = int(candidate_label in POSITIVE_SUPPORT_LABELS)
+                pairs.append(
+                    {
+                        "schema_version": CORPUS_SCHEMA_VERSION,
+                        "pair_id": _pair_id(task_id, candidate_id, binary_label),
+                        "task_id": task_id,
+                        "role_family": str(gold.get("role_family", "unknown")),
+                        "requirement": str(gold.get("requirement", "")),
+                        "evidence": evidence,
+                        "binary_label": binary_label,
+                        "support_label": candidate_label,
+                        "label_scope": "reviewed_candidate_judgment",
+                        "source_resume_hash": "",
+                        "source_job_hash": "",
+                        "semantic_case_group_id": semantic_group,
+                        "template_group": evaluation_group,
+                        "evaluation_group": evaluation_group,
+                        "review_source": decision_source,
+                    }
+                )
+        if decision_source == "human_adjudication":
+            labels_by_id = {
+                str(candidate["candidate_id"]): str(candidate["support_label"])
+                for candidate in candidates
+            }
+            if support_label in POSITIVE_SUPPORT_LABELS:
+                if labels_by_id.get(str(selected_id)) != support_label:
+                    raise EvidenceCorpusError(
+                        "Human adjudication must label the selected evidence with its support label."
+                    )
+                if any(
+                    label not in {support_label, UNLABELED_CANDIDATE_LABEL}
+                    for label in labels_by_id.values()
+                ):
+                    raise EvidenceCorpusError(
+                        "Supported human adjudications may only label the selected evidence."
+                    )
+            elif any(label != "No Support" for label in labels_by_id.values()):
+                raise EvidenceCorpusError(
+                    "No Support human adjudications must reject every candidate."
+                )
         tasks.append(
             {
                 "schema_version": CORPUS_SCHEMA_VERSION,
@@ -121,10 +152,129 @@ def _human_evaluation_group(task: dict[str, Any]) -> str:
     return f"template:{task.get('template_group', 'unknown')}"
 
 
+def reviewed_real_tasks_to_dataset(
+    gold_tasks: Iterable[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Convert finalized real training-supplement tasks conservatively."""
+    tasks: list[dict[str, Any]] = []
+    pairs: list[dict[str, Any]] = []
+    for gold in gold_tasks:
+        if str(gold.get("record_type", "")) != (
+            "real_training_supplement_gold_task"
+        ):
+            raise EvidenceCorpusError(
+                "Only finalized training-supplement real tasks may enter training."
+            )
+        task_id = str(gold.get("task_id", "")).strip()
+        support_label = str(gold.get("support_label", ""))
+        selected_id = gold.get("selected_candidate_id")
+        candidates = gold.get("candidates")
+        if not task_id or support_label not in {
+            *POSITIVE_SUPPORT_LABELS,
+            "No Support",
+        }:
+            raise EvidenceCorpusError("Real training task has invalid identity or label.")
+        if not isinstance(candidates, list) or len(candidates) < 2:
+            raise EvidenceCorpusError("Real training task needs at least two candidates.")
+        candidate_ids = {
+            str(candidate.get("candidate_id", "")) for candidate in candidates
+        }
+        if (
+            support_label in POSITIVE_SUPPORT_LABELS
+            and str(selected_id) not in candidate_ids
+        ):
+            raise EvidenceCorpusError(
+                "Supported real training task needs valid selected evidence."
+            )
+        if support_label == "No Support" and selected_id is not None:
+            raise EvidenceCorpusError(
+                "No Support real training task cannot select evidence."
+            )
+        evaluation_group = f"real-training:{task_id}"
+        normalized_candidates = [
+            {
+                "candidate_id": str(candidate["candidate_id"]),
+                "evidence": str(candidate["evidence"]),
+                **(
+                    {"support_label": str(candidate["support_label"])}
+                    if str(candidate.get("support_label", ""))
+                    in CANDIDATE_SUPPORT_LABELS
+                    else {}
+                ),
+            }
+            for candidate in candidates
+        ]
+        complete_candidate_labels = all(
+            str(candidate.get("support_label", ""))
+            in CANDIDATE_SUPPORT_LABELS
+            for candidate in normalized_candidates
+        )
+        for candidate in normalized_candidates:
+            candidate_id = candidate["candidate_id"]
+            if complete_candidate_labels:
+                pair_label = str(candidate["support_label"])
+                binary_label = int(pair_label in POSITIVE_SUPPORT_LABELS)
+                label_scope = "fully_reviewed_candidate_judgment"
+            elif support_label in POSITIVE_SUPPORT_LABELS:
+                if candidate_id != str(selected_id):
+                    continue
+                pair_label = support_label
+                binary_label = 1
+                label_scope = "selected_or_all_rejected"
+            else:
+                pair_label = "No Support"
+                binary_label = 0
+                label_scope = "selected_or_all_rejected"
+            pairs.append(
+                {
+                    "schema_version": CORPUS_SCHEMA_VERSION,
+                    "pair_id": _pair_id(task_id, candidate_id, binary_label),
+                    "task_id": task_id,
+                    "role_family": str(gold.get("role_family", "unknown")),
+                    "requirement": str(gold.get("requirement", "")),
+                    "evidence": candidate["evidence"],
+                    "binary_label": binary_label,
+                    "support_label": pair_label,
+                    "label_scope": label_scope,
+                    "source_resume_hash": str(
+                        gold.get("source_resume_hash", "")
+                    ),
+                    "source_job_hash": str(gold.get("source_job_hash", "")),
+                    "semantic_case_group_id": "",
+                    "template_group": evaluation_group,
+                    "evaluation_group": evaluation_group,
+                    "review_source": "acceptance_training_supplement",
+                }
+            )
+        tasks.append(
+            {
+                "schema_version": CORPUS_SCHEMA_VERSION,
+                "task_id": task_id,
+                "role_family": str(gold.get("role_family", "unknown")),
+                "requirement": str(gold.get("requirement", "")),
+                "candidates": normalized_candidates,
+                "selected_candidate_id": selected_id,
+                "support_label": support_label,
+                "cover_letter_safe": None,
+                "source_dataset": str(gold.get("source_dataset", "")),
+                "source_resume_hash": str(
+                    gold.get("source_resume_hash", "")
+                ),
+                "source_job_hash": str(gold.get("source_job_hash", "")),
+                "semantic_case_group_id": "",
+                "template_group": evaluation_group,
+                "evaluation_group": evaluation_group,
+                "review_source": "acceptance_training_supplement",
+            }
+        )
+    return tasks, pairs
+
+
 def combine_reviewed_sources(
     human_tasks: Iterable[dict[str, Any]],
     human_pairs: Iterable[dict[str, Any]],
     gold_tasks: Iterable[dict[str, Any]],
+    real_training_tasks: Iterable[dict[str, Any]] = (),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Merge reviewed sources while preserving provenance and group boundaries."""
     normalized_human_tasks: list[dict[str, Any]] = []
@@ -149,8 +299,11 @@ def combine_reviewed_sources(
         normalized_human_pairs.append(row)
 
     consensus_tasks, consensus_pairs = gold_tasks_to_dataset(gold_tasks)
-    all_tasks = [*normalized_human_tasks, *consensus_tasks]
-    all_pairs = [*normalized_human_pairs, *consensus_pairs]
+    real_tasks, real_pairs = reviewed_real_tasks_to_dataset(
+        real_training_tasks
+    )
+    all_tasks = [*normalized_human_tasks, *consensus_tasks, *real_tasks]
+    all_pairs = [*normalized_human_pairs, *consensus_pairs, *real_pairs]
     task_ids = [str(task["task_id"]) for task in all_tasks]
     if len(task_ids) != len(set(task_ids)):
         raise EvidenceCorpusError("Reviewed task identifiers must be unique.")
@@ -174,6 +327,44 @@ def combine_reviewed_sources(
             continue
         seen_pair_content[content_key] = binary_label
         deduplicated_pairs.append(pair)
+
+    labels_by_task_content = {
+        (
+            str(pair["task_id"]),
+            normalize_text(str(pair["evidence"])),
+        ): str(pair["support_label"])
+        for pair in all_pairs
+    }
+    enriched_tasks: list[dict[str, Any]] = []
+    for task in all_tasks:
+        task_id = str(task["task_id"])
+        candidates: list[dict[str, str]] = []
+        for candidate in task["candidates"]:
+            row = dict(candidate)
+            candidate_label = labels_by_task_content.get(
+                (task_id, normalize_text(str(candidate["evidence"])))
+            )
+            if candidate_label in {
+                *POSITIVE_SUPPORT_LABELS,
+                "No Support",
+            }:
+                row["support_label"] = candidate_label
+            candidates.append(row)
+        complete = all(
+            candidate.get("support_label")
+            in {*POSITIVE_SUPPORT_LABELS, "No Support"}
+            for candidate in candidates
+        )
+        enriched_tasks.append(
+            {
+                **task,
+                "candidates": candidates,
+                "candidate_label_coverage": (
+                    "complete" if complete else "legacy_selected_only"
+                ),
+            }
+        )
+    all_tasks = enriched_tasks
 
     manifest = {
         "schema_version": CORPUS_SCHEMA_VERSION,

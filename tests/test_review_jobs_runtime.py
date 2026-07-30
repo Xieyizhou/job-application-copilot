@@ -25,12 +25,22 @@ def run_child_check() -> None:
     app.run(timeout=30)
     app.radio[0].set_value("Review Jobs").run(timeout=30)
     assert list(app.exception) == []
-    assert "Choose a job" in [selectbox.label for selectbox in app.selectbox]
+    assert "Choose a job" not in [selectbox.label for selectbox in app.selectbox]
+    assert "Number of recommendations" not in [slider.label for slider in app.slider]
+    job_buttons = [button.label for button in app.button if " · " in button.label]
+    assert len(job_buttons) == 3
     assert "Review" not in [button.label for button in app.button]
+    assert not any(
+        "Demo workspace uses" in str(info.value)
+        for info in app.info
+    )
 
-    app.text_input[0].set_value("no-such-fictional-job").run(timeout=30)
+    app.run(timeout=30)
     assert list(app.exception) == []
-    assert "No jobs match the current filters." in [info.value for info in app.info]
+    app.radio[0].set_value("Add Target Job").run(timeout=30)
+    assert list(app.exception) == []
+    assert "Return to Personal Workspace" in [button.label for button in app.button]
+    assert not any("Demo workspace uses" in str(info.value) for info in app.info)
     assert local_workspace.exists() == local_existed_before
     assert recent_regions.exists() == recent_existed_before
     if recent_existed_before:
@@ -38,7 +48,7 @@ def run_child_check() -> None:
 
 
 class ReviewJobsRuntimeTests(unittest.TestCase):
-    def test_demo_review_jobs_empty_filter_rerun(self) -> None:
+    def test_demo_review_jobs_compact_table_rerun(self) -> None:
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--child"],
             cwd=PROJECT_ROOT,

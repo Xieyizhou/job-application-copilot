@@ -104,10 +104,22 @@ class AnnotationStorageTests(unittest.TestCase):
                 events_path=events_path,
                 selected_candidate_id=candidate_id,
                 support_label="Direct",
+                candidate_labels={
+                    candidate["candidate_id"]: (
+                        "Direct"
+                        if candidate["candidate_id"] == candidate_id
+                        else "No Support"
+                    )
+                    for candidate in task["candidates"]
+                },
                 cover_letter_safe=True,
             )
             states = latest_task_states(load_jsonl(events_path))
             self.assertEqual(states[task["task_id"]]["support_label"], "Direct")
+            self.assertEqual(
+                states[task["task_id"]]["candidate_labels"][candidate_id],
+                "Direct",
+            )
             self.assertEqual(annotation_summary(loaded, states)["completed"], 1)
             append_event(task["task_id"], "clear", events_path=events_path)
             self.assertNotIn(task["task_id"], latest_task_states(load_jsonl(events_path)))
@@ -159,6 +171,33 @@ class AnnotationStorageTests(unittest.TestCase):
             self.assertEqual(events[-1]["support_label"], "Partial")
             self.assertFalse(events[-1]["cover_letter_safe"])
 
+    def test_dashboard_saves_complete_candidate_labels(self) -> None:
+        task = build_tasks_from_records(
+            sample_records(),
+            unique_count=8,
+            blind_repeat_fraction=0,
+        )[0]
+        labels = {
+            str(candidate["candidate_id"]): "No Support"
+            for candidate in task["candidates"]
+        }
+        selected_id = str(task["candidates"][0]["candidate_id"])
+        labels[selected_id] = "Direct"
+        with tempfile.TemporaryDirectory() as directory:
+            events_path = Path(directory) / "events.jsonl"
+            with patch.object(annotation_dashboard, "EVENTS_PATH", events_path):
+                error = annotation_dashboard.save_complete_label(
+                    task,
+                    labels,
+                    selected_id,
+                    True,
+                    "complete review",
+                )
+            self.assertIsNone(error)
+            event = load_jsonl(events_path)[0]
+            self.assertEqual(event["candidate_labels"], labels)
+            self.assertEqual(event["support_label"], "Direct")
+
     def test_annotation_launcher_targets_standalone_page(self) -> None:
         argv = run_annotation.build_streamlit_argv(["--server.port", "8510"])
         self.assertEqual(argv[:2], ["streamlit", "run"])
@@ -171,11 +210,30 @@ class AnnotationDashboardTests(unittest.TestCase):
         tasks = build_tasks_from_records(sample_records(), unique_count=8, blind_repeat_fraction=0)
         task = tasks[0]
         candidate_id = str(task["candidates"][0]["candidate_id"])
-        direct_state = {"action": "label", "support_label": "Direct"}
+        direct_state = {
+            "action": "label",
+            "support_label": "Direct",
+            "selected_candidate_id": candidate_id,
+            "candidate_labels": {
+                str(candidate["candidate_id"]): (
+                    "Direct"
+                    if candidate["candidate_id"] == candidate_id
+                    else "No Support"
+                )
+                for candidate in task["candidates"]
+            },
+        }
         uncertain_state = {"action": "label", "support_label": "Uncertain"}
         skipped_state = {"action": "skip"}
         self.assertTrue(annotation_dashboard.task_matches_view(task, None, "Unlabeled"))
         self.assertTrue(annotation_dashboard.task_matches_view(task, direct_state, "Completed"))
+        self.assertFalse(
+            annotation_dashboard.task_matches_view(
+                task,
+                direct_state,
+                "Candidate labels needed",
+            )
+        )
         self.assertTrue(annotation_dashboard.task_matches_view(task, uncertain_state, "Uncertain"))
         self.assertTrue(annotation_dashboard.task_matches_view(task, skipped_state, "Skipped"))
         self.assertTrue(annotation_dashboard.task_matches_view(task, direct_state, "All"))
@@ -202,6 +260,26 @@ class AnnotationDashboardTests(unittest.TestCase):
             "no candidate",
             annotation_dashboard.candidate_label(task, annotation_dashboard.NONE_CANDIDATE),
         )
+        translation = {
+            "requirement": {"source": task["requirement"], "zh": "中文岗位要求"},
+            "candidates": [
+                {
+                    "candidate_id": candidate["candidate_id"],
+                    "source": candidate["evidence"],
+                    "zh": f"中文候选 {index}",
+                }
+                for index, candidate in enumerate(task["candidates"])
+            ],
+        }
+        self.assertIn(
+            "中文辅助",
+            annotation_dashboard.candidate_label(
+                task,
+                candidate_id,
+                translation,
+                show_translation=True,
+            ),
+        )
 
     def test_compact_rendering_and_missing_queue_message(self) -> None:
         task = build_tasks_from_records(sample_records(), unique_count=8, blind_repeat_fraction=0)[0]
@@ -217,7 +295,7 @@ class AnnotationDashboardTests(unittest.TestCase):
             )
             annotation_dashboard.render_task(task, None)
         ui.progress.assert_called_once_with(0.25)
-        ui.radio.assert_called_once()
+        self.assertEqual(ui.radio.call_count, len(task["candidates"]) + 1)
 
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing.jsonl"

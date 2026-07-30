@@ -56,6 +56,14 @@ class WordTfidfCosineScorer:
         evidence_matrix = self.vectorizer.transform(evidence)
         return _aligned_sparse_cosine(requirement_matrix, evidence_matrix)
 
+    def predict_proba(
+        self,
+        requirements: Sequence[str],
+        evidence: Sequence[str],
+    ) -> np.ndarray:
+        """Expose cosine values through the shared artifact scoring contract."""
+        return self.score(requirements, evidence)
+
     def feature_manifest(self) -> dict[str, Any]:
         return {
             "model_type": "word_tfidf_cosine",
@@ -356,3 +364,45 @@ class LexicalGuardedReranker:
             "lexical_weight": self.lexical_weight,
             "support_features": self.hybrid.feature_manifest(),
         }
+
+
+TrainableEvidenceReranker = (
+    WordTfidfCosineScorer
+    | HybridEvidenceReranker
+    | LexicalGuardedReranker
+    | PairwiseHybridReranker
+)
+
+
+def fit_selected_reranker(
+    method: str,
+    requirements: Sequence[str],
+    evidence: Sequence[str],
+    labels: Sequence[int],
+    tasks: Sequence[dict[str, Any]],
+    *,
+    random_state: int = 42,
+) -> TrainableEvidenceReranker:
+    """Fit the artifact-capable reranker selected by grouped evaluation."""
+    if method == "tfidf_cosine":
+        return WordTfidfCosineScorer().fit(requirements, evidence)
+    if method == "hybrid_lsa_reranker":
+        return HybridEvidenceReranker(random_state=random_state).fit(
+            requirements,
+            evidence,
+            labels,
+        )
+    if method == "lexical_guarded_reranker":
+        return LexicalGuardedReranker(random_state=random_state).fit(
+            requirements,
+            evidence,
+            labels,
+        )
+    if method == "pairwise_hybrid_reranker":
+        return PairwiseHybridReranker(random_state=random_state).fit(
+            requirements,
+            evidence,
+            labels,
+            tasks,
+        )
+    raise ValueError(f"Selected method cannot be saved as a reranker artifact: {method}")

@@ -16,7 +16,6 @@ def select_cover_letter_package(
 ) -> tuple[Path | None, dict[str, Any] | None]:
     """Return the selected bundle and optional tracker record."""
     if services.demo_mode_enabled():
-        st.info("This sanitized sample shows the files produced in Personal workspace.")
         if not demo_package_dir.exists():
             st.info("Demo cover-letter sample is unavailable.")
             return None, None

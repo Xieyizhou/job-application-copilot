@@ -18,6 +18,7 @@ from ml.evidence_models import (
     LsaEmbeddingScorer,
     PairwiseHybridReranker,
     WordTfidfCosineScorer,
+    fit_selected_reranker,
 )
 
 
@@ -106,3 +107,34 @@ def test_models_reject_misaligned_inputs_and_one_class_training() -> None:
         WordTfidfCosineScorer().fit(["requirement"], [])
     with pytest.raises(ValueError, match="both 0 and 1"):
         HybridEvidenceReranker().fit(REQUIREMENTS, EVIDENCE, [1, 1, 1, 1])
+
+
+def test_selected_reranker_factory_trains_supported_winner() -> None:
+    model = fit_selected_reranker(
+        "hybrid_lsa_reranker",
+        REQUIREMENTS,
+        EVIDENCE,
+        LABELS,
+        [],
+        random_state=7,
+    )
+
+    assert model.feature_manifest()["model_type"] == "hybrid_lsa_reranker"
+    lexical = fit_selected_reranker(
+        "tfidf_cosine",
+        REQUIREMENTS,
+        EVIDENCE,
+        LABELS,
+        [],
+        random_state=7,
+    )
+    assert lexical.feature_manifest()["model_type"] == "word_tfidf_cosine"
+
+
+def test_word_tfidf_exposes_artifact_probability_contract() -> None:
+    scorer = WordTfidfCosineScorer().fit(REQUIREMENTS, EVIDENCE)
+
+    scores = scorer.predict_proba(REQUIREMENTS, EVIDENCE)
+
+    assert scores.shape == (4,)
+    assert all(0.0 <= score <= 1.0 for score in scores)

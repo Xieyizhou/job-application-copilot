@@ -10,6 +10,7 @@ from typing import Any
 
 import streamlit as st
 
+from dashboard_cover_letter_evidence import render_evidence_and_gaps
 from dashboard_packages import build_application_package_zip, existing_package_files, package_zip_filename
 from dashboard_review import tracker_follow_up_due, tracker_next_action
 from dashboard_titles import display_title_from_value
@@ -48,11 +49,31 @@ def render_cover_letter_workspace(
     tracker_row: dict[str, Any] | None,
     services: Any,
 ) -> None:
-    """Render the selected letter with its primary action first."""
+    """Compatibility wrapper for the cover-letter context and document."""
     artifacts = cover_letter_artifacts(package_dir)
     package_key = safe_slug(services.relative_path(package_dir)) or "selected_package"
+    render_cover_letter_context(artifacts, tracker_row, services)
+    render_cover_letter_document(artifacts, tracker_row, package_key, services)
+
+
+def render_cover_letter_context(
+    artifacts: CoverLetterArtifacts,
+    tracker_row: dict[str, Any] | None,
+    services: Any,
+) -> None:
+    """Render the evidence context in the left side of the desktop workspace."""
     _render_identity(tracker_row)
+    render_evidence_and_gaps(artifacts, services)
     _render_readiness_statement(artifacts)
+
+
+def render_cover_letter_document(
+    artifacts: CoverLetterArtifacts,
+    tracker_row: dict[str, Any] | None,
+    package_key: str,
+    services: Any,
+) -> None:
+    """Render the editable draft and actions in the right-side document pane."""
     _render_draft(artifacts, package_key, services)
     _render_application_status(tracker_row, services)
     _render_secondary_materials(artifacts, tracker_row, package_key, services)

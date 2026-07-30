@@ -7,12 +7,10 @@ applications, scrape websites, or expose API credentials.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import html
 import io
 import json
 import re
-import sqlite3
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,27 +82,16 @@ SHORTLIST_REGION_OPTIONS = [
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from analyze_job import analyze_job_structured, extract_job_description_body  # noqa: E402
-from apply_package import create_application_package, parse_job_metadata  # noqa: E402
-from company_verification import (  # noqa: E402
-    company_verification_fields,
-    confirm_markdown_company,
-    dedupe_strings,
-    normalize_company_name,
-    verification_from_markdown,
-    verification_status_label,
-)
+from analyze_job import analyze_job_structured  # noqa: E402
 from export_documents import (  # noqa: E402
     export_cover_letter_to_docx,
     parse_job_metadata_from_package,
 )
-from fetch_history import latest_successful_fetch_run, load_fetch_runs  # noqa: E402
+from fetch_history import load_fetch_runs  # noqa: E402
 from fetch_jobs import jsearch_configured  # noqa: E402
 from jd_enrichment import enrich_saved_job_description  # noqa: E402
 import manual_jobs as manual_jobs_module  # noqa: E402
-from manual_jobs import confirm_manual_job_company  # noqa: E402
 from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
-from ml.jd_quality import classify_jd_quality  # noqa: E402
 from output_paths import safe_slug, timestamp_slug  # noqa: E402
 from tracker import add_application, update_status  # noqa: E402
 from dashboard_fit import (  # noqa: E402
@@ -115,14 +102,30 @@ from dashboard_fit import (  # noqa: E402
     summarize_analysis_requirements,
 )
 from dashboard_fit_sections import render_fit_analysis_sections as render_compact_fit_sections  # noqa: E402
+from dashboard_analysis_service import (  # noqa: E402
+    analyze_dashboard_job as service_analyze_dashboard_job,
+    unavailable_dashboard_analysis,
+)
+from dashboard_company_verification import (  # noqa: E402
+    company_candidate_names,
+    company_generation_allowed,
+    compact_company_evidence,
+    render_company_verification_summary,
+    render_manual_company_confirmation,
+    render_markdown_company_confirmation,
+)
 from dashboard_fetch import (  # noqa: E402
-    ADZUNA_SUPPORTED_COUNTRIES,
-    DEFAULT_FETCH_LIMIT_PER_SOURCE,
-    MAX_FETCH_LIMIT_PER_SOURCE,
-    REGION_CONFIG,
-    REGION_OPTIONS,
     FetchPageServices,
     fetch_jobs_tab as render_fetch_jobs_page,
+)
+from dashboard_fetch_history import (  # noqa: E402
+    fetch_history_rows,
+    fetch_run_job_rows,
+    fetch_run_label,
+    render_fetch_history_section,
+    render_fetch_run_details,
+    render_fetch_run_job_cards,
+    render_fetch_run_job_table,
 )
 from dashboard_home import (  # noqa: E402
     HomePageServices,
@@ -135,8 +138,6 @@ from dashboard_cover_letter import (  # noqa: E402
 from dashboard_packages import (  # noqa: E402
     INTERNAL_PACKAGE_FILES,
     build_application_package_zip,
-    existing_package_files,
-    package_zip_filename,
     readiness_status,
 )
 from dashboard_manual import (  # noqa: E402
@@ -145,42 +146,35 @@ from dashboard_manual import (  # noqa: E402
 )
 from dashboard_regions import (  # noqa: E402
     build_region_options,
-    default_region_option_keys,
     dynamic_source_options,
-    filtered_region_option_keys,
-    infer_high_level_region,
-    infer_location_from_path,
     job_matches_region_option,
     load_recent_region_keys,
     normalize_location,
-    region_label,
-    region_option_key,
-    region_search_blob,
     source_display_name,
+)
+from dashboard_repository import (  # noqa: E402
+    build_dashboard_job_record as repository_build_dashboard_job_record,
+    deduplicate_dashboard_jobs,
+    infer_source_from_path,
+    job_description_preference,
+    job_duplicate_key,
+    list_job_description_files as repository_list_job_description_files,
+    load_screened_jobs as repository_load_screened_jobs,
+    load_tracker_rows as repository_load_tracker_rows,
 )
 from dashboard_review import (  # noqa: E402
     RECOMMENDATION_RANK,
-    is_current_recommendation,
-    is_ignored_tracker_status,
     is_strong_match,
-    job_evidence_label,
-    job_needs_full_jd,
-    parse_local_datetime,
     review_inbox_view_matches,
     review_job_next_action,
-    review_job_sort_key,
     sorted_review_jobs,
-    tracker_age_days,
     tracker_follow_up_due,
     tracker_next_action,
 )
 from dashboard_review_page import (  # noqa: E402
     ReviewPageServices,
     job_descriptions_tab as render_review_jobs_page,
-    render_job_result_cards as render_review_job_cards,
-    render_review_action_buttons as render_review_job_actions,
     resolve_review_job_selection,
-    set_review_job_selection,
 )
 from dashboard_shell import (  # noqa: E402
     PAGE_NAMES,
@@ -195,11 +189,8 @@ from dashboard_settings import (  # noqa: E402
     safety_notes_tab as render_settings_page,
 )
 from dashboard_titles import (  # noqa: E402
-    display_title_from_value,
-    first_role_heading,
     get_job_display_title,
     is_placeholder_job_title,
-    looks_like_internal_slug,
     read_markdown_field,
     resolve_canonical_job_title,
 )
@@ -213,6 +204,7 @@ from workspace import (  # noqa: E402
     generic_cover_letter_template,
     resolve_workspace,
 )
+from scoring_types import DashboardJob, TrackerRow  # noqa: E402
 
 
 def run_with_captured_output(func: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
@@ -266,28 +258,14 @@ def go_to_page(page_name: str) -> None:
 
 def list_job_description_files(search_text: str = "") -> list[Path]:
     """Return saved job description Markdown files recursively."""
-    query = search_text.strip().lower()
-    if demo_mode_enabled():
-        if not DEMO_JOB_DIR.exists():
-            return []
-        demo_paths = [path for path in DEMO_JOB_DIR.glob("*.md") if clean_job_description_path(path)]
-        return sorted(
-            [path for path in demo_paths if not query or query in str(path).lower()],
-            key=lambda path: str(path).lower(),
-        )
-
-    search_roots = [current_workspace().jobs_dir]
-    paths = []
-    for root in search_roots:
-        if not root.exists():
-            continue
-        paths.extend(
-            path
-            for path in root.rglob("*.md")
-            if clean_job_description_path(path)
-            and (not query or query in str(path).lower())
-        )
-    return sorted(paths, key=lambda path: str(path).lower())
+    workspace = current_workspace()
+    return repository_list_job_description_files(
+        demo_mode=workspace.mode == "demo",
+        demo_job_dir=DEMO_JOB_DIR,
+        jobs_dir=workspace.jobs_dir,
+        is_job_description=clean_job_description_path,
+        search_text=search_text,
+    )
 
 
 def relative_path(path: Path) -> str:
@@ -325,125 +303,6 @@ def normalize_text(text: str) -> str:
     return " " + " ".join(text.lower().replace("-", " ").split()) + " "
 
 
-def company_generation_allowed(fields: dict[str, Any]) -> bool:
-    """Return True when cover-letter generation may use this company name."""
-    company = str(fields.get("company_normalized", "") or fields.get("normalized_company", "")).strip()
-    confidence = str(fields.get("company_confidence", "") or fields.get("confidence", "")).lower()
-    confirmed = bool(fields.get("company_confirmed_by_user") or fields.get("confirmed_by_user"))
-    needs_review = bool(fields.get("company_needs_review", fields.get("needs_review", True)))
-    return bool(company) and (confidence == "high" or confirmed) and not needs_review
-
-
-def compact_company_evidence(fields: dict[str, Any]) -> str:
-    """Format short company verification evidence for captions."""
-    evidence = fields.get("company_evidence", fields.get("evidence", [])) or []
-    if isinstance(evidence, str):
-        evidence = [item.strip() for item in evidence.split("|") if item.strip()]
-    return " | ".join(str(item) for item in evidence[:2]) or "-"
-
-
-def company_candidate_names(fields: dict[str, Any]) -> list[str]:
-    """Return normalized candidate names for selectors."""
-    candidates = fields.get("company_candidates", fields.get("candidates", [])) or []
-    names = []
-    for item in candidates:
-        if isinstance(item, dict):
-            name = str(item.get("normalized_company", "") or item.get("company", "")).strip()
-        else:
-            name = str(item).strip()
-        if name:
-            names.append(name)
-    current = str(fields.get("company_normalized", "") or fields.get("normalized_company", "") or fields.get("company_raw", "")).strip()
-    if current:
-        names.insert(0, current)
-    return dedupe_strings(names)
-
-
-def render_company_verification_summary(fields: dict[str, Any]) -> None:
-    """Show compact verification status and supporting evidence."""
-    status = verification_status_label(fields)
-    company = str(fields.get("company_normalized", "") or fields.get("normalized_company", "") or fields.get("company_raw", "") or "-")
-    st.write(f"Company: {company}")
-    st.write(f"Verification: {status}")
-    if status in {"Needs review", "Missing"}:
-        st.warning("Company name needs confirmation before generating a cover letter.")
-    evidence_text = compact_company_evidence(fields)
-    if evidence_text != "-":
-        st.caption(f"Evidence: {evidence_text}")
-
-
-def render_markdown_company_confirmation(path: Path, key_prefix: str) -> dict[str, Any]:
-    """Render editable company confirmation controls for a Markdown job file."""
-    fields = verification_from_markdown(path)
-    render_company_verification_summary(fields)
-    candidates = company_candidate_names(fields)
-    if candidates:
-        selected = st.selectbox(
-            "Suggested company candidates",
-            candidates,
-            key=f"{key_prefix}_company_candidate",
-        )
-    else:
-        selected = str(fields.get("company_raw", "") or "")
-    edited_company = st.text_input(
-        "Editable company name",
-        value=selected,
-        key=f"{key_prefix}_company_confirm_input",
-    )
-    if st.button("Confirm company name", key=f"{key_prefix}_company_confirm_button"):
-        normalized = normalize_company_name(edited_company)
-        if not normalized:
-            st.error("Enter a valid company name before confirming.")
-        else:
-            confirm_markdown_company(path, normalized)
-            st.success("Company name confirmed.")
-            st.rerun()
-    return fields
-
-
-def render_manual_company_confirmation(record: dict[str, Any], key_prefix: str) -> dict[str, Any]:
-    """Render editable company confirmation controls for a saved manual record."""
-    fields = company_verification_fields(
-        str(record.get("company_raw") or record.get("company", "")),
-        {
-            "job_text": str(record.get("job_description", "") or ""),
-            "role": str(record.get("title", "") or ""),
-            "location": str(record.get("location", "") or ""),
-            "job_url": str(record.get("url", "") or ""),
-            "company_confirmed_by_user": bool(record.get("company_confirmed_by_user")),
-            "company_source_confidence": str(record.get("company_confidence", "") or ""),
-            "company_source_evidence": compact_company_evidence(record),
-        },
-        confirmed_by_user=bool(record.get("company_confirmed_by_user")),
-        confirmed_at=str(record.get("company_confirmed_at", "") or ""),
-    )
-    fields.update({key: record.get(key) for key in record if key.startswith("company_")})
-    render_company_verification_summary(fields)
-    candidates = company_candidate_names(fields)
-    selected = st.selectbox(
-        "Suggested company candidates",
-        candidates or [str(record.get("company", "") or "")],
-        key=f"{key_prefix}_company_candidate",
-    )
-    edited_company = st.text_input(
-        "Editable company name",
-        value=selected,
-        key=f"{key_prefix}_company_confirm_input",
-    )
-    if st.button("Confirm company name", key=f"{key_prefix}_company_confirm_button"):
-        normalized = normalize_company_name(edited_company)
-        if not normalized:
-            st.error("Enter a valid company name before confirming.")
-        else:
-            updated = confirm_manual_job_company(str(record["id"]), normalized)
-            if updated:
-                st.success("Company name confirmed.")
-                st.rerun()
-            else:
-                st.error("Could not update that target job record.")
-    return fields
-
-
 def save_recent_region_key(region_key: str) -> None:
     """Persist a small MRU list for the compact default region dropdown."""
     if demo_mode_enabled() or not region_key or region_key == "all":
@@ -479,27 +338,6 @@ def score_job_for_dashboard(job_text: str) -> int:
             score -= 15
 
     return max(0, min(100, score))
-
-
-def recommendation_for_score(score: int, red_flags: list[str]) -> str:
-    """Convert dashboard score and red flags into a recommendation label."""
-    if red_flags and score >= 65:
-        return "Maybe Apply"
-    if score >= 80:
-        return "Apply"
-    if score >= 50:
-        return "Maybe Apply"
-    return "Skip or Low Priority"
-
-
-def confidence_for_job(job_text: str, score: int) -> str:
-    """Estimate confidence based on available JD detail."""
-    word_count = len(job_text.split())
-    if word_count >= 250 and score >= 70:
-        return "High"
-    if word_count >= 120:
-        return "Medium"
-    return "Low"
 
 
 def warnings_for_job(job_text: str) -> list[str]:
@@ -549,32 +387,8 @@ def asks_for_uk_work_authorization(job_text: str) -> bool:
     return any(phrase in normalized for phrase in phrases)
 
 
-def unavailable_dashboard_analysis(reason: str) -> dict[str, Any]:
-    """Return a safe current-analysis result without promoting a legacy score."""
-    return {
-        "score": None,
-        "recommendation": "Manual Review",
-        "score_breakdown": [],
-        "eligibility": {"status": "manual_review", "reasons": []},
-        "confidence": {
-            "level": "low",
-            "active_requirement_count": 0,
-            "candidate_evidence_count": 0,
-            "reasons": [reason],
-        },
-        "candidate_profile": {"career_level": "unknown", "years_experience": None, "highest_degree": "unknown", "evidence": []},
-        "parsed_job": {"required_skills": [], "preferred_skills": [], "experience_level": []},
-        "matched_skills": [],
-        "partial_matches": [],
-        "missing_skills": [],
-        "main_reason": reason,
-        "main_risk": "Review the full job description manually.",
-        "analysis_available": False,
-    }
-
-
 def analyze_job_for_dashboard(
-    job: dict[str, Any],
+    job: DashboardJob,
     job_text: str,
     candidate_text: str | None = None,
     *,
@@ -587,175 +401,36 @@ def analyze_job_for_dashboard(
         use_cache = get_script_run_ctx(suppress_warning=True) is not None
     if not job_text.strip():
         return unavailable_dashboard_analysis("Job description is empty or unreadable.")
+    workspace = current_workspace() if use_cache or candidate_text is None else None
     if candidate_text is None:
-        candidate_path = current_workspace().resume_source_path
+        candidate_path = workspace.resume_source_path if workspace else None
         if candidate_path is None or not candidate_path.is_file():
             return unavailable_dashboard_analysis("Candidate source is missing or unreadable.")
         candidate_text = read_text_file(candidate_path)
-    if not candidate_text.strip():
-        return unavailable_dashboard_analysis("Candidate source is missing or empty.")
-
-    workspace = current_workspace() if use_cache else None
-    cache_material = "\0".join(
-        [
-            DASHBOARD_SCORING_VERSION,
-            workspace.mode if workspace else "provided",
-            str(workspace.root) if workspace else "provided",
-            str(job.get("canonical_job_key", "") or job.get("path", "")),
-            hashlib.sha256(job_text.encode("utf-8")).hexdigest(),
-            hashlib.sha256(candidate_text.encode("utf-8")).hexdigest(),
-        ]
-    )
-    cache_key = hashlib.sha256(cache_material.encode("utf-8")).hexdigest()
     cache = st.session_state.setdefault("dashboard_analysis_cache", {}) if use_cache else {}
-    if cache_key in cache:
-        return dict(cache[cache_key])
-
-    try:
-        analysis = dict(analyze_job_structured(job_text, candidate_text))
-    except (OSError, ValueError, TypeError) as error:
-        return unavailable_dashboard_analysis(f"Current analysis could not run: {error}")
-
-    confidence = dict(analysis.get("confidence", {}))
-    if int(confidence.get("active_requirement_count", 0) or 0) == 0:
-        return unavailable_dashboard_analysis("Structured requirements could not be extracted reliably.")
-    analysis["analysis_available"] = True
-    if use_cache:
-        cache[cache_key] = dict(analysis)
-    return analysis
+    return service_analyze_dashboard_job(
+        job,
+        job_text,
+        candidate_text,
+        analyzer=analyze_job_structured,
+        scoring_version=DASHBOARD_SCORING_VERSION,
+        cache=cache if use_cache else None,
+        workspace_mode=workspace.mode if workspace else "provided",
+        workspace_root=str(workspace.root) if workspace else "provided",
+    )
 
 
-def build_dashboard_job_record(path: Path) -> dict[str, Any]:
+def build_dashboard_job_record(path: Path) -> DashboardJob:
     """Build one ranked dashboard row from a saved job Markdown file."""
-    job_text = read_text_file(path)
-    jd_quality = classify_jd_quality(job_text)
-    company_fields = verification_from_markdown(path)
-    company = str(company_fields.get("company_normalized") or read_markdown_field(job_text, "Company", "Not provided"))
-    stored_role = read_markdown_field(job_text, "Role", path.stem)
-    role = resolve_canonical_job_title(
-        {"company": company, "role": stored_role, "preview": job_text}
-    )
-    display_role = role
-    location = normalize_location(read_markdown_field(job_text, "Location", infer_location_from_path(path)))
-    high_level_region = infer_high_level_region(location)
-    source = read_markdown_field(job_text, "Source", infer_source_from_path(path))
-    job_url = read_markdown_field(job_text, "Job URL", "")
-    first_seen_at = read_markdown_field(job_text, "First Seen At", read_markdown_field(job_text, "Created at", "unknown"))
-    last_seen_at = read_markdown_field(job_text, "Last Seen At", first_seen_at)
-    latest_fetch_run_id = read_markdown_field(job_text, "Latest Fetch Run ID", read_markdown_field(job_text, "Last Seen Fetch Run ID", ""))
-    first_seen_fetch_run_id = read_markdown_field(job_text, "First Seen Fetch Run ID", "")
-    canonical_job_key = read_markdown_field(job_text, "Canonical Job Key", "")
-    description_source = read_markdown_field(job_text, "Description Source", "")
-    jd_fetch_status = read_markdown_field(job_text, "JD Fetch Status", "")
-    description_word_count = len(extract_job_description_body(job_text).split())
-    red_flags = detect_dashboard_red_flags(job_text)
-    score_text = read_markdown_field(job_text, "Match Score", "")
-    legacy_score = int(score_text) if score_text.isdigit() else None
-    legacy_recommendation = read_markdown_field(job_text, "Recommendation", "")
-    warnings = warnings_for_job(job_text)
-    hard_red_flag = bool(red_flags)
-
-    return {
-        "company": company,
-        "company_raw": company_fields.get("company_raw", ""),
-        "company_normalized": company_fields.get("company_normalized", company),
-        "company_confidence": company_fields.get("company_confidence", ""),
-        "company_needs_review": company_fields.get("company_needs_review", True),
-        "company_evidence": company_fields.get("company_evidence", []),
-        "company_candidates": company_fields.get("company_candidates", []),
-        "company_confirmed_by_user": company_fields.get("company_confirmed_by_user", False),
-        "company_confirmed_at": company_fields.get("company_confirmed_at", ""),
-        "company_status": verification_status_label(company_fields),
-        "role": role,
-        "display_role": display_role,
-        "location": location,
-        "normalized_location": location,
-        "high_level_region": high_level_region,
-        "source": source.lower(),
-        "score": None,
-        "recommendation": "Manual Review",
-        "confidence": {"level": "low", "active_requirement_count": 0, "candidate_evidence_count": 0, "reasons": []},
-        "eligibility": {"status": "manual_review", "reasons": []},
-        "score_breakdown": [],
-        "analysis_result": {},
-        "analysis_available": False,
-        "legacy_score": legacy_score,
-        "legacy_recommendation": legacy_recommendation,
-        "red_flags": red_flags,
-        "warnings": warnings,
-        "hard_red_flag": hard_red_flag,
-        "job_url": job_url,
-        "canonical_job_key": canonical_job_key,
-        "description_source": description_source,
-        "jd_fetch_status": jd_fetch_status,
-        "description_word_count": description_word_count,
-        "jd_quality": jd_quality,
-        "first_seen_at": first_seen_at,
-        "last_seen_at": last_seen_at,
-        "first_seen_fetch_run_id": first_seen_fetch_run_id,
-        "latest_fetch_run_id": latest_fetch_run_id,
-        "is_manual": "manual_jobs" in path.parts,
-        "path": path,
-        "preview": job_text[:1200],
-        "label": f"{company} | {display_role} | {location}",
-    }
-
-
-def job_duplicate_key(job: dict[str, Any]) -> tuple[str, str, str, str]:
-    """Return URL key plus company/role/location fallback fields."""
-    return (
-        str(job["job_url"]).strip().lower(),
-        str(job["company"]).strip().lower(),
-        str(job["role"]).strip().lower(),
-        str(job["location"]).strip().lower(),
+    return repository_build_dashboard_job_record(
+        path,
+        read_text=read_text_file,
+        detect_red_flags=detect_dashboard_red_flags,
+        collect_warnings=warnings_for_job,
     )
 
 
-def job_description_preference(job: dict[str, Any]) -> tuple[int, int, int]:
-    """Prefer duplicate records using the canonical JD-quality result."""
-    quality = dict(job.get("jd_quality", {}) or {})
-    readiness = (
-        2
-        if quality.get("reliable_scoring_ready", False)
-        else 1
-        if quality.get("provisional_scoring_ready", False)
-        else 0
-    )
-    return (
-        readiness,
-        int(quality.get("quality_score", 0) or 0),
-        int(job.get("description_word_count", 0) or 0),
-    )
-
-
-def deduplicate_dashboard_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Deduplicate saved jobs while retaining the strongest available JD evidence."""
-    unique_jobs: list[dict[str, Any]] = []
-    url_indexes: dict[str, int] = {}
-    fallback_indexes: dict[tuple[str, str, str], int] = {}
-
-    for job in jobs:
-        job_url, company, role, location = job_duplicate_key(job)
-        fallback = (company, role, location)
-        existing_index = url_indexes.get(job_url) if job_url else None
-        if existing_index is None and all(fallback):
-            existing_index = fallback_indexes.get(fallback)
-
-        if existing_index is None:
-            existing_index = len(unique_jobs)
-            unique_jobs.append(job)
-        elif job_description_preference(job) > job_description_preference(unique_jobs[existing_index]):
-            unique_jobs[existing_index] = job
-
-        if job_url:
-            url_indexes[job_url] = existing_index
-        if all(fallback):
-            fallback_indexes[fallback] = existing_index
-
-    return unique_jobs
-
-
-def dashboard_rank_key(job: dict[str, Any]) -> tuple[int, int, int, int]:
+def dashboard_rank_key(job: DashboardJob) -> tuple[int, int, int, int]:
     """Sort by recommendation, score, confidence, then fewer red flags."""
     return (
         RECOMMENDATION_RANK.get(job["recommendation"], 0),
@@ -765,46 +440,20 @@ def dashboard_rank_key(job: dict[str, Any]) -> tuple[int, int, int, int]:
     )
 
 
-def infer_source_from_path(path: Path) -> str:
-    """Infer source from organized job description paths."""
-    parts = list(path.parts)
-    if "manual_jobs" in parts:
-        return "manual"
-    if "job_descriptions" in parts:
-        index = parts.index("job_descriptions")
-        if len(parts) > index + 2:
-            return parts[index + 1]
-    return "unknown"
-
-
-def load_screened_jobs(search_text: str = "") -> list[dict[str, Any]]:
+def load_screened_jobs(search_text: str = "") -> list[DashboardJob]:
     """Load jobs and attach canonical full-analysis results in memory."""
     _ = search_text
-    records = [build_dashboard_job_record(path) for path in list_job_description_files()]
-    unique_records = deduplicate_dashboard_jobs(records)
     candidate_path = current_workspace().resume_source_path
-    candidate_text = read_text_file(candidate_path) if candidate_path and candidate_path.is_file() else ""
-    analyzed_records = []
-    relevance_pairs: list[tuple[str, str]] = []
-    for job in unique_records:
-        job_text = read_text_file(Path(job["path"]))
-        analysis = analyze_job_for_dashboard(job, job_text, candidate_text)
-        analyzed = apply_canonical_analysis(job, analysis)
-        relevance_pairs.append((candidate_text, extract_job_description_body(job_text)))
-        presentation = build_fit_presentation(analyzed)
-        analyzed["label"] = (
-            f"{analyzed['company']} | {get_job_display_title(analyzed)} | "
-            f"{analyzed['location']} | {presentation['role_fit']}"
-        )
-        analyzed_records.append(analyzed)
-    relevance_signals = suppress_collapsed_relevance_signals(
-        predict_relevance_batch(relevance_pairs)
+    return repository_load_screened_jobs(
+        list_job_description_files(),
+        candidate_path=candidate_path,
+        read_text=read_text_file,
+        build_record=build_dashboard_job_record,
+        analyze_job=analyze_job_for_dashboard,
+        rank_key=dashboard_rank_key,
+        predict_relevance=predict_relevance_batch,
+        suppress_relevance=suppress_collapsed_relevance_signals,
     )
-    for analyzed, relevance_signal in zip(analyzed_records, relevance_signals):
-        analyzed["ml_relevance"] = relevance_signal
-    unique_records = analyzed_records
-    unique_records.sort(key=dashboard_rank_key, reverse=True)
-    return unique_records
 
 
 def load_tracker_rows(
@@ -813,98 +462,19 @@ def load_tracker_rows(
     company_search: str = "",
     sort_by: str = "created_at",
     descending: bool = True,
-) -> list[dict[str, Any]]:
+) -> list[TrackerRow]:
     """Load tracker rows with simple local filtering and sorting."""
-    database_path = current_workspace().tracker_database_path
-    if database_path is None or not database_path.exists():
-        return []
-
-    order_map = {
-        "match_score": "COALESCE(match_score, -1)",
-        "created_at": "created_at",
-        "status": "status",
-    }
-    order_column = order_map.get(sort_by, "created_at")
-    order_direction = "DESC" if descending else "ASC"
-
-    conditions = []
-    params: list[Any] = []
-
-    if statuses:
-        placeholders = ", ".join("?" for _ in statuses)
-        conditions.append(f"status IN ({placeholders})")
-        params.extend(statuses)
-
-    if minimum_score > 0:
-        conditions.append("COALESCE(match_score, 0) >= ?")
-        params.append(minimum_score)
-
-    if company_search.strip():
-        conditions.append("LOWER(company) LIKE ?")
-        params.append(f"%{company_search.strip().lower()}%")
-
-    where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-    query = f"""
-        SELECT
-            id,
-            company,
-            role,
-            location,
-            job_url,
-            match_score,
-            recommendation,
-            status,
-            resume_file,
-            cover_letter_file,
-            notes,
-            created_at,
-            applied_date
-        FROM applications
-        {where_clause}
-        ORDER BY {order_column} {order_direction}, id DESC
-    """
-
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
-        rows = connection.execute(query, params).fetchall()
-
-    return [dict(row) for row in rows]
+    return repository_load_tracker_rows(
+        current_workspace().tracker_database_path,
+        statuses=statuses,
+        minimum_score=minimum_score,
+        company_search=company_search,
+        sort_by=sort_by,
+        descending=descending,
+    )
 
 
-def load_tracker_record(application_id: int) -> dict[str, Any] | None:
-    """Load one tracker record by id."""
-    database_path = current_workspace().tracker_database_path
-    if database_path is None or not database_path.exists():
-        return None
-
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
-        row = connection.execute(
-            """
-            SELECT
-                id,
-                company,
-                role,
-                location,
-                job_url,
-                match_score,
-                recommendation,
-                status,
-                resume_file,
-                cover_letter_file,
-                notes,
-                created_at,
-                applied_date
-            FROM applications
-            WHERE id = ?
-            """,
-            (application_id,),
-        ).fetchone()
-
-    return dict(row) if row else None
-
-
-def resolve_package_dir_from_tracker(row: dict[str, Any]) -> Path | None:
+def resolve_package_dir_from_tracker(row: TrackerRow | dict[str, Any]) -> Path | None:
     """Infer the package folder from tracker file paths."""
     for key in ["cover_letter_file", "resume_file"]:
         value = str(row.get(key) or "").strip()
@@ -954,16 +524,17 @@ def count_generated_packages() -> int:
     )
 
 
-def tracker_args_for_job(job: dict[str, Any]) -> SimpleNamespace:
+def tracker_args_for_job(job: DashboardJob) -> SimpleNamespace:
     """Prepare canonical current-analysis values for a new tracker row."""
     eligibility = eligibility_status(job).replace("_", " ").title()
     confidence = confidence_level(job.get("confidence")).title()
+    score = job.get("score")
     return SimpleNamespace(
         company=str(job.get("company", "")).strip() or "Unknown company",
         role=resolve_canonical_job_title(job),
         location=str(job.get("normalized_location", "") or job.get("location", "")).strip(),
         job_url=str(job.get("job_url", "")).strip(),
-        match_score=int(job["score"]) if job.get("analysis_available") and job.get("score") is not None else None,
+        match_score=int(score) if job.get("analysis_available") and score is not None else None,
         recommendation=str(job.get("recommendation", "Manual Review")).strip(),
         status="saved",
         resume_file="",
@@ -975,7 +546,7 @@ def tracker_args_for_job(job: dict[str, Any]) -> SimpleNamespace:
     )
 
 
-def save_job_to_tracker(job: dict[str, Any]) -> tuple[int | None, str]:
+def save_job_to_tracker(job: DashboardJob) -> tuple[int | None, str]:
     """Save a reviewed job lead to the local tracker without generating documents."""
     args = tracker_args_for_job(job)
     workspace = current_workspace()
@@ -984,7 +555,10 @@ def save_job_to_tracker(job: dict[str, Any]) -> tuple[int | None, str]:
     return run_with_captured_output(add_application, args, workspace.tracker_database_path)
 
 
-def tracker_row_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+def tracker_row_for_job(
+    job: DashboardJob,
+    tracker_rows: list[TrackerRow],
+) -> TrackerRow | None:
     """Find a tracker row for a job using URL first, then company/role/location."""
     job_url = str(job.get("job_url", "") or "").strip().lower()
     company = str(job.get("company", "") or "").strip().lower()
@@ -1007,7 +581,7 @@ def tracker_row_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]])
     return None
 
 
-def tracker_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> str:
+def tracker_status_for_job(job: DashboardJob, tracker_rows: list[TrackerRow]) -> str:
     """Return the current tracker status for display on job cards."""
     if demo_mode_enabled():
         return "Demo only"
@@ -1015,7 +589,7 @@ def tracker_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any
     return str(row.get("status", "") or "Not tracked") if row else "Not tracked"
 
 
-def package_dir_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> Path | None:
+def package_dir_for_job(job: DashboardJob, tracker_rows: list[TrackerRow]) -> Path | None:
     """Find a generated package for display without changing package behavior."""
     row = tracker_row_for_job(job, tracker_rows)
     if row:
@@ -1025,7 +599,7 @@ def package_dir_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]])
     return latest_package_for_company_role(str(job.get("company", "")), resolve_canonical_job_title(job))
 
 
-def package_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> str:
+def package_status_for_job(job: DashboardJob, tracker_rows: list[TrackerRow]) -> str:
     """Return a compact package status for Review Jobs display."""
     if demo_mode_enabled():
         report_path = DEMO_PACKAGE_DIR / "analysis.md"
@@ -1044,7 +618,12 @@ def package_status_for_job(job: dict[str, Any], tracker_rows: list[dict[str, Any
     return "Cover letter ready" if package_dir_for_job(job, tracker_rows) else "No cover letter"
 
 
-def default_review_inbox_view(jobs: list[dict[str, Any]], tracker_rows: list[dict[str, Any]], *, demo: bool) -> str:
+def default_review_inbox_view(
+    jobs: list[DashboardJob],
+    tracker_rows: list[TrackerRow],
+    *,
+    demo: bool,
+) -> str:
     """Choose the initial Review Jobs view without changing filtering rules."""
     if demo:
         return "All"
@@ -1071,7 +650,10 @@ def default_review_inbox_view(jobs: list[dict[str, Any]], tracker_rows: list[dic
     return "All"
 
 
-def mark_job_not_interested(job: dict[str, Any], tracker_rows: list[dict[str, Any]]) -> tuple[int | None, str]:
+def mark_job_not_interested(
+    job: DashboardJob,
+    tracker_rows: list[TrackerRow],
+) -> tuple[int | None, str]:
     """Archive a tracked job, creating a tracker row first if needed."""
     row = tracker_row_for_job(job, tracker_rows)
     if row is None:
@@ -1079,6 +661,8 @@ def mark_job_not_interested(job: dict[str, Any], tracker_rows: list[dict[str, An
     else:
         tracker_id = int(row["id"])
         output = ""
+    if tracker_id is None:
+        raise WorkspaceError("Tracker record could not be created.")
     database_path = current_workspace().tracker_database_path
     if database_path is None:
         raise WorkspaceError("Tracker is unavailable in Demo workspace.")
@@ -1109,15 +693,6 @@ def load_package_notes(package_dir: Path) -> str:
         if candidate.exists():
             return read_text_file(candidate)
     return ""
-
-
-def first_existing_package_file(package_dir: Path, names: list[str]) -> Path | None:
-    """Return the first known generated package file that exists."""
-    for name in names:
-        candidate = package_dir / name
-        if candidate.exists() and candidate.is_file():
-            return candidate
-    return None
 
 
 def render_readiness_checklist(
@@ -1165,116 +740,6 @@ def generate_cover_letter_docx_for_package(package_dir: Path) -> tuple[Path | No
     return cover_letter_docx_path, warnings
 
 
-def fetch_run_label(run: dict[str, Any]) -> str:
-    """Build a readable fetch-run selector label."""
-    return (
-        f"{run.get('created_at', '')} | {source_display_name(str(run.get('source', '')))} | "
-        f"{run.get('region', '-') or '-'} | {run.get('query', '-') or '-'} | "
-        f"{run.get('new_jobs_count', 0)} new"
-    )
-
-
-def render_fetch_run_job_table(jobs: list[dict[str, Any]], empty_message: str) -> None:
-    """Render compact job summaries stored on a fetch run."""
-    if not jobs:
-        st.info(empty_message)
-        return
-    st.dataframe(
-        [
-            {
-                "Company": job.get("company", ""),
-                "Role": get_job_display_title(job),
-                "Location": normalize_location(str(job.get("location", ""))),
-                "Source": source_display_name(str(job.get("source", ""))),
-                "Saved": "Yes" if job.get("path") else "No",
-            }
-            for job in jobs
-        ],
-        width="stretch",
-        hide_index=True,
-    )
-
-
-def render_fetch_run_job_cards(jobs: list[dict[str, Any]], empty_message: str) -> None:
-    """Render fetched jobs as simple cards without changing fetch behavior."""
-    if not jobs:
-        st.info(empty_message)
-        return
-
-    for index, job in enumerate(jobs, start=1):
-        with st.container(border=True):
-            company = str(job.get("company", "") or "Unknown company")
-            role = get_job_display_title(job, fallback="Unknown role")
-            location = normalize_location(str(job.get("location", ""))) or "-"
-            source = source_display_name(str(job.get("source", "")))
-            st.markdown(f"**{company}**")
-            st.write(role)
-            st.caption(f"{location} | {source}")
-            st.caption("Saved locally · Fit and evidence quality are calculated in Review Jobs")
-            if job.get("job_url"):
-                st.link_button("Open original posting", str(job["job_url"]))
-            if job.get("path"):
-                with st.expander("View Details", expanded=False):
-                    path = PROJECT_ROOT / str(job.get("path", ""))
-                    if path.exists():
-                        st.markdown(read_text_file(path)[:1200])
-                    else:
-                        st.write(f"Saved path: `{job.get('path', '')}`")
-
-
-def render_fetch_run_details(run: dict[str, Any]) -> None:
-    """Show new jobs first, with repeated jobs collapsed by default."""
-    if not run:
-        return
-    st.write(
-        f"{source_display_name(str(run.get('source', '')))} / {run.get('region', '-') or '-'} / "
-        f"{run.get('query', '-') or '-'}"
-    )
-    st.caption(
-        f"{run.get('total_jobs_returned', 0)} returned | "
-        f"{run.get('new_jobs_count', 0)} new | "
-        f"{run.get('duplicate_jobs_count', 0)} already seen | "
-        f"Status: {run.get('fetch_status', '-')}"
-    )
-    notes = str(run.get("notes", "") or "").strip()
-    if notes:
-        st.warning(notes)
-    render_fetch_run_job_cards(run.get("new_jobs", []) or [], "No new jobs were discovered in this search.")
-    with st.expander("Compact table view", expanded=False):
-        render_fetch_run_job_table(run.get("new_jobs", []) or [], "No new jobs were discovered in this search.")
-    with st.expander("Advanced: already seen jobs from this search", expanded=False):
-        render_fetch_run_job_cards(run.get("previously_seen_jobs", []) or [], "No already seen jobs were returned.")
-
-
-def render_fetch_history_section() -> None:
-    """Render recent fetch-run history and a past-run review selector."""
-    runs = load_fetch_runs(limit=20)
-    st.markdown("**Fetch History**")
-    if not runs:
-        st.info("No fetch history yet.")
-        return
-    st.dataframe(
-        [
-            {
-                "Date/time": run.get("created_at", ""),
-                "Source": source_display_name(str(run.get("source", ""))),
-                "Region": run.get("region", ""),
-                "Query": run.get("query", ""),
-                "Total returned": run.get("total_jobs_returned", 0),
-                "New jobs": run.get("new_jobs_count", 0),
-                "Already seen": run.get("duplicate_jobs_count", 0),
-                "Status": run.get("fetch_status", ""),
-            }
-            for run in runs
-        ],
-        width="stretch",
-        hide_index=True,
-    )
-    labels = [fetch_run_label(run) for run in runs]
-    selected_label = st.selectbox("Review search results", labels, key="fetch_history_selected")
-    render_fetch_run_details(runs[labels.index(selected_label)])
-
-
 def render_markdown_file(path: Path, title: str) -> None:
     """Show one Markdown file in a simple expander."""
     if not path.exists():
@@ -1310,53 +775,64 @@ def render_action_callout(action: str, *, caution: bool = False) -> None:
         st.info(message)
 
 
+def home_page_services() -> HomePageServices:
+    """Build the explicit dependency surface for Dashboard."""
+    return HomePageServices(
+        count_generated_packages=count_generated_packages,
+        demo_mode_enabled=demo_mode_enabled,
+        go_to_page=go_to_page,
+        load_screened_jobs=load_screened_jobs,
+        load_tracker_rows=load_tracker_rows,
+        render_page_header=render_page_header,
+    )
+
+
 def dashboard_tab() -> None:
     """Render the home page through its explicitly injected services."""
-    render_home_page(
-        HomePageServices(
-            count_generated_packages=count_generated_packages,
-            demo_mode_enabled=demo_mode_enabled,
-            go_to_page=go_to_page,
-            load_screened_jobs=load_screened_jobs,
-            load_tracker_rows=load_tracker_rows,
-            render_page_header=render_page_header,
-        )
+    render_home_page(home_page_services())
+
+
+def fetch_page_services() -> FetchPageServices:
+    """Build the explicit dependency surface for Find Jobs."""
+    return FetchPageServices(
+        current_workspace=current_workspace,
+        demo_mode_enabled=demo_mode_enabled,
+        go_to_page=go_to_page,
+        relocate_fetched_jobs_to_workspace=relocate_fetched_jobs_to_workspace,
+        render_fetch_history_section=render_fetch_history_section,
+        render_fetch_run_job_cards=render_fetch_run_job_cards,
+        render_fetch_run_job_table=render_fetch_run_job_table,
+        render_page_header=render_page_header,
+        run_with_captured_output=run_with_captured_output,
+        default_recommendation_limit=DEFAULT_RECOMMENDATION_LIMIT,
+        min_recommendation_limit=MIN_RECOMMENDATION_LIMIT,
+        max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
+        show_debug_ui=SHOW_DEBUG_UI,
     )
 
 
 def fetch_jobs_tab() -> None:
     """Render Find Jobs through the extracted discovery module."""
-    render_fetch_jobs_page(
-        FetchPageServices(
-            current_workspace=current_workspace,
-            demo_mode_enabled=demo_mode_enabled,
-            go_to_page=go_to_page,
-            relocate_fetched_jobs_to_workspace=relocate_fetched_jobs_to_workspace,
-            render_fetch_history_section=render_fetch_history_section,
-            render_fetch_run_job_cards=render_fetch_run_job_cards,
-            render_fetch_run_job_table=render_fetch_run_job_table,
-            render_page_header=render_page_header,
-            run_with_captured_output=run_with_captured_output,
-            default_recommendation_limit=DEFAULT_RECOMMENDATION_LIMIT,
-            min_recommendation_limit=MIN_RECOMMENDATION_LIMIT,
-            max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
-            show_debug_ui=SHOW_DEBUG_UI,
-        )
+    render_fetch_jobs_page(fetch_page_services())
+
+
+def manual_page_services() -> ManualPageServices:
+    """Build the explicit dependency surface for Add Target Job."""
+    return ManualPageServices(
+        company_generation_allowed=company_generation_allowed,
+        current_workspace=current_workspace,
+        demo_mode_enabled=demo_mode_enabled,
+        relative_path=relative_path,
+        render_manual_company_confirmation=render_manual_company_confirmation,
+        render_page_header=render_page_header,
+        run_with_captured_output=run_with_captured_output,
+        switch_workspace_mode=switch_workspace_mode,
     )
+
 
 def manual_job_target_tab() -> None:
     """Render Add Target Job through the extracted manual workflow module."""
-    render_manual_job_target_page(
-        ManualPageServices(
-            company_generation_allowed=company_generation_allowed,
-            current_workspace=current_workspace,
-            demo_mode_enabled=demo_mode_enabled,
-            relative_path=relative_path,
-            render_manual_company_confirmation=render_manual_company_confirmation,
-            render_page_header=render_page_header,
-            run_with_captured_output=run_with_captured_output,
-        )
-    )
+    render_manual_job_target_page(manual_page_services())
 
 
 JOB_CARD_METADATA_PREFIXES = {
@@ -1390,11 +866,6 @@ def clean_card_text(value: Any, fallback: str = "-") -> str:
     text = " ".join(str(value or "").split())
     text = re.sub(r"^[#>*_`\\-\\s]+", "", text).strip()
     return text or fallback
-
-
-def card_html(text: Any, class_name: str) -> str:
-    """Render escaped card text with compact product typography."""
-    return f'<div class="{class_name}">{html.escape(clean_card_text(text))}</div>'
 
 
 def is_card_metadata_line(line: str) -> bool:
@@ -1456,15 +927,7 @@ def key_requirements_from_text(job_text: str) -> list[str]:
     return requirements
 
 
-def load_fit_resume_text() -> str:
-    """Read resume text for fit analysis without requiring private data in demo mode."""
-    path = current_workspace().resume_source_path
-    if path is None or not path.exists():
-        return ""
-    return read_text_file(path)
-
-
-def structured_fit_analysis(job: dict[str, Any], job_text: str) -> dict[str, Any]:
+def structured_fit_analysis(job: DashboardJob, job_text: str) -> dict[str, Any]:
     """Return the same canonical analysis already attached to the loaded job."""
     existing = job.get("analysis_result")
     if isinstance(existing, dict) and existing:
@@ -1485,13 +948,7 @@ def sanitize_fit_text(value: Any) -> str:
     return text
 
 
-def render_keyword_list(label: str, keywords: list[Any], empty_text: str = "None") -> None:
-    """Render keyword chips as short text."""
-    cleaned = [sanitize_fit_text(keyword) for keyword in keywords if str(keyword).strip()]
-    st.write(f"{label}: {', '.join(cleaned) if cleaned else empty_text}")
-
-
-def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
+def render_fit_analysis_sections(job: DashboardJob, job_text: str) -> None:
     """Render decision evidence with diagnostics collapsed by default."""
     render_compact_fit_sections(
         job,
@@ -1499,6 +956,7 @@ def render_fit_analysis_sections(job: dict[str, Any], job_text: str) -> None:
         analyze=structured_fit_analysis,
         sanitize=sanitize_fit_text,
         demo_mode=demo_mode_enabled(),
+        show_debug=SHOW_DEBUG_UI,
     )
 
 
@@ -1523,70 +981,9 @@ def render_generation_success(summary: dict[str, Any]) -> None:
     st.info("Open the Cover Letter page to preview and export the draft.")
 
 
-def generate_review_job_package(
-    job: dict[str, Any],
-    button_key: str,
-    primary: bool = False,
-    label: str = "Generate Cover Letter",
-) -> None:
-    """Generate a cover-letter bundle for a reviewed job."""
-    selected_path = job["path"]
-    metadata = parse_job_metadata(selected_path)
-    company = str(job.get("company_normalized") or metadata.get("company") or job.get("company", "")).strip()
-    role = str(metadata.get("role") or job.get("role", "")).strip()
-    location = normalize_location(str(metadata.get("location") or job.get("normalized_location") or job.get("location", "")))
-    job_url = str(metadata.get("job_url") or job.get("job_url", "")).strip()
-
-    if not st.button(label, key=button_key, type="primary" if primary else "secondary", width="stretch"):
-        return
-    if not all([company, role, location, job_url]):
-        st.error("Company, role, location, and job URL are required before generating a cover letter.")
-        return
-
-    latest_company_fields = verification_from_markdown(selected_path)
-    if normalize_company_name(company) != str(latest_company_fields.get("company_normalized", "")):
-        st.error("Confirm the company name in the detail view before generating a cover letter.")
-        return
-    if not company_generation_allowed(latest_company_fields):
-        st.error(
-            "Company name needs confirmation before generating a cover letter. "
-            "This prevents using the wrong company name in your application."
-        )
-        return
-
-    try:
-        summary, output = run_with_captured_output(
-            create_application_package,
-            job_description_path=selected_path,
-            workspace=current_workspace(),
-            company=company,
-            role=role,
-            location=location,
-            job_url=job_url,
-        )
-        render_generation_success(summary)
-        st.write(f"Overall score: {summary['match_score']}/100")
-        st.write(f"Recommendation: {summary['recommendation']}")
-        if summary.get("uk_review_notes"):
-            st.warning("UK work authorization review")
-            for note in summary["uk_review_notes"]:
-                st.write(f"- {note}")
-        if summary.get("export_warnings"):
-            with st.expander("Validation warnings", expanded=False):
-                for warning in summary["export_warnings"]:
-                    st.write(f"- {warning}")
-        if SHOW_DEBUG_UI and output:
-            with st.expander("Advanced: cover-letter generation output", expanded=False):
-                st.text(output)
-    except Exception as error:  # noqa: BLE001
-        st.error(f"Could not generate the cover letter: {error}")
-
-
 def review_page_services() -> ReviewPageServices:
     """Build the explicit dependency surface for Review Jobs."""
     return ReviewPageServices(
-        build_job_snippet=build_job_snippet,
-        card_html=card_html,
         company_generation_allowed=company_generation_allowed,
         current_workspace=current_workspace,
         default_review_inbox_view=default_review_inbox_view,
@@ -1598,85 +995,70 @@ def review_page_services() -> ReviewPageServices:
         load_package_notes=load_package_notes,
         load_screened_jobs=load_screened_jobs,
         load_tracker_rows=load_tracker_rows,
-        mark_job_not_interested=mark_job_not_interested,
         package_dir_for_job=package_dir_for_job,
         package_status_for_job=package_status_for_job,
         read_text_file=read_text_file,
         relative_path=relative_path,
-        render_action_callout=render_action_callout,
         render_fit_analysis_sections=render_fit_analysis_sections,
         render_generation_success=render_generation_success,
         render_markdown_company_confirmation=render_markdown_company_confirmation,
         render_page_header=render_page_header,
         run_with_captured_output=run_with_captured_output,
         sanitize_fit_text=sanitize_fit_text,
-        save_job_to_tracker=save_job_to_tracker,
         save_recent_region_key=save_recent_region_key,
         tracker_row_for_job=tracker_row_for_job,
         tracker_status_for_job=tracker_status_for_job,
-        default_recommendation_limit=DEFAULT_RECOMMENDATION_LIMIT,
-        min_recommendation_limit=MIN_RECOMMENDATION_LIMIT,
         max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
         show_debug_ui=SHOW_DEBUG_UI,
     )
-
-
-def render_review_action_buttons(
-    job: dict[str, Any],
-    tracker_rows: list[dict[str, Any]],
-    key_prefix: str,
-) -> None:
-    """Compatibility wrapper for the extracted review action renderer."""
-    render_review_job_actions(job, tracker_rows, key_prefix, review_page_services())
-
-
-def render_job_result_cards(
-    jobs: list[dict[str, Any]],
-    tracker_rows: list[dict[str, Any]],
-) -> None:
-    """Compatibility wrapper for the extracted review card renderer."""
-    render_review_job_cards(jobs, tracker_rows, review_page_services())
 
 
 def job_descriptions_tab() -> None:
     """Render Review Jobs through the extracted page module."""
     render_review_jobs_page(review_page_services())
 
+
+def tracker_page_services() -> TrackerPageServices:
+    """Build the explicit dependency surface for Tracker."""
+    return TrackerPageServices(
+        current_workspace=current_workspace,
+        demo_mode_enabled=demo_mode_enabled,
+        load_tracker_rows=load_tracker_rows,
+        render_action_callout=render_action_callout,
+        render_page_header=render_page_header,
+        run_with_captured_output=run_with_captured_output,
+    )
+
+
 def tracker_tab() -> None:
     """Render Tracker through the extracted page module."""
-    render_tracker_page(
-        TrackerPageServices(
-            current_workspace=current_workspace,
-            demo_mode_enabled=demo_mode_enabled,
-            load_tracker_rows=load_tracker_rows,
-            render_action_callout=render_action_callout,
-            render_page_header=render_page_header,
-            run_with_captured_output=run_with_captured_output,
-        )
+    render_tracker_page(tracker_page_services())
+
+
+def cover_letter_page_services() -> CoverLetterPageServices:
+    """Build the explicit dependency surface for Cover Letter."""
+    return CoverLetterPageServices(
+        current_workspace=current_workspace,
+        demo_mode_enabled=demo_mode_enabled,
+        generate_cover_letter_docx_for_package=generate_cover_letter_docx_for_package,
+        go_to_page=go_to_page,
+        latest_package_for_company_role=latest_package_for_company_role,
+        load_package_notes=load_package_notes,
+        load_tracker_rows=load_tracker_rows,
+        read_text_file=read_text_file,
+        relative_path=relative_path,
+        render_action_callout=render_action_callout,
+        render_markdown_file=render_markdown_file,
+        render_page_header=render_page_header,
+        render_readiness_checklist=render_readiness_checklist,
+        resolve_package_dir_from_tracker=resolve_package_dir_from_tracker,
+        run_with_captured_output=run_with_captured_output,
     )
 
 
 def package_viewer_tab() -> None:
     """Render Cover Letter through the extracted page module."""
-    render_cover_letter_page(
-        CoverLetterPageServices(
-            current_workspace=current_workspace,
-            demo_mode_enabled=demo_mode_enabled,
-            generate_cover_letter_docx_for_package=generate_cover_letter_docx_for_package,
-            go_to_page=go_to_page,
-            latest_package_for_company_role=latest_package_for_company_role,
-            load_package_notes=load_package_notes,
-            load_tracker_rows=load_tracker_rows,
-            read_text_file=read_text_file,
-            relative_path=relative_path,
-            render_action_callout=render_action_callout,
-            render_markdown_file=render_markdown_file,
-            render_page_header=render_page_header,
-            render_readiness_checklist=render_readiness_checklist,
-            resolve_package_dir_from_tracker=resolve_package_dir_from_tracker,
-            run_with_captured_output=run_with_captured_output,
-        )
-    )
+    render_cover_letter_page(cover_letter_page_services())
 
 
 def settings_page_services() -> SettingsPageServices:

@@ -37,6 +37,11 @@ def parse_args() -> argparse.Namespace:
         help="Export only completed, resolved tasks without requiring the full queue.",
     )
     parser.add_argument("--dataset-name", default="reviewed_evidence_pilot")
+    parser.add_argument(
+        "--require-candidate-labels",
+        action="store_true",
+        help="Reject legacy task-only events and require every candidate judgment.",
+    )
     return parser.parse_args()
 
 
@@ -49,6 +54,7 @@ def main() -> None:
         states,
         random_state=args.random_state,
         require_complete=not args.allow_partial,
+        require_candidate_labels=args.require_candidate_labels,
     )
     pairs = build_training_pairs(annotated)
     manifest = dataset_manifest(

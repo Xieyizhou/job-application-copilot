@@ -11,7 +11,7 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SRC_DIR = PROJECT_ROOT / "src"
 DEFAULT_MODEL_PATH = (
-    PROJECT_ROOT / "data" / "ml" / "models" / "evidence_pairwise_reranker_v3.joblib"
+    PROJECT_ROOT / "data" / "ml" / "models" / "evidence_reranker_v3.joblib"
 )
 DEFAULT_DATASET_DIR = (
     PROJECT_ROOT / "data" / "ml" / "processed" / "reviewed_evidence_training_v3"
@@ -29,6 +29,7 @@ if str(SRC_DIR) not in sys.path:
 from ml.annotation import load_jsonl  # noqa: E402
 from ml.evidence_validation import (  # noqa: E402
     DEFAULT_SEMANTIC_MANIFEST,
+    EvidenceValidationError,
     evaluate_reranker_artifact,
 )
 
@@ -44,12 +45,17 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    training_tasks = load_jsonl(args.dataset_dir / "annotated_tasks.jsonl")
     training_pairs = load_jsonl(args.dataset_dir / "training_pairs.jsonl")
-    report = evaluate_reranker_artifact(
-        manifest_path=args.manifest_path,
-        model_path=args.model_path,
-        training_pairs=training_pairs,
-    )
+    try:
+        report = evaluate_reranker_artifact(
+            manifest_path=args.manifest_path,
+            model_path=args.model_path,
+            training_tasks=training_tasks,
+            training_pairs=training_pairs,
+        )
+    except EvidenceValidationError as error:
+        raise SystemExit(f"External diagnostic blocked: {error}") from error
     args.report_path.parent.mkdir(parents=True, exist_ok=True)
     args.report_path.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
@@ -62,7 +68,10 @@ def main() -> None:
         f"AP={metrics['average_precision']:.3f}"
     )
     print(f"Failed cases: {', '.join(report['failed_case_ids']) or 'none'}")
-    print("Promotion eligible: no; a frozen 40+ task real holdout is still required.")
+    print(
+        "Promotion eligible: no; this is the small curated diagnostic. "
+        "Run evaluate_real_holdout.py for the frozen real-text gate."
+    )
     print(f"Report: {args.report_path}")
 
 

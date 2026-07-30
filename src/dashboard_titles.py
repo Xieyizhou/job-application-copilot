@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 
@@ -124,7 +125,10 @@ def first_role_heading(markdown_text: str, company: str = "") -> str:
     return ""
 
 
-def resolve_canonical_job_title(job: dict[str, Any], fallback: str = "Missing job title") -> str:
+def resolve_canonical_job_title(
+    job: Mapping[str, Any],
+    fallback: str = "Missing job title",
+) -> str:
     """Resolve one canonical title without letting placeholders block Markdown."""
     for key in ("display_role", "title", "role"):
         candidate = display_title_from_value(job.get(key), fallback="")
@@ -142,6 +146,9 @@ def resolve_canonical_job_title(job: dict[str, Any], fallback: str = "Missing jo
     return fallback
 
 
-def get_job_display_title(job: dict[str, Any], fallback: str = "Missing job title") -> str:
+def get_job_display_title(
+    job: Mapping[str, Any],
+    fallback: str = "Missing job title",
+) -> str:
     """Return the canonical user-facing title for a job."""
     return resolve_canonical_job_title(job, fallback)

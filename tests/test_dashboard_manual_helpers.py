@@ -190,6 +190,7 @@ class DashboardManualHelperTests(unittest.TestCase):
             render_manual_company_confirmation=render_confirmation,
             render_page_header=Mock(),
             run_with_captured_output=Mock(return_value=(summary, "backend output")),
+            switch_workspace_mode=Mock(),
         )
         record = {
             "id": "manual-7",
@@ -258,11 +259,14 @@ class DashboardManualHelperTests(unittest.TestCase):
             render_manual_company_confirmation=Mock(),
             render_page_header=Mock(),
             run_with_captured_output=Mock(),
+            switch_workspace_mode=Mock(),
         )
         with patch.object(dashboard_manual, "st", ui):
             dashboard_manual.manual_job_target_tab(services)
         services.render_page_header.assert_called_once()
-        ui.info.assert_called_once()
+        ui.info.assert_not_called()
+        ui.caption.assert_called_once()
+        services.switch_workspace_mode.assert_called_once_with("Personal")
 
     def test_summary_and_saved_record_render_paths(self) -> None:
         ui = MagicMock()

@@ -8,6 +8,7 @@ from typing import Any, Callable
 import streamlit as st
 
 from dashboard_settings_sections import render_settings_sections
+from scoring_types import TrackerRow
 from workspace import (
     SUPPORTED_COVER_LETTER_TEMPLATE_EXTENSIONS,
     SUPPORTED_EXPERIENCE_BANK_EXTENSIONS,
@@ -25,7 +26,7 @@ class SettingsPageServices:
     current_workspace: Callable[[], Workspace]
     demo_mode_enabled: Callable[[], bool]
     list_job_description_files: Callable[..., list[Any]]
-    load_tracker_rows: Callable[..., list[dict[str, Any]]]
+    load_tracker_rows: Callable[..., list[TrackerRow]]
     render_page_header: Callable[[str, str | None], None]
 
 

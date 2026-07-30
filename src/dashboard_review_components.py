@@ -2,29 +2,33 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
 import streamlit as st
 
 from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status
-from dashboard_review import job_evidence_label, job_needs_full_jd, review_job_next_action
-from dashboard_review_styles import badge_html, decision_field_html, render_review_component_styles
+from dashboard_review import ReviewAction, job_needs_full_jd, primary_review_action
+from dashboard_review_styles import (
+    action_note_html,
+    decision_field_html,
+    render_review_component_styles,
+)
 from dashboard_titles import get_job_display_title
 from output_paths import safe_slug
-from scoring_types import DashboardJob
+from scoring_types import DashboardJob, TrackerRow
 
 
 class ReviewComponentServices(Protocol):
-    build_job_snippet: Callable[[dict[str, Any]], str]
-    card_html: Callable[[Any, str], str]
-    demo_mode_enabled: Callable[[], bool]
-    mark_job_not_interested: Callable[..., tuple[Any, str]]
-    package_status_for_job: Callable[..., str]
-    render_action_callout: Callable[..., None]
-    save_job_to_tracker: Callable[..., tuple[Any, str]]
-    tracker_status_for_job: Callable[..., str]
-    show_debug_ui: bool
+    @property
+    def demo_mode_enabled(self) -> Callable[[], bool]: ...
+
+    @property
+    def package_status_for_job(self) -> Callable[..., str]: ...
+
+    @property
+    def tracker_status_for_job(self) -> Callable[..., str]: ...
 
 
 def jd_quality_label(job: DashboardJob | dict[str, Any]) -> str:
@@ -87,108 +91,48 @@ def hard_constraint(job: DashboardJob | dict[str, Any]) -> str:
     return "Eligibility needs manual review."
 
 
-def render_badges(job: DashboardJob | dict[str, Any]) -> None:
-    """Render confidence and JD quality as secondary status labels."""
-    confidence = confidence_level(job.get("confidence")).title()
-    quality = jd_quality_label(job)
-    confidence_tone = "positive" if confidence.lower() in {"medium", "high"} else "warning"
-    quality_tone = "warning" if job_needs_full_jd(job) else "positive"
-    st.markdown(
-        '<div class="review-badge-row">'
-        + badge_html("Confidence", confidence, confidence_tone)
-        + badge_html("JD", quality, quality_tone)
-        + "</div>",
-        unsafe_allow_html=True,
-    )
-
-
 def render_review_action_buttons(
-    job: dict[str, Any],
-    tracker_rows: list[dict[str, Any]],
+    job: DashboardJob,
     key_prefix: str,
-    services: ReviewComponentServices,
-    on_select: Callable[[dict[str, Any], str], None],
+    action: ReviewAction,
+    on_select: Callable[[DashboardJob, str], None],
 ) -> None:
-    """Render one primary action and keep secondary actions collapsed."""
-    package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
-    needs_full_jd = job_needs_full_jd(job)
-    if needs_full_jd:
-        action_label, focus = "Get Full JD", "JD"
-    elif package_status in {"Cover letter ready", "Demo cover letter"}:
-        action_label, focus = "Review Cover Letter", "Cover Letter"
-    else:
-        action_label, focus = "Prepare Cover Letter", "Cover Letter"
-    if st.button(action_label, key=f"{key_prefix}_primary", type="primary", width="stretch"):
-        on_select(job, focus)
+    """Render the single action derived for the selected job."""
+    if st.button(
+        action.label,
+        key=f"{key_prefix}_primary",
+        type="primary",
+        width="content",
+    ):
+        on_select(job, action.target_section)
         st.rerun()
-
-    with st.expander("Secondary actions", expanded=False):
-        left, right = st.columns(2)
-        with left:
-            if st.button("View Fit Evidence", key=f"{key_prefix}_fit", width="stretch"):
-                on_select(job, "Fit")
-                st.rerun()
-        with right:
-            if services.demo_mode_enabled():
-                st.caption("Tracker disabled in Demo.")
-            elif st.button("Add to Tracker", key=f"{key_prefix}_track", width="stretch"):
-                try:
-                    tracker_id, _output = services.save_job_to_tracker(job)
-                    st.success(f"Saved to tracker #{tracker_id}.")
-                except Exception as error:  # noqa: BLE001
-                    st.error(str(error))
-        if not services.demo_mode_enabled() and st.button("Ignore", key=f"{key_prefix}_ignore"):
-            try:
-                tracker_id, _output = services.mark_job_not_interested(job, tracker_rows)
-                st.success(f"Marked tracker #{tracker_id} as not interested.")
-            except Exception as error:  # noqa: BLE001
-                st.error(str(error))
-
-
-def render_job_result_cards(
-    jobs: list[dict[str, Any]],
-    tracker_rows: list[dict[str, Any]],
-    services: ReviewComponentServices,
-    on_select: Callable[[dict[str, Any], str], None],
-) -> None:
-    """Render one decision-focused action per result card."""
-    render_review_component_styles()
-    for index, job in enumerate(jobs, start=1):
-        file_key = safe_slug(str(job["path"]))
-        tracker_status = services.tracker_status_for_job(job, tracker_rows)
-        package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
-        next_action = review_job_next_action(job, tracker_status, package_status)
-        result = visible_role_fit(job)
-        if result == "Not reliable":
-            result = str(job.get("recommendation", "Manual Review"))
-        with st.container(border=True):
-            st.markdown(
-                services.card_html(job["company"], "review-card-company")
-                + services.card_html(get_job_display_title(job), "review-card-role")
-                + services.card_html(f"Result: {result}", "review-card-result"),
-                unsafe_allow_html=True,
-            )
-            render_badges(job)
-            st.caption(f"Next: {next_action}")
-            if st.button("Review", key=f"review_{file_key}_{index}", width="stretch"):
-                on_select(job, "Overview")
-                st.rerun()
 
 
 def render_selected_review_header(
-    job: dict[str, Any],
-    tracker_rows: list[dict[str, Any]],
+    job: DashboardJob,
+    tracker_rows: list[TrackerRow],
     services: ReviewComponentServices,
 ) -> dict[str, Any]:
     """Render identity and exactly four decision fields."""
+    render_review_component_styles()
     tracker_status = services.tracker_status_for_job(job, tracker_rows)
     package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
     presentation = build_fit_presentation(job)
-    st.markdown(f"**{job['company']} · {get_job_display_title(job)}**")
-    st.caption(str(job.get("normalized_location", "")))
+    st.markdown(
+        '<div class="review-selected-job-header">'
+        f'<div class="review-selected-job-title">{html.escape(str(job["company"]))} · '
+        f"{html.escape(get_job_display_title(job))}</div>"
+        f'<div class="review-selected-job-location">'
+        f'{html.escape(str(job.get("normalized_location", "")))}</div>'
+        "</div>",
+        unsafe_allow_html=True,
+    )
     decision_fields = [
-        ("Recommendation", job.get("recommendation", "Manual Review")),
         ("Role Fit", visible_role_fit(job)),
+        (
+            "Eligibility",
+            eligibility_status(job).replace("_", " ").title(),
+        ),
         ("Confidence", confidence_level(job.get("confidence")).title()),
         ("JD Quality", jd_quality_label(job)),
     ]
@@ -198,10 +142,15 @@ def render_selected_review_header(
         + "</div>",
         unsafe_allow_html=True,
     )
-    next_action = review_job_next_action(job, tracker_status, package_status)
-    services.render_action_callout(
-        next_action,
-        caution=confidence_level(job.get("confidence")) == "low" or eligibility_status(job) == "failed",
+    action = primary_review_action(
+        job,
+        tracker_status,
+        package_status,
+        demo=services.demo_mode_enabled(),
+    )
+    st.markdown(
+        action_note_html(action.message, caution=action.caution),
+        unsafe_allow_html=True,
     )
     return {
         "tracker_status": tracker_status,
@@ -209,41 +158,24 @@ def render_selected_review_header(
         "presentation": presentation,
         "confidence": dict(job.get("confidence", {}) or {}),
         "jd_quality": dict(job.get("jd_quality", {}) or {}),
+        "action": action,
     }
 
 
 def render_review_overview_section(
-    job: dict[str, Any],
-    tracker_rows: list[dict[str, Any]],
+    job: DashboardJob,
     selected_path: Path,
     context: dict[str, Any],
-    services: ReviewComponentServices,
-    on_select: Callable[[dict[str, Any], str], None],
+    on_select: Callable[[DashboardJob, str], None],
 ) -> None:
     """Render why, risk, constraint, and one primary next action."""
-    st.markdown("**Why this result**")
+    st.markdown("**Decision basis**")
     st.write(f"Strongest evidence: {strongest_evidence(job)}")
     st.write(f"Main gap: {main_gap(job)}")
     st.write(f"Hard constraint: {hard_constraint(job)}")
     render_review_action_buttons(
         job,
-        tracker_rows,
         key_prefix=f"overview_actions_{safe_slug(str(selected_path))}",
-        services=services,
+        action=context["action"],
         on_select=on_select,
     )
-
-    with st.expander("Advanced analysis", expanded=False):
-        confidence = context["confidence"]
-        coverage = context["presentation"].get("coverage_score")
-        st.write(f"Tracker: {context['tracker_status']}")
-        st.write(f"Cover letter: {context['package_status']}")
-        st.write(f"Recognized requirements: {int(confidence.get('active_requirement_count', 0) or 0)}")
-        st.write(f"Observed coverage: {int(coverage)}%" if coverage is not None else "Observed coverage: unavailable")
-        learned = dict(job.get("ml_relevance", {}) or {})
-        if learned.get("available") and learned.get("displayable", True) and not job_needs_full_jd(job):
-            st.write(f"Experimental local model: {float(learned.get('probability', 0.0)):.0%}")
-        snippet = services.build_job_snippet(job)
-        if snippet:
-            st.caption(snippet)
-        st.caption(job_evidence_label(job))

@@ -10,6 +10,7 @@ import joblib
 
 from ml.annotation_generation import normalize_text
 from ml.annotation_metrics import decision_metrics
+from ml.evidence_artifact import EvidenceArtifactError, validate_evidence_artifact
 from ml.validation import (
     DEFAULT_SEMANTIC_MANIFEST,
     load_manifest,
@@ -19,7 +20,7 @@ from ml.validation import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RERANKER_PATH = (
-    PROJECT_ROOT / "data" / "ml" / "models" / "evidence_pairwise_reranker_v3.joblib"
+    PROJECT_ROOT / "data" / "ml" / "models" / "evidence_reranker_v3.joblib"
 )
 
 
@@ -96,18 +97,28 @@ def evaluate_reranker_artifact(
     *,
     manifest_path: Path = DEFAULT_SEMANTIC_MANIFEST,
     model_path: Path = DEFAULT_RERANKER_PATH,
+    training_tasks: Sequence[dict[str, Any]] = (),
     training_pairs: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     """Load one local artifact and evaluate it on the curated semantic manifest."""
+    if not model_path.is_file():
+        raise EvidenceValidationError(
+            f"Evidence reranker artifact not found: {model_path}. Retrain first."
+        )
+    if not training_tasks or not training_pairs:
+        raise EvidenceValidationError(
+            "Current training tasks and pairs are required for artifact freshness checks."
+        )
     manifest = load_manifest(manifest_path)
     cases = validate_semantic_manifest(manifest)
-    artifact = joblib.load(model_path)
-    if (
-        not isinstance(artifact, dict)
-        or artifact.get("model_type") != "pairwise_hybrid_reranker"
-        or "model" not in artifact
-    ):
-        raise EvidenceValidationError("Unsupported evidence reranker artifact.")
+    try:
+        artifact = validate_evidence_artifact(
+            joblib.load(model_path),
+            tasks=training_tasks,
+            pairs=training_pairs,
+        )
+    except EvidenceArtifactError as error:
+        raise EvidenceValidationError(str(error)) from error
     model = artifact["model"]
     report = evaluate_reranker_cases(
         cases,

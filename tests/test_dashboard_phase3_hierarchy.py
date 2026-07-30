@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from dashboard_home import home_summary
+from dashboard_home import home_summary, primary_home_action
 from dashboard_settings_sections import job_source_health
 from dashboard_tracker_components import tracker_summary
 
@@ -14,7 +14,7 @@ from dashboard_tracker_components import tracker_summary
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_dashboard_keeps_three_decision_counts() -> None:
+def test_dashboard_keeps_one_primary_action_and_collapsed_counts() -> None:
     jobs = [
         {"eligibility": {"status": "passed"}},
         {"eligibility": {"status": "failed"}},
@@ -26,7 +26,21 @@ def test_dashboard_keeps_three_decision_counts() -> None:
     source = (PROJECT_ROOT / "src" / "dashboard_home.py").read_text(encoding="utf-8")
     assert "Saved opportunities" not in source
     assert "Applications sent" not in source
-    assert source.index("**Next actions**") < source.index("**Priority opportunities**")
+    assert "**Your next step**" in source
+    assert "Priority opportunities" not in source
+    assert 'with st.expander("Workspace summary"' in source
+    assert primary_home_action(jobs, rows, 0)[2] == "Review Jobs"
+
+
+def test_shell_keeps_navigation_in_sidebar_and_bounds_main_width() -> None:
+    source = (PROJECT_ROOT / "src" / "dashboard_shell.py").read_text(encoding="utf-8")
+    assert "st.sidebar.radio(" in source
+    assert 'max-width: 1320px' in source
+    assert 'header[data-testid="stHeader"]' in source
+    assert "desktop-workspace-marker" in source
+    assert "@media (max-width: 1099px)" in source
+    assert "render_app_title" not in source
+    assert "st.radio(" not in source.replace("st.sidebar.radio(", "")
 
 
 def test_tracker_defaults_to_stage_and_next_action() -> None:
@@ -61,6 +75,24 @@ def test_settings_reports_source_health_without_key_values() -> None:
     }
 
     source = (PROJECT_ROOT / "src" / "dashboard_settings_sections.py").read_text(encoding="utf-8")
-    assert '["Workspace", "Job sources", "Scoring", "Privacy", "Advanced"]' in source
+    assert '["Workspace", "Job sources", "Scoring", "Privacy"]' in source
+    assert "local relevance model" not in source.lower()
     assert "os.getenv" in source
     assert "API key:" not in source
+
+
+def test_cover_letter_uses_aligned_context_and_document_panels() -> None:
+    source = (PROJECT_ROOT / "src" / "dashboard_cover_letter.py").read_text(
+        encoding="utf-8"
+    )
+    styles = (PROJECT_ROOT / "src" / "dashboard_desktop_styles.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'st.columns(' in source
+    assert 'vertical_alignment="top"' in source
+    assert 'key="cover_letter_context_panel"' in source
+    assert 'key="cover_letter_document_panel"' in source
+    assert "render_cover_letter_context(" in source
+    assert "render_cover_letter_document(" in source
+    assert ".st-key-cover_letter_context_panel" in styles
+    assert ".st-key-cover_letter_document_panel" in styles

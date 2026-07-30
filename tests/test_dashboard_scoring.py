@@ -264,6 +264,10 @@ class DashboardActionGuidanceTests(unittest.TestCase):
             "Senior Data Engineer requires Python SQL pandas data analysis communication "
             "documentation and 5+ years experience required."
         )
+        failed["jd_quality"] = {
+            "display_label": "Complete",
+            "reliable_scoring_ready": True,
+        }
         self.assertIn("hard constraint", dashboard.review_job_next_action(failed))
 
         low_confidence = analyzed_job("Machine learning")

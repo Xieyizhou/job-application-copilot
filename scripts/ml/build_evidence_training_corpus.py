@@ -22,6 +22,23 @@ DEFAULT_GOLD_PATH = (
     / "gold"
     / "gold_tasks.jsonl"
 )
+DEFAULT_ADJUDICATION_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "ml"
+    / "annotations"
+    / "pipeline_v1"
+    / "gold"
+    / "human_adjudication_gold.jsonl"
+)
+DEFAULT_ACCEPTANCE_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "ml"
+    / "annotations"
+    / "acceptance_supplement_v1"
+    / "acceptance_supplement_gold_v1.jsonl"
+)
 DEFAULT_OUTPUT_DIR = (
     PROJECT_ROOT / "data" / "ml" / "processed" / "reviewed_evidence_training_v3"
 )
@@ -37,6 +54,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--human-dir", type=Path, default=DEFAULT_HUMAN_DIR)
     parser.add_argument("--gold-path", type=Path, default=DEFAULT_GOLD_PATH)
+    parser.add_argument(
+        "--adjudication-path",
+        type=Path,
+        default=DEFAULT_ADJUDICATION_PATH,
+        help="Optional local gold exported from completed human adjudications.",
+    )
+    parser.add_argument(
+        "--acceptance-path",
+        type=Path,
+        default=DEFAULT_ACCEPTANCE_PATH,
+        help="Optional frozen active-learning training supplement.",
+    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     return parser.parse_args()
 
@@ -45,7 +74,10 @@ def main() -> None:
     args = parse_args()
     human_tasks = load_jsonl(args.human_dir / "annotated_tasks.jsonl")
     human_pairs = load_jsonl(args.human_dir / "training_pairs.jsonl")
-    gold_tasks = load_jsonl(args.gold_path)
+    consensus_gold = load_jsonl(args.gold_path)
+    adjudication_gold = load_jsonl(args.adjudication_path)
+    acceptance_gold = load_jsonl(args.acceptance_path)
+    gold_tasks = [*consensus_gold, *adjudication_gold]
     if not human_tasks or not human_pairs:
         raise SystemExit("Export the reviewed v3 human seed before combining sources.")
     if not gold_tasks:
@@ -54,6 +86,7 @@ def main() -> None:
         human_tasks,
         human_pairs,
         gold_tasks,
+        acceptance_gold,
     )
     write_jsonl(tasks, args.output_dir / "annotated_tasks.jsonl")
     write_jsonl(pairs, args.output_dir / "training_pairs.jsonl")
@@ -65,6 +98,8 @@ def main() -> None:
     print(f"Combined pairs: {manifest['pair_count']}")
     print(f"Task sources: {manifest['task_source_counts']}")
     print(f"Pair labels: {manifest['pair_label_counts']}")
+    print(f"Human adjudication gold: {len(adjudication_gold)}")
+    print(f"Acceptance training supplement: {len(acceptance_gold)}")
     print(f"Output: {args.output_dir}")
 
 

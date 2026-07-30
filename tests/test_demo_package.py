@@ -39,15 +39,14 @@ class DemoPackageTests(unittest.TestCase):
 
         self.assertEqual(list(app.exception), [])
         expander_labels = [expander.label for expander in app.expander]
-        self.assertIn("Advanced analysis", expander_labels)
+        self.assertIn("Evidence details", expander_labels)
         self.assertNotIn("Requirement-to-resume evidence map", expander_labels)
-        similarity_captions = [
-            str(caption.value)
-            for caption in app.caption
-            if "similarity" in str(caption.value).lower()
-        ]
-        self.assertTrue(similarity_captions)
-        self.assertTrue(any("Direct support" in caption for caption in similarity_captions))
+        self.assertTrue(
+            any("Direct support" in str(markdown.value) for markdown in app.markdown)
+        )
+        self.assertFalse(
+            any("similarity" in str(caption.value).lower() for caption in app.caption)
+        )
 
     def test_demo_docx_files_are_valid_and_neutral(self) -> None:
         expected_text = {

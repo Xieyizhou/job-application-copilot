@@ -31,7 +31,7 @@ was copied into this document.
 
 ### Add Target Job
 
-- Three instruction banners, three tabs, two cleanup actions, upload controls, and a long
+- Three guidance banners, three tabs, two cleanup actions, upload controls, and a long
   metadata form appear before the main save action.
 - Destructive or maintenance actions are visually equal to the primary task.
 - Most optional metadata can be inferred or placed behind “More details.”

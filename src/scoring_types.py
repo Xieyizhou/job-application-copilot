@@ -145,12 +145,36 @@ class StructuredAnalysis(ScoringResult):
 class DashboardJob(TypedDict, total=False):
     path: Any
     company: str
+    company_raw: str
+    company_normalized: str
+    company_confidence: str
+    company_evidence: list[str]
+    company_candidates: list[str]
+    company_confirmed_by_user: bool
+    company_confirmed_at: str
+    company_status: str
     role: str
+    display_role: str
     title: str
     location: str
+    normalized_location: str
     source: str
     url: str
+    job_url: str
     label: str
+    preview: str
+    canonical_job_key: str
+    description_source: str
+    first_seen_fetch_run_id: str
+    latest_fetch_run_id: str
+    is_manual: bool
+    red_flags: list[str]
+    red_flags_text: str
+    warnings: list[str]
+    warnings_text: str
+    hard_red_flag: bool
+    new_label: str
+    fetch_run_date: str
     analysis_result: dict[str, Any]
     analysis: dict[str, Any]
     analysis_available: bool

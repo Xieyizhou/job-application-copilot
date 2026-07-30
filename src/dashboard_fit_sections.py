@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import html
 from typing import Any, Callable
 
 import streamlit as st
 
-from dashboard_fit import apply_canonical_analysis, build_fit_presentation, confidence_level
+from dashboard_fit import apply_canonical_analysis, build_fit_presentation
 from scoring_types import DashboardJob, FitPresentation
 
 
@@ -36,10 +37,14 @@ def render_top_evidence(analysis: dict[str, Any], sanitize: Sanitizer) -> None:
         for match in matches:
             requirement = sanitize(match.get("requirement", "Requirement"))
             evidence = sanitize(match.get("evidence", ""))
-            st.write(f"{requirement}: “{evidence}”")
-            st.caption(
-                f"{float(match.get('similarity', 0.0)):.0%} similarity · "
-                f"{match.get('match_type', 'Evidence support')}"
+            support = str(match.get("match_type", "Evidence support"))
+            st.markdown(
+                '<div class="review-evidence-row">'
+                f'<div><strong>{html.escape(requirement)}</strong>: '
+                f"“{html.escape(evidence)}”</div>"
+                f"<span>{html.escape(support)}</span>"
+                "</div>",
+                unsafe_allow_html=True,
             )
         return
     strengths = [str(item).strip() for item in analysis.get("matched_strengths", []) if str(item).strip()]
@@ -82,28 +87,21 @@ def render_advanced_analysis(
     sanitize: Sanitizer,
     *,
     demo_mode: bool,
+    show_debug: bool,
 ) -> None:
-    """Keep diagnostic, experimental, and source-level detail collapsed."""
-    confidence = dict(analysis.get("confidence", {}) or {})
-    eligibility = dict(analysis.get("eligibility", {}) or {})
-    quality = dict(analysis.get("jd_quality", {}) or job.get("jd_quality", {}) or {})
+    """Keep requirement and source-level detail collapsed."""
     terms = dict(presentation.get("terms", {}) or {})
-    with st.expander("Advanced analysis", expanded=False):
-        st.markdown("**Decision diagnostics**")
-        st.write(f"Eligibility: {str(eligibility.get('status', 'manual_review')).replace('_', ' ').title()}")
-        st.write(f"Confidence: {confidence_level(confidence).title()}")
-        st.write(f"JD quality: {quality.get('display_label', 'Needs review')}")
+    with st.expander("Evidence details", expanded=False):
         coverage = presentation.get("coverage_score")
-        st.write(f"Recognized requirements: {as_int(terms.get('active_requirement_count', 0))}")
-        st.write(f"Observed coverage: {int(coverage)}%" if coverage is not None else "Observed coverage: unavailable")
-
-        learned = dict(job.get("ml_relevance", {}) or {})
-        if learned.get("available") and learned.get("displayable", True) and quality.get("reliable_scoring_ready"):
-            st.markdown("**Experimental local model**")
-            st.write(f"Relevance estimate: {float(learned.get('probability', 0.0)):.0%}")
-            st.caption("Auxiliary diagnostic only; it does not change Role Fit or recommendation.")
-
         st.markdown("**Recognized requirement details**")
+        st.caption(
+            f"{as_int(terms.get('active_requirement_count', 0))} recognized · "
+            + (
+                f"{int(coverage)}% observed coverage"
+                if coverage is not None
+                else "coverage unavailable"
+            )
+        )
         render_requirement_details(terms, sanitize)
 
         suggestions = [str(item).strip() for item in analysis.get("resume_suggestions", []) if str(item).strip()]
@@ -122,7 +120,7 @@ def render_advanced_analysis(
             for item in profile_evidence[:3]:
                 st.write(f"- {profile_label}: {sanitize(item)}")
 
-        if analysis.get("raw_analysis"):
+        if show_debug and analysis.get("raw_analysis"):
             with st.expander("Full analysis report", expanded=False):
                 st.markdown(sanitize(analysis["raw_analysis"]))
 
@@ -134,10 +132,18 @@ def render_fit_analysis_sections(
     analyze: Callable[[DashboardJob, str], dict[str, Any]],
     sanitize: Sanitizer,
     demo_mode: bool,
+    show_debug: bool = False,
 ) -> None:
     """Render concise evidence first and diagnostics after one click."""
     analysis = analyze(job, job_text)
     presentation = build_fit_presentation(apply_canonical_analysis(job, analysis))
     render_top_evidence(analysis, sanitize)
     render_main_gap(analysis, sanitize)
-    render_advanced_analysis(job, analysis, presentation, sanitize, demo_mode=demo_mode)
+    render_advanced_analysis(
+        job,
+        analysis,
+        presentation,
+        sanitize,
+        demo_mode=demo_mode,
+        show_debug=show_debug,
+    )

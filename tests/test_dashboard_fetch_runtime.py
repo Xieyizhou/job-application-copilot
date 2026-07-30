@@ -184,6 +184,31 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
         self.assertEqual(dashboard_fetch.REGION_CONFIG["Singapore"]["adzuna_country"], "sg")
         self.assertEqual(dashboard_fetch.REGION_CONFIG["United Kingdom"]["adzuna_country"], "gb")
 
+    def test_result_summary_keeps_provider_totals_separate(self) -> None:
+        outcome = dashboard_fetch.FetchSearchOutcome(
+            saved_paths=["one.md"],
+            errors=["provider issue"],
+            runs=[
+                {
+                    "total_jobs_returned": 4,
+                    "new_jobs_count": 1,
+                    "duplicate_jobs_count": 2,
+                    "skipped_jobs_count": 1,
+                    "full_descriptions_count": 3,
+                    "new_jobs": [{"role": "Analyst"}],
+                    "previously_seen_jobs": [{"role": "Scientist"}],
+                }
+            ],
+        )
+        summary = dashboard_fetch.summarize_fetch_outcome(outcome)
+        self.assertEqual(summary.returned, 4)
+        self.assertEqual(summary.new, 1)
+        self.assertEqual(summary.already_seen, 2)
+        self.assertEqual(summary.issues, 2)
+        self.assertEqual(summary.full_descriptions, 3)
+        self.assertEqual(len(summary.new_jobs), 1)
+        self.assertEqual(len(summary.seen_jobs), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

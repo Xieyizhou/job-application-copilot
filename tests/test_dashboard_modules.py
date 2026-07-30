@@ -16,6 +16,10 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from dashboard_fit import build_fit_presentation
 from dashboard_packages import build_application_package_zip
+import dashboard_analysis_service
+import dashboard_company_verification
+import dashboard_fetch_history
+import dashboard_repository
 from dashboard_regions import build_region_options, dynamic_source_options
 from dashboard_review import review_inbox_view_matches
 from dashboard_shell import switch_workspace_mode
@@ -23,6 +27,50 @@ import dashboard
 
 
 class DashboardModuleContractTests(unittest.TestCase):
+    def test_fetch_history_helpers_remain_available_through_facade(self) -> None:
+        self.assertIs(
+            dashboard.fetch_run_label,
+            dashboard_fetch_history.fetch_run_label,
+        )
+        self.assertIs(
+            dashboard.render_fetch_history_section,
+            dashboard_fetch_history.render_fetch_history_section,
+        )
+        self.assertIs(
+            dashboard.render_fetch_run_job_cards,
+            dashboard_fetch_history.render_fetch_run_job_cards,
+        )
+
+    def test_company_verification_helpers_remain_available_through_facade(self) -> None:
+        self.assertIs(
+            dashboard.company_generation_allowed,
+            dashboard_company_verification.company_generation_allowed,
+        )
+        self.assertIs(
+            dashboard.render_manual_company_confirmation,
+            dashboard_company_verification.render_manual_company_confirmation,
+        )
+        self.assertIs(
+            dashboard.render_markdown_company_confirmation,
+            dashboard_company_verification.render_markdown_company_confirmation,
+        )
+
+    def test_analysis_fallback_remains_available_through_dashboard_facade(self) -> None:
+        self.assertIs(
+            dashboard.unavailable_dashboard_analysis,
+            dashboard_analysis_service.unavailable_dashboard_analysis,
+        )
+
+    def test_repository_helpers_remain_available_through_dashboard_facade(self) -> None:
+        self.assertIs(
+            dashboard.deduplicate_dashboard_jobs,
+            dashboard_repository.deduplicate_dashboard_jobs,
+        )
+        self.assertIs(
+            dashboard.infer_source_from_path,
+            dashboard_repository.infer_source_from_path,
+        )
+
     def test_page_wrappers_inject_services_into_extracted_modules(self) -> None:
         with patch.object(dashboard, "render_home_page") as render_home:
             dashboard.dashboard_tab()
@@ -49,12 +97,30 @@ class DashboardModuleContractTests(unittest.TestCase):
             dashboard.job_descriptions_tab()
         review_services = render_review.call_args.args[0]
         self.assertIs(review_services.load_screened_jobs, dashboard.load_screened_jobs)
-        self.assertIs(review_services.save_job_to_tracker, dashboard.save_job_to_tracker)
+        self.assertEqual(review_services.max_recommendation_limit, dashboard.MAX_RECOMMENDATION_LIMIT)
+
+    def test_all_page_service_factories_expose_explicit_dependencies(self) -> None:
+        home = dashboard.home_page_services()
+        fetch = dashboard.fetch_page_services()
+        manual = dashboard.manual_page_services()
+        review = dashboard.review_page_services()
+        tracker = dashboard.tracker_page_services()
+        cover_letter = dashboard.cover_letter_page_services()
+        settings = dashboard.settings_page_services()
+
+        self.assertIs(home.load_screened_jobs, dashboard.load_screened_jobs)
+        self.assertIs(fetch.run_with_captured_output, dashboard.run_with_captured_output)
+        self.assertIs(manual.current_workspace, dashboard.current_workspace)
+        self.assertIs(review.tracker_status_for_job, dashboard.tracker_status_for_job)
+        self.assertIs(tracker.load_tracker_rows, dashboard.load_tracker_rows)
+        self.assertIs(cover_letter.read_text_file, dashboard.read_text_file)
+        self.assertIs(settings.render_page_header, dashboard.render_page_header)
 
     def test_workspace_switch_clears_cross_workspace_selection(self) -> None:
         state = {
             "workspace_mode": "Personal",
             "selected_review_job_path": "private/job.md",
+            "selected_review_tab": "Job description",
             "latest_generated_package_dir": "private/generated",
         }
 
@@ -63,6 +129,7 @@ class DashboardModuleContractTests(unittest.TestCase):
         self.assertEqual(state["workspace_mode"], "Demo")
         self.assertFalse(state["workspace_setup_open"])
         self.assertNotIn("selected_review_job_path", state)
+        self.assertNotIn("selected_review_tab", state)
         self.assertNotIn("latest_generated_package_dir", state)
 
     def test_region_and_source_models_are_derived_from_loaded_jobs(self) -> None:

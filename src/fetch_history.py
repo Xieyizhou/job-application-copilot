@@ -275,14 +275,6 @@ def load_fetch_runs(limit: int | None = None) -> list[dict[str, Any]]:
     return records[:limit] if limit else records
 
 
-def latest_successful_fetch_run() -> dict[str, Any] | None:
-    """Return the newest run that completed without failing."""
-    for run in load_fetch_runs():
-        if str(run.get("fetch_status", "")).lower() in {"success", "partial"}:
-            return run
-    return None
-
-
 def upsert_markdown_metadata(path: Path, fields: dict[str, str]) -> None:
     """Insert or update metadata fields before the job description body."""
     text = path.read_text(encoding="utf-8")

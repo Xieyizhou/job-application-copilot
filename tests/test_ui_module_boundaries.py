@@ -25,10 +25,73 @@ def file_size(relative_path: str) -> int:
 
 
 class UIOrchestrationBoundaryTests(unittest.TestCase):
+    def test_dashboard_page_wrappers_only_delegate_built_services(self) -> None:
+        for function_name in (
+            "dashboard_tab",
+            "fetch_jobs_tab",
+            "manual_job_target_tab",
+            "job_descriptions_tab",
+            "tracker_tab",
+            "package_viewer_tab",
+            "safety_notes_tab",
+        ):
+            self.assertLessEqual(
+                top_level_function_size("src/dashboard.py", function_name),
+                4,
+            )
+
+    def test_dashboard_repository_owns_read_only_data_orchestration(self) -> None:
+        self.assertLessEqual(file_size("src/dashboard_repository.py"), 340)
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard.py", "list_job_description_files"),
+            12,
+        )
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard.py", "build_dashboard_job_record"),
+            10,
+        )
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard.py", "load_screened_jobs"),
+            15,
+        )
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard.py", "load_tracker_rows"),
+            20,
+        )
+
+    def test_dashboard_analysis_service_owns_caching_and_fallbacks(self) -> None:
+        self.assertLessEqual(file_size("src/dashboard_analysis_service.py"), 140)
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard.py", "analyze_job_for_dashboard"),
+            35,
+        )
+
+    def test_company_verification_controls_are_extracted_from_dashboard(self) -> None:
+        self.assertLessEqual(
+            file_size("src/dashboard_company_verification.py"),
+            190,
+        )
+        for function_name in (
+            "company_generation_allowed",
+            "render_manual_company_confirmation",
+            "render_markdown_company_confirmation",
+        ):
+            with self.assertRaises(AssertionError):
+                top_level_function_size("src/dashboard.py", function_name)
+
     def test_review_jobs_entrypoint_stays_orchestration_only(self) -> None:
+        self.assertLessEqual(file_size("src/dashboard_review_page.py"), 520)
+        self.assertLessEqual(file_size("src/dashboard_review_filters.py"), 350)
         self.assertLessEqual(
             top_level_function_size("src/dashboard_review_page.py", "job_descriptions_tab"),
             50,
+        )
+        self.assertLessEqual(
+            top_level_function_size(
+                "src/dashboard_review_filters.py",
+                "render_review_filter_controls",
+            ),
+            45,
         )
 
     def test_manual_entrypoint_stays_orchestration_only(self) -> None:
@@ -36,6 +99,30 @@ class UIOrchestrationBoundaryTests(unittest.TestCase):
             top_level_function_size("src/dashboard_manual.py", "render_manual_add_extract_tab"),
             35,
         )
+
+    def test_find_jobs_entrypoint_stays_orchestration_only(self) -> None:
+        self.assertLessEqual(file_size("src/dashboard_fetch.py"), 480)
+        self.assertLessEqual(file_size("src/dashboard_fetch_history.py"), 190)
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard_fetch.py", "fetch_jobs_tab"),
+            25,
+        )
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard_fetch.py", "render_fetch_options_form"),
+            45,
+        )
+        self.assertLessEqual(
+            top_level_function_size("src/dashboard_fetch.py", "render_fetch_results"),
+            15,
+        )
+        for function_name in (
+            "fetch_run_label",
+            "render_fetch_history_section",
+            "render_fetch_run_job_cards",
+            "render_fetch_run_job_table",
+        ):
+            with self.assertRaises(AssertionError):
+                top_level_function_size("src/dashboard.py", function_name)
 
     def test_phase_two_ui_files_stay_bounded(self) -> None:
         self.assertLessEqual(file_size("src/dashboard_manual.py"), 750)

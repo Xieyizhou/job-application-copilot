@@ -324,7 +324,7 @@ def run_annotation_experiment(
     random_state: int = 42,
 ) -> dict[str, Any]:
     """Compare transparent, latent, and trained reranking baselines."""
-    cosine, _ = _evaluate_cross_validated(
+    cosine, cosine_thresholds = _evaluate_cross_validated(
         "tfidf_cosine",
         tasks,
         pairs,
@@ -403,6 +403,7 @@ def run_annotation_experiment(
         },
         "trained_threshold_median": float(np.median(trained_thresholds)),
         "method_threshold_medians": {
+            "tfidf_cosine": float(np.median(cosine_thresholds)),
             "lsa_embedding": float(np.median(embedding_thresholds)),
             "trained_pair_classifier": float(np.median(trained_thresholds)),
             "hybrid_lsa_reranker": float(np.median(hybrid_thresholds)),

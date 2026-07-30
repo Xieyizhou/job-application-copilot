@@ -6,6 +6,8 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from scoring_types import TrackerRow
+
 
 PAGE_NAMES = (
     "Dashboard",
@@ -17,39 +19,36 @@ PAGE_NAMES = (
     "Settings",
 )
 
-PAGE_DESCRIPTIONS = {
-    "Dashboard": "Start with the next-action cards.",
-    "Find Jobs": "Search broadly, then verify full JDs.",
-    "Add Target Job": "Capture one complete source of truth.",
-    "Review Jobs": "Compare evidence, gaps, and risks.",
-    "Cover Letter": "Review the draft, evidence trace, and gaps.",
-    "Tracker": "Keep stages and follow-ups current.",
-    "Settings": "Review workspace and scoring boundaries.",
-}
-
 GLOBAL_STYLES = """
 <style>
+header[data-testid="stHeader"],
+[data-testid="stToolbar"],
+[data-testid="stDecoration"],
+#MainMenu,
+footer {
+    display: none !important;
+}
 .block-container {
-    padding-top: 1.5rem !important;
+    max-width: 1320px !important;
+    padding-top: .75rem !important;
     padding-bottom: 2rem !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
 }
-.app-title-safe-area {
-    padding-top: 2.25rem;
-    padding-bottom: 0.75rem;
-    overflow: visible !important;
+div[data-testid="stMain"]:has(.desktop-workspace-marker) {
+    overflow: hidden !important;
 }
-.app-title-text {
-    font-size: 2.35rem;
-    font-weight: 750;
-    line-height: 1.25;
-    letter-spacing: -0.02em;
-    margin: 0;
-    padding: 0;
-    overflow: visible !important;
+div[data-testid="stMainBlockContainer"]:has(.desktop-workspace-marker) {
+    height: 100vh !important;
+    overflow: hidden !important;
+    padding-bottom: .5rem !important;
+}
+.desktop-workspace-marker {
+    display: none;
 }
 .page-header {
-    margin-top: 0.35rem;
-    margin-bottom: 0.65rem;
+    margin-top: 0;
+    margin-bottom: 0.55rem;
 }
 .page-title {
     font-size: 1.55rem;
@@ -58,7 +57,8 @@ GLOBAL_STYLES = """
     margin: 0 0 0.35rem 0;
 }
 .page-subtitle {
-    color: rgba(49, 51, 63, 0.72);
+    color: var(--text-color);
+    opacity: 0.68;
     font-size: 0.92rem;
     line-height: 1.35;
     margin: 0;
@@ -74,6 +74,13 @@ h3 {
 div[data-testid="stRadio"] {
     margin-top: 0rem !important;
     margin-bottom: 0.2rem !important;
+}
+@media (max-width: 1099px) {
+    div[data-testid="stMain"]:has(.desktop-workspace-marker),
+    div[data-testid="stMainBlockContainer"]:has(.desktop-workspace-marker) {
+        height: auto !important;
+        overflow: auto !important;
+    }
 }
 </style>
 """
@@ -96,6 +103,7 @@ def switch_workspace_mode(session_state: Any, mode: str) -> None:
         "package_viewer_tracker_id",
         "selected_review_job_path",
         "selected_review_job_label",
+        "selected_review_tab",
         "review_workspace_mode",
     ]:
         session_state.pop(key, None)
@@ -107,10 +115,28 @@ def render_sidebar(
     current_workspace: Callable[[], Any],
     list_job_description_files: Callable[..., list[Any]],
     count_generated_packages: Callable[[], int],
-    load_tracker_rows: Callable[..., list[dict[str, Any]]],
+    load_tracker_rows: Callable[..., list[TrackerRow]],
     demo_mode_enabled: Callable[[], bool],
 ) -> None:
     """Render a Personal-first workflow with Demo as a separate experience."""
+    active_page = str(st.session_state.get("active_page", "Dashboard"))
+    if active_page not in PAGE_NAMES:
+        active_page = "Dashboard"
+        st.session_state["active_page"] = active_page
+
+    st.sidebar.title("Job Application Toolkit")
+    st.sidebar.caption("Your local job application workflow")
+    selected_page = st.sidebar.radio(
+        "Navigation",
+        PAGE_NAMES,
+        index=PAGE_NAMES.index(active_page),
+        label_visibility="collapsed",
+    )
+    if selected_page != active_page:
+        st.session_state["active_page"] = selected_page
+        st.rerun()
+    st.sidebar.divider()
+
     active_mode = str(st.session_state.get("workspace_mode", "Personal"))
     if active_mode == "Demo":
         if st.sidebar.button("Back to Personal Workspace", type="primary", width="stretch"):
@@ -120,7 +146,6 @@ def render_sidebar(
         switch_workspace_mode(st.session_state, "Demo")
         st.rerun()
 
-    st.sidebar.title("Your Job Search Flow")
     workspace = current_workspace()
     if workspace.mode == "personal":
         st.sidebar.caption("Personal workspace · local and private")
@@ -136,7 +161,7 @@ def render_sidebar(
             st.session_state["workspace_setup_open"] = True
             st.rerun()
     else:
-        st.sidebar.info("Demo mode · sanitized and read-only")
+        st.sidebar.caption("Demo · sanitized, fictional, and read-only")
 
     if workspace.ready:
         try:
@@ -150,22 +175,7 @@ def render_sidebar(
         except (OSError, sqlite3.Error):
             pass
 
-    active_page = str(st.session_state.get("active_page", "Dashboard"))
-    st.sidebar.markdown(f"**Current:** {active_page}")
-    st.sidebar.caption(PAGE_DESCRIPTIONS.get(active_page, "Follow the workflow one decision at a time."))
     st.sidebar.caption("Local-first. Human-reviewed. No automatic submissions.")
-
-
-def render_app_title(st: Any) -> None:
-    """Render the global product title below the navigation safe area."""
-    st.markdown(
-        """
-        <div class="app-title-safe-area">
-          <div class="app-title-text">Job Application Toolkit</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def run_app(
@@ -174,7 +184,7 @@ def run_app(
     current_workspace: Callable[[], Any],
     list_job_description_files: Callable[..., list[Any]],
     count_generated_packages: Callable[[], int],
-    load_tracker_rows: Callable[..., list[dict[str, Any]]],
+    load_tracker_rows: Callable[..., list[TrackerRow]],
     demo_mode_enabled: Callable[[], bool],
     render_candidate_workspace_setup: Callable[[Any], None],
     manual_jobs_module: Any,
@@ -191,7 +201,6 @@ def run_app(
         load_tracker_rows=load_tracker_rows,
         demo_mode_enabled=demo_mode_enabled,
     )
-    render_app_title(st)
 
     workspace = current_workspace()
     if workspace.mode == "personal" and (
@@ -202,20 +211,4 @@ def run_app(
     if workspace.mode == "personal":
         manual_jobs_module.MANUAL_SAVED_JOBS_DIR = workspace.jobs_dir
 
-    active_page = str(st.session_state.get("active_page", "Dashboard"))
-    if active_page not in PAGE_NAMES:
-        active_page = "Dashboard"
-        st.session_state["active_page"] = active_page
-
-    selected_page = st.radio(
-        "Navigation",
-        PAGE_NAMES,
-        index=PAGE_NAMES.index(active_page),
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    if selected_page != active_page:
-        st.session_state["active_page"] = selected_page
-        st.rerun()
-
-    page_renderers[selected_page]()
+    page_renderers[str(st.session_state.get("active_page", "Dashboard"))]()

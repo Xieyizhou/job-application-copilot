@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -19,6 +20,16 @@ RECOMMENDATION_RANK = {
 }
 
 REVIEW_INBOX_OPTIONS = ["Recommended", "Needs attention", "Ready", "All"]
+
+
+@dataclass(frozen=True)
+class ReviewAction:
+    """One consistent Review Jobs action and its destination."""
+
+    label: str
+    target_section: str
+    message: str
+    caution: bool = False
 
 
 def is_ignored_tracker_status(status: str) -> bool:
@@ -99,16 +110,6 @@ def is_strong_match(job: DashboardJob) -> bool:
     )
 
 
-def is_current_recommendation(job: DashboardJob) -> bool:
-    """Return True for current eligible recommendations shown on Dashboard."""
-    return (
-        bool(job.get("analysis_available"))
-        and eligibility_status(job) == "passed"
-        and confidence_level(job.get("confidence")) in {"medium", "high"}
-        and str(job.get("recommendation", "")) in {"Apply", "Apply / Maybe Apply", "Maybe Apply"}
-    )
-
-
 def sorted_review_jobs(jobs: list[DashboardJob], sort_by: str) -> list[DashboardJob]:
     """Return Review Jobs sorted for inbox display."""
     reverse = sort_by != "Company A-Z"
@@ -183,25 +184,90 @@ def review_job_next_action(
     job: DashboardJob | dict[str, Any],
     tracker_status: str = "Not tracked",
     package_status: str = "No cover letter",
+    *,
+    demo: bool = False,
 ) -> str:
-    """Return one prioritized action for a saved job."""
+    """Compatibility wrapper returning the prioritized action message."""
+    return primary_review_action(
+        job,
+        tracker_status,
+        package_status,
+        demo=demo,
+    ).message
+
+
+def primary_review_action(
+    job: DashboardJob | dict[str, Any],
+    tracker_status: str = "Not tracked",
+    package_status: str = "No cover letter",
+    *,
+    demo: bool = False,
+) -> ReviewAction:
+    """Return the single Review Jobs action used by guidance and controls."""
+    del tracker_status  # Review Jobs actions stay focused on evidence and materials.
     if not job.get("analysis_available"):
-        return "Add a complete job description before judging fit."
+        return ReviewAction(
+            "Add Complete JD" if not demo else "Inspect JD limits",
+            "JD",
+            (
+                "This sample lacks a complete job description, so no fit decision is available."
+                if demo
+                else "Add a complete job description before judging fit."
+            ),
+            caution=True,
+        )
+    if job_needs_full_jd(job):
+        if demo:
+            return ReviewAction(
+                "Inspect JD limits",
+                "JD",
+                "This sample JD is incomplete, so its fit result remains provisional.",
+                caution=True,
+            )
+        return ReviewAction(
+            "Get Full JD",
+            "JD",
+            "Get the full job description before trusting fit or generating materials.",
+            caution=True,
+        )
     if eligibility_status(job) == "failed":
-        return "Review the hard constraint, then ignore unless the source is wrong."
+        return ReviewAction(
+            "Verify constraint",
+            "JD",
+            "Verify the hard constraint against the original posting.",
+            caution=True,
+        )
     if confidence_level(job.get("confidence")) == "low":
-        if job_needs_full_jd(job):
-            return "Get the full job description before trusting fit."
-        return "Review the extracted requirements and candidate evidence."
+        return ReviewAction(
+            "Review Evidence",
+            "Fit",
+            "Review the extracted requirements and resume evidence before deciding.",
+            caution=True,
+        )
     if bool(job.get("company_needs_review")):
-        return "Confirm the company name before generating documents."
-    if package_status in {"No cover letter", "Not generated", "-"}:
-        return "Review the gaps, then generate a resume-grounded cover letter."
-    if tracker_status == "Not tracked":
-        return "Add this opportunity to the tracker."
-    if str(tracker_status).lower() == "ready":
-        return "Review the cover letter and apply manually."
-    return "Open the tracker and record the latest outcome."
+        return ReviewAction(
+            "Confirm Employer",
+            "Cover Letter",
+            "Confirm the employer identity before generating documents.",
+            caution=True,
+        )
+    if package_status in {"Cover letter ready", "Demo cover letter"}:
+        return ReviewAction(
+            "Review Cover Letter",
+            "Cover Letter",
+            "Review the evidence, gaps, and employer details before applying manually.",
+        )
+    if demo:
+        return ReviewAction(
+            "Review Evidence",
+            "Fit",
+            "Inspect the evidence and gaps behind this fictional result.",
+        )
+    return ReviewAction(
+        "Prepare Cover Letter",
+        "Cover Letter",
+        "Review the gaps, then prepare a resume-grounded cover letter.",
+    )
 
 
 def job_evidence_label(job: DashboardJob | dict[str, Any]) -> str:
