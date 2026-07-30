@@ -90,14 +90,18 @@ def render_manual_workspace_styles() -> None:
         <style>
         .st-key-manual_jd_panel,
         .st-key-manual_verify_panel {
-            height:calc(100vh - 8.4rem) !important;
-            min-height:430px;
-            overflow-y:auto;
+            height:calc(100vh - 11.2rem) !important;
+            max-height:calc(100vh - 11.2rem) !important;
+            min-height:0 !important;
+            flex:0 0 calc(100vh - 11.2rem) !important;
+            overflow-y:auto !important;
+            overscroll-behavior:contain;
+            scrollbar-gutter:stable;
             padding-right:.45rem;
         }
         .st-key-manual_jd_panel [data-testid="stTextArea"] textarea {
-            height:calc(100vh - 24rem) !important;
-            min-height:260px;
+            height:calc(100vh - 26rem) !important;
+            min-height:220px;
         }
         .st-key-manual_verify_panel [data-testid="stForm"] {
             border:0 !important;padding:0 !important;margin-bottom:.35rem;
@@ -106,8 +110,10 @@ def render_manual_workspace_styles() -> None:
             .st-key-manual_jd_panel,
             .st-key-manual_verify_panel {
                 height:auto !important;
-                min-height:0;
-                overflow:visible;
+                max-height:none !important;
+                min-height:0 !important;
+                flex:1 1 auto !important;
+                overflow:visible !important;
             }
             .st-key-manual_jd_panel [data-testid="stTextArea"] textarea {
                 height:340px !important;
@@ -126,7 +132,13 @@ def render_cover_letter_workspace_styles() -> None:
         <style>
         .st-key-cover_letter_context_panel,
         .st-key-cover_letter_document_panel {
-            height:calc(100vh - 4.7rem);overflow-y:auto;
+            height:calc(100vh - 4.7rem) !important;
+            max-height:calc(100vh - 4.7rem) !important;
+            min-height:0 !important;
+            flex:0 0 calc(100vh - 4.7rem) !important;
+            overflow-y:auto !important;
+            overscroll-behavior:contain;
+            scrollbar-gutter:stable;
             margin-top:0 !important;padding-right:.4rem;
         }
         .st-key-cover_letter_context_panel > div,
@@ -139,7 +151,9 @@ def render_cover_letter_workspace_styles() -> None:
         @media (max-width:1099px) {
             .st-key-cover_letter_context_panel,
             .st-key-cover_letter_document_panel {
-                height:auto !important;overflow:visible;padding-right:0;
+                height:auto !important;max-height:none !important;
+                min-height:0 !important;flex:1 1 auto !important;
+                overflow:visible !important;padding-right:0;
             }
         }
         </style>

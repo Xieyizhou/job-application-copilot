@@ -89,7 +89,13 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         for evidence in ["Bachelor's degree in Data Science", "Python", "SQL", "scikit-learn", "cross-validation"]:
             self.assertIn(evidence, candidate)
         normalized = candidate.lower()
-        for forbidden in ["ucsd", "xieyizhou", "github.com", "linkedin.com", "@"]:
+        for forbidden in [
+            "personal-university.example",
+            "personal-candidate-name",
+            "github.com",
+            "linkedin.com",
+            "@",
+        ]:
             self.assertNotIn(forbidden, normalized)
 
     def test_three_jobs_have_distinct_canonical_outcomes(self) -> None:
@@ -157,7 +163,12 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         for path in DEMO_PACKAGE.glob("*.docx"):
             package_text += "\n" + "\n".join(p.text for p in Document(path).paragraphs)
         normalized = package_text.lower()
-        for forbidden in ["ucsd", "xieyizhou", "/users/", "github.com"]:
+        for forbidden in [
+            "personal-university.example",
+            "personal-candidate-name",
+            "/users/",
+            "github.com",
+        ]:
             self.assertNotIn(forbidden, normalized)
         self.assertIn("demo", normalized)
         workspace = demo_workspace()

@@ -41,6 +41,11 @@ def test_shell_keeps_navigation_in_sidebar_and_bounds_main_width() -> None:
     assert "@media (max-width: 1099px)" in source
     assert "render_app_title" not in source
     assert "st.radio(" not in source.replace("st.sidebar.radio(", "")
+    assert "Personal · {workspace_status} · Local" in source
+    assert "Manage workspace files" in source
+    assert "Candidate source:" not in source
+    assert "sidebar_jobs" not in source
+    assert "No automatic submissions." not in source
 
 
 def test_tracker_defaults_to_stage_and_next_action() -> None:
@@ -96,3 +101,9 @@ def test_cover_letter_uses_aligned_context_and_document_panels() -> None:
     assert "render_cover_letter_document(" in source
     assert ".st-key-cover_letter_context_panel" in styles
     assert ".st-key-cover_letter_document_panel" in styles
+    assert "max-height:calc(100vh - 4.7rem) !important" in styles
+    assert "flex:0 0 calc(100vh - 4.7rem) !important" in styles
+    assert "overflow-y:auto !important" in styles
+    assert "max-height:calc(100vh - 11.2rem) !important" in styles
+    assert "flex:0 0 calc(100vh - 11.2rem) !important" in styles
+    assert "height:calc(100vh - 26rem) !important" in styles

@@ -54,7 +54,7 @@ def _render_workspace(ui: Any, workspace: Any, jobs_count: int, tracker_count: i
     ui.write("Candidate source: " + ("Ready" if workspace.resume_source_path else "Missing"))
     ui.write(f"Saved jobs: {jobs_count}")
     ui.write(f"Tracker records: {tracker_count if not demo_mode else 'Disabled in Demo'}")
-    ui.caption("Use Replace candidate files in the sidebar to update your resume or optional template.")
+    ui.caption("Use Manage workspace files in the sidebar to update your resume or optional template.")
 
 
 def _render_sources(ui: Any, sources: dict[str, bool]) -> None:

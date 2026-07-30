@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -148,34 +147,13 @@ def render_sidebar(
 
     workspace = current_workspace()
     if workspace.mode == "personal":
-        st.sidebar.caption("Personal workspace · local and private")
-        st.sidebar.caption("Configured" if workspace.ready else "Setup required")
-        st.sidebar.write(f"Candidate source: {'Ready' if workspace.resume_source_path else 'Missing'}")
-        st.sidebar.write(
-            f"Experience bank: {'Provided' if workspace.experience_bank_path else 'Optional · resume-grounded'}"
-        )
-        st.sidebar.write(
-            f"Cover-letter template: {'Provided' if workspace.cover_letter_template_path else 'Generic template'}"
-        )
-        if workspace.ready and st.sidebar.button("Replace candidate files"):
+        workspace_status = "Ready" if workspace.ready else "Setup required"
+        st.sidebar.caption(f"Personal · {workspace_status} · Local")
+        if workspace.ready and st.sidebar.button("Manage workspace files", width="stretch"):
             st.session_state["workspace_setup_open"] = True
             st.rerun()
     else:
-        st.sidebar.caption("Demo · sanitized, fictional, and read-only")
-
-    if workspace.ready:
-        try:
-            sidebar_jobs = len(list_job_description_files())
-            sidebar_packages = count_generated_packages()
-            sidebar_cover_label = "cover letter" if sidebar_packages == 1 else "cover letters"
-            sidebar_tracker = 0 if demo_mode_enabled() else len(load_tracker_rows(sort_by="created_at", descending=True))
-            st.sidebar.caption(
-                f"{sidebar_jobs} jobs · {sidebar_packages} {sidebar_cover_label} · {sidebar_tracker} tracker records"
-            )
-        except (OSError, sqlite3.Error):
-            pass
-
-    st.sidebar.caption("Local-first. Human-reviewed. No automatic submissions.")
+        st.sidebar.caption("Demo · Read-only")
 
 
 def run_app(

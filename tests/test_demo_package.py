@@ -117,9 +117,13 @@ class DemoPackageTests(unittest.TestCase):
         )
         self.assertEqual(local_workspace.exists(), existed_before)
 
-    @patch.object(dashboard, "demo_mode_enabled", return_value=True)
-    def test_demo_review_filter_and_sort_options_are_total(self, _demo_mode: object) -> None:
-        jobs = dashboard.load_screened_jobs()
+    def test_demo_review_filter_and_sort_options_are_total(self) -> None:
+        demo_workspace = dashboard.resolve_workspace("Demo")
+        with (
+            patch.object(dashboard, "current_workspace", return_value=demo_workspace),
+            patch.object(dashboard, "demo_mode_enabled", return_value=True),
+        ):
+            jobs = dashboard.load_screened_jobs()
         self.assertTrue(jobs)
         tracker_rows: list[dict[str, object]] = []
 
