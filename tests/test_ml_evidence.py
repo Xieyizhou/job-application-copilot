@@ -95,6 +95,44 @@ No specific degree level is required for this role.
         )
         self.assertEqual([record["text"] for record in records], ["Python", "SQL"])
 
+    def test_compressed_preview_keeps_only_complete_atomic_requirements(self) -> None:
+        records = extract_requirement_records(
+            """## Job Description
+...introductory fragment... Experience with motion analysis and dataset labeling. Familiarity with structuring large...
+"""
+        )
+        self.assertEqual(
+            [record["text"] for record in records],
+            ["Experience with motion analysis and dataset labeling"],
+        )
+
+    def test_inline_bullets_and_tildes_are_split_and_deduplicated(self) -> None:
+        records = extract_requirement_records(
+            """## Requirements
+Qualifications ~5+ years of machine learning experience ~Portfolio of completed...
+5+ years of machine learning experience
+...degree fragment; advanced degree preferred. • Strong foundation in software engineering and applied machine learning. • Responsible AI knowledge...
+"""
+        )
+        self.assertEqual(
+            [record["text"] for record in records],
+            [
+                "5+ years of machine learning experience",
+                "Strong foundation in software engineering and applied machine learning",
+            ],
+        )
+
+    def test_role_description_is_not_returned_with_atomic_responsibility(self) -> None:
+        records = extract_requirement_records(
+            """## Job Description
+Role Description We are hiring an engineer. The candidate will be responsible for designing and deploying machine learning models. You will work closely with software...
+"""
+        )
+        self.assertEqual(
+            [record["text"] for record in records],
+            ["The candidate will be responsible for designing and deploying machine learning models"],
+        )
+
     def test_resume_extractor_omits_contact_and_keeps_section(self) -> None:
         records = extract_resume_evidence_records(
             """# Fictional Candidate

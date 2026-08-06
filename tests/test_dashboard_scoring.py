@@ -44,6 +44,35 @@ def analyzed_job(job_text: str, candidate_text: str = MATCHING_CANDIDATE) -> dic
 
 
 class CanonicalDashboardAnalysisTests(unittest.TestCase):
+    def test_personal_web_shadow_does_not_change_analysis_result(self) -> None:
+        job = {
+            "company": "Fictional Signal Works",
+            "role": "Data Analyst",
+            "path": Path("fictional-role.md"),
+        }
+        workspace = SimpleNamespace(
+            mode="personal",
+            root=Path("data/local_workspace"),
+            resume_source_path=Path("candidate.md"),
+        )
+        with (
+            patch.object(dashboard, "current_workspace", return_value=workspace),
+            patch.object(dashboard, "enqueue_web_candidate_shadow") as enqueue_shadow,
+        ):
+            result = dashboard.analyze_job_for_dashboard(
+                job,
+                "Required: Python and SQL.",
+                MATCHING_CANDIDATE,
+                use_cache=True,
+            )
+        self.assertTrue(result["analysis_available"])
+        self.assertNotIn("shadow", result)
+        enqueue_shadow.assert_called_once_with(
+            "Required: Python and SQL.",
+            MATCHING_CANDIDATE,
+            workspace_mode="personal",
+        )
+
     def test_dashboard_uses_full_analyzer_not_lightweight_score(self) -> None:
         job = analyzed_job("Machine learning")
         self.assertEqual(dashboard.score_job_for_dashboard("Machine learning"), 57)

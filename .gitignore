@@ -15,6 +15,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .cache/
+.code-review-graph/
 .tox/
 .nox/
 build/
@@ -89,6 +90,8 @@ data/ml/processed/
 data/ml/models/
 data/ml/annotations/
 data/ml/shadow/
+data/ml/source_partitions/
 models/
-reports/ml/
+reports/
 data/ml/external/
+data/ml/distillation/

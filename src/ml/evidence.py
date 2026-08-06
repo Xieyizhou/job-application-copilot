@@ -93,6 +93,47 @@ YEAR_WORDS = {
 }
 
 
+def _atomic_requirement_fragments(raw_line: str) -> list[str]:
+    """Split compressed preview text while discarding ellipsis-truncated tails."""
+    cleaned = clean_source_line(raw_line)
+    if not cleaned:
+        return []
+    pieces = re.split(r"(\.{3,}|[•~])", cleaned)
+    fragments: list[str] = []
+    for index in range(0, len(pieces), 2):
+        chunk = pieces[index].strip()
+        preceding_boundary = pieces[index - 1] if index else ""
+        following_boundary = pieces[index + 1] if index + 1 < len(pieces) else ""
+        if not chunk:
+            continue
+        chunk = re.sub(
+            r"^(?:role description|description|qualifications?|requirements?)\s*:?​?\s*",
+            "",
+            chunk,
+            flags=re.IGNORECASE,
+        ).strip()
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", chunk)
+        for sentence_index, sentence in enumerate(sentences):
+            sentence = sentence.strip()
+            is_final_sentence = sentence_index == len(sentences) - 1
+            if (
+                preceding_boundary.startswith("...")
+                and sentence_index == 0
+                and sentence[:1].islower()
+            ):
+                continue
+            if (
+                following_boundary.startswith("...")
+                and is_final_sentence
+                and not re.search(r"[.!?]$", sentence)
+            ):
+                continue
+            sentence = sentence.rstrip(".!?").strip()
+            if sentence:
+                fragments.append(sentence)
+    return fragments
+
+
 def clean_source_line(raw_line: str) -> str:
     """Clean Markdown decoration while preserving factual source wording."""
     line = raw_line.strip()
@@ -175,25 +216,53 @@ def extract_requirement_records(job_text: str) -> list[dict[str, str]]:
             term in current_section
             for term in ("preferred", "nice to have", "bonus", "plus")
         )
-        preferred_signal = any(term in lower for term in ("preferred", "nice to have", "bonus", "a plus"))
-        required_signal = any(
-            term in lower
-            for term in ("required", "must", "experience with", "responsible for", "proficiency in")
-        )
-        previous_line = clean_source_line(source_lines[line_index - 1]).lower() if line_index else ""
-        negation_context = f"{previous_line} {lower}"
-        negated_requirement = bool(
-            re.search(
-                r"\b(?:no|not|does not|is not|without)\b.{0,200}\b(?:required|must)\b",
-                negation_context,
-            )
-        )
         is_bullet = bool(re.match(r"^[-*•]\s+", stripped))
-        if negated_requirement or not (required_signal or preferred_signal or (requirement_section and is_bullet)):
-            continue
-        demand = "preferred" if preferred_section or preferred_signal else "required"
-        if line not in {record["text"] for record in records}:
-            records.append({"text": line, "demand": demand, "section": current_section or "job description"})
+        has_inline_list = bool(re.search(r"[•~]", raw_line))
+        previous_line = clean_source_line(source_lines[line_index - 1]).lower() if line_index else ""
+        fragments = _atomic_requirement_fragments(raw_line)
+        for fragment in fragments:
+            fragment_lower = fragment.lower()
+            preferred_signal = any(
+                term in fragment_lower
+                for term in ("preferred", "nice to have", "bonus", "a plus")
+            )
+            required_signal = any(
+                term in fragment_lower
+                for term in (
+                    "required",
+                    "requires",
+                    "must",
+                    "experience with",
+                    "responsible for",
+                    "proficiency in",
+                    "strong background in",
+                    "strong foundation in",
+                    "familiarity with",
+                )
+            )
+            negation_context = f"{previous_line} {fragment_lower}"
+            negated_requirement = bool(
+                re.search(
+                    r"\b(?:no|not|does not|is not|without)\b.{0,200}\b(?:required|must)\b",
+                    negation_context,
+                )
+            )
+            if negated_requirement or not (
+                required_signal
+                or preferred_signal
+                or (requirement_section and is_bullet)
+                or (requirement_section and has_inline_list)
+            ):
+                continue
+            demand = "preferred" if preferred_section or preferred_signal else "required"
+            if fragment not in {record["text"] for record in records}:
+                records.append(
+                    {
+                        "text": fragment,
+                        "demand": demand,
+                        "section": current_section or "job description",
+                    }
+                )
     return sorted(records, key=lambda item: item["demand"] == "preferred")
 
 

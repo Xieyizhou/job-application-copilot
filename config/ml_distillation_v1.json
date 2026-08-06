@@ -1,0 +1,42 @@
+{
+  "dataset_policy": {
+    "allow_human_reviewed_training_only": true,
+    "allow_unlabeled_source_pool": false,
+    "allow_v4_v7_before_full_qa_and_human_labels": false,
+    "allow_v6_sealed_holdout": false,
+    "allow_frozen_reserve": false,
+    "allow_shadow_diagnostics": false,
+    "allow_v8_annotation_pilot": false
+  },
+  "experiment_id": "evidence_distillation_v1",
+  "product_integration_allowed": false,
+  "rollout_allowed": false,
+  "schema_version": 1,
+  "student": {
+    "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+    "objective": "scalar_candidate_ranking_only",
+    "source": "huggingface",
+    "weights_frozen_before_distillation": false
+  },
+  "teachers": [
+    {
+      "id": "local_embedding_baseline",
+      "kind": "embedding_baseline",
+      "model": "qwen3-embedding:0.6b",
+      "source": "ollama"
+    },
+    {
+      "id": "primary_reranker_candidate",
+      "kind": "reranker_teacher",
+      "model": "Qwen/Qwen3-Reranker-0.6B",
+      "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+      "source": "huggingface"
+    },
+    {
+      "id": "audit_reranker_candidate",
+      "kind": "reranker_audit",
+      "model": "BAAI/bge-reranker-v2-m3",
+      "source": "huggingface"
+    }
+  ]
+}

@@ -14,10 +14,23 @@ import pandas as pd
 from ml.annotation_generation import infer_role_family as infer_annotation_role_family
 from ml.evidence import extract_requirement_records
 from ml.real_development import (
+    LEGACY_EVIDENCE_EXTRACTION,
     ROLE_FAMILIES,
     extract_action_evidence,
     infer_role_family,
     source_hash,
+    validate_evidence_extraction_policy,
+)
+from ml.source_text_quality import (
+    LEGACY_SOURCE_TEXT_QUALITY,
+    SUCCESSOR_V5_SOURCE_TEXT_QUALITY,
+    SUCCESSOR_V6_SOURCE_TEXT_QUALITY,
+    SUCCESSOR_V7_SOURCE_TEXT_QUALITY,
+    SUCCESSOR_V8_SOURCE_TEXT_QUALITY,
+    canonical_public_text,
+    diverse_quality_evidence,
+    requirement_quality_reasons_for_policy,
+    validate_source_text_quality_policy,
 )
 
 REQUIREMENT_SIGNAL = (
@@ -44,6 +57,35 @@ REQUIREMENT_SIGNAL = (
     "lead",
     "collaborat",
 )
+
+
+def development_source_revision(
+    djinni_manifest_path: Path,
+    *,
+    ats_dataset_dir: Path | None = None,
+) -> str:
+    """Commit to local source bytes without exposing any source content."""
+    djinni_digest = hashlib.sha256(djinni_manifest_path.read_bytes()).hexdigest()
+    if ats_dataset_dir is None:
+        return f"djinni-manifest-sha256:{djinni_digest}"
+    files = sorted(path for path in ats_dataset_dir.rglob("*") if path.is_file())
+    if not files:
+        raise ValueError("ATS dataset directory is empty.")
+    ats_hasher = hashlib.sha256()
+    for path in files:
+        relative = path.relative_to(ats_dataset_dir).as_posix()
+        ats_hasher.update(relative.encode())
+        ats_hasher.update(b"\0")
+        ats_hasher.update(hashlib.sha256(path.read_bytes()).digest())
+    payload = json.dumps(
+        {
+            "ats_dataset_sha256": ats_hasher.hexdigest(),
+            "djinni_manifest_sha256": djinni_digest,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return f"djinni+ats-sha256:{hashlib.sha256(payload).hexdigest()}"
 NON_REQUIREMENT_SIGNAL = (
     "bonus",
     "incentive",
@@ -58,6 +100,37 @@ NON_REQUIREMENT_SIGNAL = (
     "pharmaceutical sciences",
     "biochemistry biotechnology",
 )
+SPECIALIZED_PROFILE_ROLE_SIGNALS = {
+    "ML": (
+        "machine learning",
+        "data scientist",
+        "artificial intelligence",
+        "computer vision",
+        "deep learning",
+        "nlp",
+        "pytorch",
+        "tensorflow",
+    ),
+    "Data": (
+        "data analyst",
+        "analytics",
+        "business intelligence",
+        "power bi",
+        "tableau",
+        "reporting analyst",
+    ),
+}
+
+
+def _extract_profile_evidence(
+    text: str,
+    *,
+    policy: str,
+) -> list[str]:
+    """Keep the legacy call contract stable for frozen source builders."""
+    if policy == LEGACY_EVIDENCE_EXTRACTION:
+        return extract_action_evidence(text)
+    return extract_action_evidence(text, policy=policy)
 SKILLSPAN_REQUIREMENT_SIGNAL = (
     "experience",
     "knowledge",
@@ -82,8 +155,11 @@ def load_djinni_requirements(
     *,
     random_state: int,
     family_limit: int = 180,
+    text_quality_policy: str = LEGACY_SOURCE_TEXT_QUALITY,
+    included_job_hashes: set[str] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Load privacy-screened JD requirements, balanced by broad role family."""
+    validate_source_text_quality_policy(text_quality_policy)
     jobs = pd.read_parquet(
         parquet_path,
         columns=["id", "Position", "Primary Keyword", "Long Description"],
@@ -92,7 +168,14 @@ def load_djinni_requirements(
     for row in jobs.sample(frac=1, random_state=random_state).to_dict("records"):
         raw_id = str(row.get("id", ""))
         job_hash = source_hash("djinni_job", raw_id)
-        if not raw_id or job_hash in excluded_job_hashes:
+        if (
+            not raw_id
+            or job_hash in excluded_job_hashes
+            or (
+                included_job_hashes is not None
+                and job_hash not in included_job_hashes
+            )
+        ):
             continue
         family = infer_role_family(
             str(row.get("Position", "")),
@@ -103,12 +186,31 @@ def load_djinni_requirements(
         requirements = extract_requirement_records(
             str(row.get("Long Description", ""))
         )
-        usable = [
-            str(record["text"])
-            for record in requirements
-            if 6 <= len(str(record["text"]).split()) <= 48
-            and _is_requirement_text(str(record["text"]))
-        ]
+        usable: list[str] = []
+        for record in requirements:
+            source_text = str(record["text"])
+            candidate = (
+                canonical_public_text(source_text)
+                if text_quality_policy
+                in {
+                    SUCCESSOR_V6_SOURCE_TEXT_QUALITY,
+                    SUCCESSOR_V7_SOURCE_TEXT_QUALITY,
+                    SUCCESSOR_V8_SOURCE_TEXT_QUALITY,
+                }
+                else source_text
+            )
+            if (
+                6 <= len(source_text.split()) <= 48
+                and _is_requirement_text(candidate)
+                and (
+                    text_quality_policy == LEGACY_SOURCE_TEXT_QUALITY
+                    or not requirement_quality_reasons_for_policy(
+                        source_text,
+                        text_quality_policy,
+                    )
+                )
+            ):
+                usable.append(candidate)
         if usable:
             pools[family].append(
                 {
@@ -176,27 +278,79 @@ def load_djinni_profiles(
     *,
     random_state: int,
     family_limit: int = 240,
+    include_supplemental_profile_text: bool = False,
+    prefer_specialized_role: bool = False,
+    minimum_evidence: int = 5,
+    text_quality_policy: str = LEGACY_SOURCE_TEXT_QUALITY,
+    included_resume_hashes: set[str] | None = None,
+    evidence_extraction_policy: str = LEGACY_EVIDENCE_EXTRACTION,
 ) -> dict[str, list[dict[str, Any]]]:
     """Load profiles containing enough privacy-screened action evidence."""
+    validate_source_text_quality_policy(text_quality_policy)
+    validate_evidence_extraction_policy(evidence_extraction_policy)
+    if minimum_evidence < 4:
+        raise ValueError("Djinni development profiles need four evidence statements.")
+    text_columns = (
+        ["CV", "Highlights", "Moreinfo", "Looking For"]
+        if include_supplemental_profile_text
+        else ["CV"]
+    )
     profiles = pd.read_parquet(
         parquet_path,
-        columns=["id", "Position", "Primary Keyword", "CV"],
+        columns=["id", "Position", "Primary Keyword", *text_columns],
     )
     pools: dict[str, list[dict[str, Any]]] = defaultdict(list)
     rows = profiles.sample(frac=1, random_state=random_state + 1)
     for row in rows.to_dict("records"):
         raw_id = str(row.get("id", ""))
         resume_hash = source_hash("djinni_profile", raw_id)
-        if not raw_id or resume_hash in excluded_resume_hashes:
+        if (
+            not raw_id
+            or resume_hash in excluded_resume_hashes
+            or (
+                included_resume_hashes is not None
+                and resume_hash not in included_resume_hashes
+            )
+        ):
             continue
-        family = infer_role_family(
-            str(row.get("Position", "")),
-            str(row.get("Primary Keyword", "")),
+        role_text = (
+            f"{row.get('Position', '')} {row.get('Primary Keyword', '')}"
+        ).lower()
+        specialized = next(
+            (
+                family_name
+                for family_name, signals in (
+                    SPECIALIZED_PROFILE_ROLE_SIGNALS.items()
+                )
+                if any(signal in role_text for signal in signals)
+            ),
+            None,
+        )
+        family = (
+            specialized
+            if prefer_specialized_role and specialized
+            else infer_role_family(
+                str(row.get("Position", "")),
+                str(row.get("Primary Keyword", "")),
+            )
         )
         if family not in ROLE_FAMILIES or len(pools[family]) >= family_limit:
             continue
-        evidence = extract_action_evidence(str(row.get("CV", "")))
-        if len(evidence) >= 5:
+        evidence = _extract_profile_evidence(
+            "\n".join(str(row.get(column, "")) for column in text_columns),
+            policy=evidence_extraction_policy,
+        )
+        if text_quality_policy in {
+            SUCCESSOR_V5_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V6_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V7_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V8_SOURCE_TEXT_QUALITY,
+        }:
+            evidence = diverse_quality_evidence(
+                evidence,
+                policy=text_quality_policy,
+            )
+        if len(evidence) >= minimum_evidence:
             pools[family].append(
                 {
                     "source_hash": resume_hash,
@@ -216,8 +370,16 @@ def load_ats_profiles(
     *,
     random_state: int,
     family_limit: int = 120,
+    minimum_evidence: int = 4,
+    text_quality_policy: str = LEGACY_SOURCE_TEXT_QUALITY,
+    included_resume_hashes: set[str] | None = None,
+    evidence_extraction_policy: str = LEGACY_EVIDENCE_EXTRACTION,
 ) -> dict[str, list[dict[str, Any]]]:
     """Load new privacy-screened evidence profiles from the local ATS corpus."""
+    validate_source_text_quality_policy(text_quality_policy)
+    validate_evidence_extraction_policy(evidence_extraction_policy)
+    if minimum_evidence < 4:
+        raise ValueError("ATS development profiles need four evidence statements.")
     try:
         from datasets import load_from_disk
     except ModuleNotFoundError as error:
@@ -235,13 +397,32 @@ def load_ats_profiles(
     for text in rows:
         raw_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
         resume_hash = source_hash("resume_ats_profile", raw_hash)
-        if resume_hash in excluded_resume_hashes:
+        if (
+            resume_hash in excluded_resume_hashes
+            or (
+                included_resume_hashes is not None
+                and resume_hash not in included_resume_hashes
+            )
+        ):
             continue
         family = infer_annotation_role_family(text)
         if family not in ROLE_FAMILIES or len(pools[family]) >= family_limit:
             continue
-        evidence = extract_action_evidence(text)
-        if len(evidence) < 5:
+        evidence = _extract_profile_evidence(
+            text,
+            policy=evidence_extraction_policy,
+        )
+        if text_quality_policy in {
+            SUCCESSOR_V5_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V6_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V7_SOURCE_TEXT_QUALITY,
+            SUCCESSOR_V8_SOURCE_TEXT_QUALITY,
+        }:
+            evidence = diverse_quality_evidence(
+                evidence,
+                policy=text_quality_policy,
+            )
+        if len(evidence) < minimum_evidence:
             continue
         pools[family].append(
             {

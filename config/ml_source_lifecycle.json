@@ -1,0 +1,126 @@
+{
+  "as_of": "2026-08-02",
+  "global_policy": {
+    "development_model_selection_allowed": false,
+    "failed_development_direct_training_allowed": false,
+    "holdout_content_access_before_model_freeze": false,
+    "product_integration_allowed": false
+  },
+  "schema_version": 1,
+  "development_batches": [
+    {
+      "assignment_sha256": "3b72fd035ab76d8266a2e2db81296945126d86eabe2a6a6bd340a2b7eb8cb4e7",
+      "assignments": 24,
+      "automated_quality_gate_passed": true,
+      "existing_holdout_partition_id": "successor_v6_source_pool",
+      "human_labels_available": false,
+      "manual_quality_gate_passed": false,
+      "new_holdout_created": false,
+      "partition_id": "successor_v8_development",
+      "product_integration_allowed": false,
+      "resume_groups": 4,
+      "state": "awaiting_manual_stratified_quality_audit",
+      "version": "successor_v8"
+    }
+  ],
+  "source_partitions": [
+    {
+      "development": {
+        "assignment_sha256": "7e9c32c152ee58f2cef30e20ccf65962f13d53b69369e156d4d6dfacbedf008b",
+        "assignments": 144,
+        "failure_count": 34,
+        "failure_stage": "manual_pre_review_text_quality",
+        "human_labels_available": false,
+        "state": "training_candidate_requires_full_qa_and_human_labels"
+      },
+      "holdout": {
+        "assignment_sha256": "2cf3056e9634a042d74baac35783349422d7dbc823740736383f385dc1b660fa",
+        "assignments": 144,
+        "content_opened": false,
+        "labels_opened": false,
+        "state": "sealed_retired_unopened"
+      },
+      "partition_id": "successor_v4_source_pool",
+      "version": "successor_v4"
+    },
+    {
+      "development": {
+        "assignment_sha256": "24c1f384fb02a0b9bef7ebf0f550ca89eb8960354e8de4deed5216f137119799",
+        "assignments": 144,
+        "failure_count": 6,
+        "failure_stage": "automated_canonical_text_quality",
+        "human_labels_available": false,
+        "state": "training_candidate_requires_full_qa_and_human_labels"
+      },
+      "holdout": {
+        "assignment_sha256": "cccf5909f860a8dd2fc06bc86f5c807c78c22e9f3964af5afd6f50b1fc66858e",
+        "assignments": 144,
+        "content_opened": false,
+        "labels_opened": false,
+        "state": "sealed_retired_unopened"
+      },
+      "partition_id": "successor_v5_source_pool",
+      "version": "successor_v5"
+    },
+    {
+      "development": {
+        "assignment_sha256": "bda88e45dbb41f92fcba8a0448e0ec703b501aaea3852b435eff43a51a0e3d08",
+        "assignments": 144,
+        "failure_count": 1,
+        "failure_stage": "stratified_manual_text_quality",
+        "human_labels_available": false,
+        "state": "training_candidate_requires_full_qa_and_human_labels"
+      },
+      "holdout": {
+        "assignment_sha256": "87abfa9d760a38e39ba801b991de38de6a34c540477f66b43c9dec2fa41f1a8a",
+        "assignments": 144,
+        "content_opened": false,
+        "labels_opened": false,
+        "state": "sealed_operational_holdout_candidate"
+      },
+      "partition_id": "successor_v6_source_pool",
+      "version": "successor_v6"
+    },
+    {
+      "development": {
+        "assignment_sha256": "61dae83d911096749c28a25dea1d20f6a6277f8175d08a5de96c3542c9148886",
+        "assignments": 144,
+        "failure_count": 58,
+        "failure_stage": "automated_policy_application",
+        "human_labels_available": false,
+        "state": "training_candidate_requires_full_qa_and_human_labels"
+      },
+      "holdout": {
+        "assignment_sha256": "5f75e829fb01b4fe0fbaa2c54996b65a349a11b5e4b041c3481a539be250848e",
+        "assignments": 144,
+        "content_opened": false,
+        "labels_opened": false,
+        "state": "sealed_retired_unopened"
+      },
+      "partition_id": "successor_v7_source_pool",
+      "version": "successor_v7"
+    },
+    {
+      "development": {
+        "assignment_sha256": "3515678959b30a7ad167977f936cb27cfa0c36e3a426eb09c114b369c3064a68",
+        "assignments": 72,
+        "automated_quality_gate_passed": true,
+        "content_materialized": true,
+        "human_labels_available": false,
+        "quality_audit_completed": true,
+        "resume_groups": 12,
+        "state": "development_materialized_awaiting_manual_quality_audit"
+      },
+      "holdout": {
+        "assignment_sha256": "8c545dab245421c17e168dd070b6415e671c9a9235b1355345727c64b2b89c9a",
+        "assignments": 72,
+        "content_opened": false,
+        "labels_opened": false,
+        "resume_groups": 12,
+        "state": "sealed_operational_holdout_candidate"
+      },
+      "partition_id": "successor_v9_source_pool",
+      "version": "successor_v9"
+    }
+  ]
+}

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import random
 import re
 from collections.abc import Sequence
 from typing import Any
 
 from ml.annotation_generation import normalize_text
-from ml.evidence import clean_source_line, useful_tokens
+from ml.evidence import useful_tokens
+from ml.source_text_quality import canonical_public_text
 
 
 ROLE_FAMILIES = ("Data", "ML", "Software", "Business")
@@ -65,6 +67,47 @@ ACTION_PREFIX = re.compile(
     r"documented|implemented|improved|increased|integrated|led|maintained|"
     r"managed|migrated|monitored|optimized|prepared|presented|produced|"
     r"reduced|researched|supported|tested|trained|used|worked)\b",
+    re.IGNORECASE,
+)
+LEGACY_EVIDENCE_EXTRACTION = "action_prefix_v1"
+CONTEXTUAL_EVIDENCE_EXTRACTION = "contextual_action_v2"
+EVIDENCE_EXTRACTION_POLICIES = (
+    LEGACY_EVIDENCE_EXTRACTION,
+    CONTEXTUAL_EVIDENCE_EXTRACTION,
+)
+CONTEXTUAL_ACTION_PREFIX = re.compile(
+    r"^(?:(?:responsible for|experience (?:includes?|involves?)|"
+    r"selected projects?|projects?)\s*[:\-]?\s*)"
+    r"(?:analy[sz]ing|automating|building|collaborating|configuring|"
+    r"conducting|coordinating|creating|deploying|designing|developing|"
+    r"delivering|documenting|implementing|improving|increasing|"
+    r"integrating|leading|maintaining|managing|migrating|monitoring|"
+    r"optimizing|preparing|presenting|producing|reducing|researching|"
+    r"supporting|testing|training|using|working)\b",
+    re.IGNORECASE,
+)
+LABELED_ACTION = re.compile(
+    r"^[^:\n]{2,80}:\s*(?:i\s+|we\s+)?(?:analy[sz]ed|automated|built|"
+    r"collaborated|configured|conducted|coordinated|created|deployed|"
+    r"designed|developed|delivered|documented|implemented|improved|"
+    r"increased|integrated|led|maintained|managed|migrated|monitored|"
+    r"optimized|prepared|presented|produced|reduced|researched|supported|"
+    r"tested|trained|used|worked)\b",
+    re.IGNORECASE,
+)
+ROLE_LED_ACTION = re.compile(
+    r"^as an? [^,:]{2,80}[,:]\s*(?:i\s+)?(?:analy[sz]ed|automated|built|"
+    r"collaborated|configured|conducted|coordinated|created|deployed|"
+    r"designed|developed|delivered|documented|implemented|improved|"
+    r"increased|integrated|led|maintained|managed|migrated|monitored|"
+    r"optimized|prepared|presented|produced|reduced|researched|supported|"
+    r"tested|trained|used|worked)\b",
+    re.IGNORECASE,
+)
+CAPABILITY_EVIDENCE_PREFIX = re.compile(
+    r"^(?:(?:professional|relevant|hands-on)\s+)?experience\s+(?:in|with)\b|"
+    r"^(?:expertise|proficiency|knowledge)\s+in\b|"
+    r"^(?:proficient|skilled|specialized)\s+in\b",
     re.IGNORECASE,
 )
 PRIVATE_OR_METADATA = re.compile(
@@ -124,23 +167,79 @@ def infer_role_family(*texts: str) -> str | None:
     return winners[0] if len(winners) == 1 else None
 
 
-def extract_action_evidence(resume_text: str) -> list[str]:
+def validate_evidence_extraction_policy(policy: str) -> None:
+    """Reject unknown extraction policies instead of changing source pools."""
+    if policy not in EVIDENCE_EXTRACTION_POLICIES:
+        raise ValueError(f"Unknown evidence extraction policy: {policy}")
+
+
+def evidence_extraction_manifest(policy: str) -> dict[str, object]:
+    """Commit to one extraction policy without retaining source text."""
+    validate_evidence_extraction_policy(policy)
+    rules = {
+        "policy": policy,
+        "requires_complete_statement": True,
+        "rejects_private_or_metadata": True,
+        "rejects_location_context": True,
+        "rejects_incomplete_endings": True,
+        "deduplicates_normalized_text": True,
+        "accepted_prefix_groups": (
+            ["action"]
+            if policy == LEGACY_EVIDENCE_EXTRACTION
+            else ["action", "contextual_action", "labeled_action", "capability"]
+        ),
+    }
+    encoded = json.dumps(
+        rules,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return {
+        **rules,
+        "policy_sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+
+
+def _has_supported_evidence_prefix(text: str, policy: str) -> bool:
+    if ACTION_PREFIX.search(text):
+        return True
+    if policy == LEGACY_EVIDENCE_EXTRACTION:
+        return False
+    return bool(
+        CONTEXTUAL_ACTION_PREFIX.search(text)
+        or LABELED_ACTION.search(text)
+        or ROLE_LED_ACTION.search(text)
+        or CAPABILITY_EVIDENCE_PREFIX.search(text)
+    )
+
+
+def extract_action_evidence(
+    resume_text: str,
+    *,
+    policy: str = LEGACY_EVIDENCE_EXTRACTION,
+) -> list[str]:
     """Extract factual action statements while rejecting likely personal data."""
+    validate_evidence_extraction_policy(policy)
     candidates: list[str] = []
     chunks = re.split(r"[\r\n]+|(?<=[.!?])\s+(?=[A-Z])", resume_text)
     for raw in chunks:
         text = clean_public_text(raw)
         words = text.split()
+        supported_prefix = _has_supported_evidence_prefix(text, policy)
         if not 6 <= len(words) <= 48:
             continue
         if (
             PRIVATE_OR_METADATA.search(text)
             or LOCATION_CONTEXT.search(text)
-            or DATE_OR_HEADING.search(text)
             or INCOMPLETE_ENDING.search(text)
         ):
             continue
-        if not ACTION_PREFIX.search(text):
+        if DATE_OR_HEADING.search(text) and not (
+            policy == CONTEXTUAL_EVIDENCE_EXTRACTION
+            and supported_prefix
+        ):
+            continue
+        if not supported_prefix:
             continue
         if text.count('"') % 2 or text.count("“") != text.count("”"):
             continue
@@ -253,17 +352,4 @@ def _near_duplicate(first: str, second: str) -> bool:
 
 def clean_public_text(text: str) -> str:
     """Normalize broken display characters without rewriting source facts."""
-    cleaned = (
-        text.replace("\x92", "'")
-        .replace("\x95", "")
-        .replace("\u200b", " ")
-        .replace("\ufeff", "")
-    )
-    cleaned = clean_source_line(cleaned)
-    cleaned = re.sub(
-        r"^\(\s*full-time[^)]*\)\s*",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-    return re.sub(r"^[^\w(]+", "", cleaned).strip()
+    return canonical_public_text(text)

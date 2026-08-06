@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "release_id": "minilm-v21-possessive-ranking-e15",
+  "task": "requirement_evidence_support_strength_and_ranking",
+  "backbone": {
+    "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+    "revision": "c5ee24cb16019beea0893ab7796b1df96625c6b8"
+  },
+  "training": {
+    "dataset_id": "codex_teacher_possessive_ranking_v21",
+    "tasks": 3024,
+    "pairs": 12096,
+    "focus_tasks": 1296,
+    "resume_groups": 1992,
+    "batch_size": 16,
+    "epochs": 3,
+    "learning_rate": 0.000003,
+    "max_length": 256,
+    "seed": 47,
+    "loss_weights": {
+      "support": 2.0,
+      "strength": 1.5,
+      "ranking": 2.0
+    },
+    "ranking_margin": 1.0,
+    "ranking_margin_weight": 2.0,
+    "focus_replay_multiplier": 3,
+    "unfrozen_last_encoder_layers": 3,
+    "parent_artifact_sha256": "a945e0db0c0de085e95e63d443ab482339f94388da809b8de93a162b4a53f19c",
+    "model_state_sha256": "2ea86514c9abb314c57167ebd8e5939a2d898f445b075d9ff41f793b4eea0913"
+  },
+  "frozen_evaluation": {
+    "dataset_id": "teacher_eval_e15_frozen_shuffled_agency_proxy",
+    "tasks": 96,
+    "pairs": 384,
+    "support_threshold": 0.3,
+    "direct_given_support_threshold": 0.3,
+    "task_agreement": 0.90625,
+    "task_macro_f1": 0.8962293744902441,
+    "direct_recall": 1.0,
+    "partial_recall": 0.7916666666666666,
+    "no_support_recall": 0.9,
+    "supported_top1": 1.0,
+    "report_sha256": "573515e9ada524c7bffd026446c0afcb76671d8eb37b708138b409f7bcc21e93",
+    "manifest_sha256": "8d1bae4ed170ce32e371c9a169c444a411ff67d21fc49ba669bf4e21125f9af2"
+  },
+  "bundle": {
+    "manifest_sha256": "413cd2599bbe6cd79feeffb693ff46417c4c3106345a8543d2058b78cb4717ec",
+    "model_type": "minilm_hierarchical_native_thresholds",
+    "decision_contract": "max_support_acceptance_then_ranked_strength_v1"
+  },
+  "data_contract": {
+    "teacher_labels_are_human_gold": false,
+    "shadow_or_holdout_used_for_training": false,
+    "row_level_data_public": false,
+    "weights_public": false
+  },
+  "authorization": {
+    "web_shadow_allowed": true,
+    "product_integration_allowed": false,
+    "demo_integration_allowed": false,
+    "rollout_allowed": false
+  }
+}

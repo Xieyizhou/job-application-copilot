@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from ml.real_development import (
+    CONTEXTUAL_EVIDENCE_EXTRACTION,
     DevelopmentDataError,
     build_development_task,
     evidence_overlap,
+    evidence_extraction_manifest,
     extract_action_evidence,
     infer_role_family,
     source_hash,
@@ -51,6 +53,54 @@ def test_action_evidence_rejects_contact_and_heading_lines() -> None:
         "Developed reporting dashboards used by finance leaders.",
         "Automated daily SQL extracts and validation checks.",
     ]
+
+
+def test_contextual_extraction_adds_complete_evidence_without_changing_legacy() -> None:
+    source = """
+    Responsible for developing forecasting pipelines used by analysts.
+    Experience includes building classification models with Python.
+    Customer churn project: Built validation reports for model reviewers.
+    As a Data Analyst, created dashboards for operational leaders.
+    Proficient in Python, SQL, and statistical analysis.
+    Project: customer churn prediction.
+    Contact me at candidate@example.com for project details.
+    """
+
+    assert extract_action_evidence(source) == []
+    assert extract_action_evidence(
+        source,
+        policy=CONTEXTUAL_EVIDENCE_EXTRACTION,
+    ) == [
+        "Responsible for developing forecasting pipelines used by analysts.",
+        "Experience includes building classification models with Python.",
+        "Customer churn project: Built validation reports for model reviewers.",
+        "As a Data Analyst, created dashboards for operational leaders.",
+        "Proficient in Python, SQL, and statistical analysis.",
+    ]
+
+
+def test_contextual_extraction_rejects_unknown_policy() -> None:
+    with pytest.raises(ValueError, match="Unknown evidence extraction policy"):
+        extract_action_evidence(
+            "Built reliable reporting pipelines for finance leaders.",
+            policy="future-policy",
+        )
+
+
+def test_extraction_manifest_separates_frozen_policies() -> None:
+    legacy = evidence_extraction_manifest("action_prefix_v1")
+    contextual = evidence_extraction_manifest(
+        CONTEXTUAL_EVIDENCE_EXTRACTION
+    )
+
+    assert legacy["accepted_prefix_groups"] == ["action"]
+    assert contextual["accepted_prefix_groups"] == [
+        "action",
+        "contextual_action",
+        "labeled_action",
+        "capability",
+    ]
+    assert legacy["policy_sha256"] != contextual["policy_sha256"]
 
 
 def test_development_task_has_stable_candidates_and_no_label() -> None:

@@ -1,176 +1,161 @@
-# Semantic Evidence Retrieval Model Card
+# MiniLM Resume-Evidence Model Card
 
 ## Summary
 
-The project's primary ML task is requirement-level evidence retrieval:
+The model answers one deliberately narrow question:
 
 ```text
-one JD requirement + factual statements from an existing resume
-    → strongest candidate statement
+job requirement + four resume statements
     → Direct / Partial / No Support
+    → strongest defensible evidence
 ```
 
-The objective is to find defensible resume evidence for human review and cover-letter
-preparation. It is not a hiring model, interview predictor, resume generator, or automatic
-application decision.
+It supports evidence review for job applications. It does not predict hiring outcomes,
+score candidate quality, generate resume claims, or make eligibility decisions.
 
-## Current status
+## Current release candidate
 
-| Component | Status | Product effect |
-|---|---|---|
-| Transparent lexical and concept retriever | Active | Proposes reviewable resume evidence |
-| Sentence-embedding two-stage candidate | Rejected after operational shadow review | None |
-| Task-level rejection successor | Blocked on development | None |
-| Legacy whole-resume/job relevance signal | Experimental auxiliary | Never changes product decisions |
+| Item | Value |
+|---|---|
+| Candidate | MiniLM v21 (`minilm-two-stage-v3`) |
+| Architecture | Shared MiniLM encoder with support, strength, and ranking heads |
+| Decision rule | Maximum support ≥ 0.30; Direct conditional probability ≥ 0.30 |
+| Evaluation | Frozen E15, 96 tasks / 384 candidate pairs |
+| Deployment state | Opt-in, read-only background Web shadow |
+| Product authority | None; `product_integration_allowed=false` |
+| Bundle size | 91.6 MB |
 
-No learned semantic candidate currently controls Role Fit, Eligibility, Confidence,
-JD Quality, ranking, recommendation, or Cover Letter evidence.
+The production-facing transparent retriever remains authoritative. When explicitly enabled,
+the learned model runs in a background diagnostic path without changing visible scores or
+application text. It is disabled by default in a clean clone.
+
+## Architecture
+
+The model encodes each requirement/evidence pair once and produces three signals:
+
+- `support_probability`: whether the sentence provides usable support;
+- `direct_probability_given_support`: whether supported evidence is Direct rather than
+  Partial;
+- `rank_score`: which supported sentence is strongest.
+
+Task rejection uses the maximum support score across the four candidates. Ranking is kept
+separate from acceptance so a fluent but unsupported sentence cannot win solely through
+semantic similarity. Invalid or incomplete input fails closed.
+
+## Training and evaluation data
+
+| Dataset role | Scale | Use |
+|---|---:|---|
+| v21 training corpus | 3,024 tasks / 12,096 pairs | Training; includes 1,296 targeted boundary tasks |
+| Frozen E15 | 96 tasks / 384 pairs | One-time candidate evaluation only |
+| Web shadow snapshot | 57 jobs / 183 requirements | Unlabeled deployment-distribution diagnostic |
+| Sealed operational holdouts | Not opened | Reserved; never used for this result |
+
+Training emphasizes capability-vs-tool distinctions, agency and ownership, compound
+requirements, Partial/Direct boundaries, possessive accountability, and strongest-evidence
+ranking. Resume groups, source hashes, exact text, and near-text similarity are audited
+across splits. E15 had zero exact overlap with training and a maximum token Jaccard of
+0.333, below the predeclared 0.85 exclusion threshold.
+
+The E15 labels are privacy-safe synthetic teacher-proxy contracts with automated rule
+audits. Agreement with them is useful for model selection, but it is not human-gold
+accuracy and does not establish real-world hiring validity.
+
+## Frozen E15 results
+
+| Metric | Result |
+|---|---:|
+| Task agreement | **90.63%** |
+| Task macro-F1 | **89.62%** |
+| Direct recall | **100.00%** |
+| Partial recall | **79.17%** |
+| No-Support recall | **90.00%** |
+| Supported Top-1 | **100.00%** |
+| Wilson 95% interval for agreement | **83.14%–94.99%** |
+
+Role-family task agreement was 87.50% for Software, 91.67% for Data, 95.83% for ML,
+and 87.50% for Business. All predeclared E15 gates passed.
+
+## Runtime validation
+
+Measured locally on Apple MPS over the frozen evaluation packet:
+
+| Gate | Result | Requirement |
+|---|---:|---:|
+| Throughput | 137.9 pairs/s | ≥20 pairs/s |
+| p95 task latency | 41.5 ms | Diagnostic |
+| Peak RSS | 876.6 MB | ≤1.5 GB |
+| Offline/runtime parity | Exact | Required |
+| Invalid-input behavior | Fail closed | Required |
+
+The bundle is self-contained, loads offline, records SHA-256 hashes for runtime files,
+and uses local-only inference.
+
+## Web shadow observation
+
+Across a completed local 57-job snapshot, v21 accepted 27 of 183 extracted requirements (14.75%):
+12 Direct and 15 Partial. The earlier shadow candidate accepted 18 (9.84%). This shows a
+change in coverage, not an accuracy improvement, because these Web observations are not
+labeled. They remain excluded from training.
+
+## Failure-driven development
+
+Earlier candidates exposed distinct problems rather than one generic “model failure”:
+
+- fixed calibration corrections caused an all-reject collapse;
+- native tri-class objectives failed to reject No Support reliably;
+- broader fine-tuning moved established logits and hurt prior behavior;
+- v18 improved the hierarchy but failed fresh E12 generalization;
+- v19 improved ranking but confused subject, agency, and ownership;
+- v20 fixed many support boundaries but over-corrected against Direct evidence;
+- v21 added possessive-accountability counterfactuals and an explicit ranking margin,
+  then passed a newly generated, frozen E15.
+
+Failed evaluation sets became development diagnostics and were not reused as final tests.
+See the [ML System Case Study](ML_SYSTEM_CASE_STUDY.md) for the engineering narrative.
 
 ## Intended use
 
-- Rank factual resume statements for one explicit JD requirement.
-- Reject the complete candidate set when no statement provides usable support.
-- Preserve the exact requirement, evidence sentence, source section, and support label.
-- Support human review of evidence used in application materials.
+- Rank factual statements from an existing resume for one explicit requirement.
+- Reject the candidate set when no statement provides defensible support.
+- Preserve the requirement, evidence text, source section, label, and scores for review.
+- Support local, human-reviewed application preparation.
 
 ## Out-of-scope use
 
 - Predicting interviews, offers, hiring success, or candidate quality.
-- Inferring protected or sensitive candidate attributes.
+- Inferring protected or sensitive attributes.
 - Overriding eligibility or work-authorization review.
-- Rewriting or generating a resume.
-- Automatically submitting an application.
-- Treating retrieval similarity as probability of support.
-
-## Product baseline
-
-The active product path uses a transparent local retriever combining:
-
-- word-level TF-IDF similarity
-- exact requirement-term coverage
-- explicit concept aliases
-- a small concreteness bonus for action-led or quantified statements
-
-Evidence below the configured 42% retrieval threshold is rejected. When the portable
-TF-IDF artifact is unavailable, the product falls back to the auditable lexical and
-concept layer.
-
-Sensitive eligibility requirements are excluded from employer-facing prose even when a
-resume contains matching text.
-
-## Learned candidate
-
-The evaluated candidate separates ranking from rejection:
-
-- a pinned sentence encoder supplies semantic candidate representations
-- a hybrid ranker orders the candidate statements
-- a support classifier decides whether any candidate should be accepted
-- task-level rejection experiments inspect the full distribution of four candidate
-  probabilities
-
-This design keeps retrieval rank separate from evidence acceptance.
-
-## Labels
-
-Every candidate statement receives one of three labels:
-
-- **Direct** — explicit evidence satisfies the requirement.
-- **Partial** — relevant evidence exists but does not fully satisfy the requirement.
-- **No Support** — the statement does not provide defensible evidence.
-
-Reviewed tasks preserve all candidate labels rather than converting unselected candidates
-into automatic negatives.
-
-## Data and isolation
-
-| Dataset role | Scale | Allowed use |
-|---|---:|---|
-| Reviewed training corpus | 207 tasks / 828 candidate judgments | Training and grouped development |
-| Real development v3 | 96 tasks | Candidate selection before reserve construction |
-| Frozen reserve v4 | 96 tasks | One-time evaluation; consumed |
-| Operational shadow v1 review | 24 disagreement-enriched tasks | Deployment diagnostic; consumed |
-| Operational development v2 | 64 tasks / 256 candidate judgments | Successor development only |
-
-Resume groups, job groups, semantic groups, exact text, and near-text are checked for
-overlap according to each dataset contract. Frozen reserve and shadow labels cannot be
-used for training, threshold selection, or architecture selection.
-
-Most row-level data, annotations, fitted artifacts, and reports remain in ignored local
-paths because they contain restricted or personally sourced material. The repository
-tracks de-identified manifests, evaluation code, contracts, and regression fixtures.
-
-## Evaluation results
-
-Metrics below belong to different dataset roles and should not be compared as if they
-came from one shared test population.
-
-| Stage | Metric | Reference | Candidate | Decision |
-|---|---|---|---|---|
-| Real development v3 | Task-balanced accuracy | LSA 0.530 | Two-stage 0.675 | Passed development gate |
-| Frozen reserve v4 | Task-balanced accuracy | LSA 0.403 | Two-stage 0.586 | Authorized isolated shadow only |
-| Operational shadow v1 | Reviewed decision correctness on disagreement sample | Transparent 0.625 | Shadow 0.250 | Rejected |
-| Operational development v2 | Task-balanced accuracy | Candidate baseline 0.547 | Task rejector 0.551 | Blocked |
-
-On reserve v4, the frozen candidate also improved Recall@1 from 0.400 to 0.533,
-Recall@3 from 0.833 to 0.933, and No Support rejection from 0.439 to 0.773. The paired
-90% interval for task-outcome improvement was 0.086 to 0.288.
-
-The reserve result did not transfer safely to operational shadow use. On the
-disagreement-enriched shadow review, the candidate accepted 23 cases, including 17
-judged No Support. This false-accept pattern blocked product integration.
-
-The corrected nested operational-development evaluation raised No Support rejection
-from 0.548 to 0.738 but reduced supported-task success from 0.545 to 0.364. Its
-task-balanced result changed from 0.547 to 0.551, with a paired 90% interval of
--0.077 to 0.085. No successor artifact was created.
+- Inventing or rewriting resume facts.
+- Automatically submitting applications.
+- Treating teacher agreement as real-world accuracy.
 
 ## Known limitations
 
-- Operational development v2 contains only two Direct tasks.
-- Generic resume bullets can appear semantically related without satisfying a requirement.
-- Repeatedly matching one resume against many jobs differs from balanced candidate pools.
-- Compound, numeric, degree, and eligibility constraints require explicit handling.
-- Current operational results do not establish population-level performance.
-- CPU latency and memory targets must be measured before any future product trial.
+- Partial evidence remains the weakest E15 class.
+- Four-candidate packets do not cover every resume layout or requirement formulation.
+- Requirement extraction errors can occur before the model is called.
+- Synthetic teacher contracts may encode systematic teacher preferences.
+- Web-shadow coverage is unlabeled and cannot establish correctness.
+- CPU deployment needs its own latency and memory benchmark.
 
-## Promotion requirements
+## Promotion boundary
 
-A successor may proceed only if:
+The candidate may remain in non-decision shadow mode. Product integration requires a
+separate authorization, labeled operational review, acceptable false-accept behavior,
+runtime monitoring, and a rollback path. No E15 result alone authorizes user-visible use.
 
-1. It is selected on new source-isolated development data with stronger Direct and Partial
-   coverage.
-2. Nested resume-grouped evaluation excludes every outer test group from candidate fitting,
-   rejection fitting, and threshold selection.
-3. It improves task-balanced outcomes with a positive lower paired interval while
-   preserving supported-task success and No Support rejection.
-4. The artifact, source revision, dependencies, thresholds, baseline, and success criteria
-   are frozen before a new holdout is constructed.
-5. A fresh source-isolated holdout passes once without tuning.
-6. A later non-decision shadow trial confirms acceptable false-accept behavior.
+## Reproducibility and release hygiene
 
-Passing these gates would authorize another isolated shadow trial, not an automatic product
-decision.
-
-## Reproducibility
-
-Public checks:
-
-```bash
-PYTHONPATH=src python -m pytest tests/test_ml_*.py -q
-python scripts/ml/evaluate_real_validation.py --semantic-only
-```
-
-The full operational evaluation requires ignored local reviewed data:
-
-```bash
-PYTHONPATH=src python scripts/ml/evaluate_task_rejector_operational_v2.py
-```
-
-The 24-case semantic regression result is agreement with a small curated set. It is not
-model accuracy or evidence of generalization to all resumes and jobs.
+Public code includes the exact content-free v21 release contract, reusable objective and
+evaluation components, leakage checks, runtime adapters, and regression tests. Row-level
+teacher data, personal data, final experimental launchers, model weights, and reports stay
+in Git-ignored local storage. A clean clone can validate declared hashes and safety flags,
+but cannot reproduce training without those intentionally unpublished inputs.
 
 ## Version
 
-- Model card: 1.0
-- Updated: 2026-07-29
+- Model card: 2.0
+- Updated: 2026-08-07
+- Web shadow: available, opt-in, disabled by default
 - Learned product integration: not approved

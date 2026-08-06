@@ -92,6 +92,7 @@ from fetch_jobs import jsearch_configured  # noqa: E402
 from jd_enrichment import enrich_saved_job_description  # noqa: E402
 import manual_jobs as manual_jobs_module  # noqa: E402
 from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
+from ml.web_candidate_shadow import enqueue_web_candidate_shadow  # noqa: E402
 from output_paths import safe_slug, timestamp_slug  # noqa: E402
 from tracker import add_application, update_status  # noqa: E402
 from dashboard_fit import (  # noqa: E402
@@ -396,7 +397,6 @@ def analyze_job_for_dashboard(
 ) -> dict[str, Any]:
     """Return the canonical full analysis for one loaded dashboard job."""
     from streamlit.runtime.scriptrunner import get_script_run_ctx
-
     if use_cache is None:
         use_cache = get_script_run_ctx(suppress_warning=True) is not None
     if not job_text.strip():
@@ -408,7 +408,7 @@ def analyze_job_for_dashboard(
             return unavailable_dashboard_analysis("Candidate source is missing or unreadable.")
         candidate_text = read_text_file(candidate_path)
     cache = st.session_state.setdefault("dashboard_analysis_cache", {}) if use_cache else {}
-    return service_analyze_dashboard_job(
+    analysis = service_analyze_dashboard_job(
         job,
         job_text,
         candidate_text,
@@ -418,6 +418,9 @@ def analyze_job_for_dashboard(
         workspace_mode=workspace.mode if workspace else "provided",
         workspace_root=str(workspace.root) if workspace else "provided",
     )
+    if workspace is not None and workspace.mode == "personal":
+        enqueue_web_candidate_shadow(job_text, candidate_text, workspace_mode=workspace.mode)
+    return analysis
 
 
 def build_dashboard_job_record(path: Path) -> DashboardJob:

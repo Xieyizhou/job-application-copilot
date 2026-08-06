@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "expected_reason": "requirement_heading_fragment",
+      "kind": "requirement",
+      "text": "As a QA you will be responsible for:**"
+    },
+    {
+      "expected_reason": "requirement_unfinished_tail",
+      "kind": "requirement",
+      "text": "Experience with Azure data services, including"
+    },
+    {
+      "expected_reason": "requirement_word_count",
+      "kind": "requirement",
+      "text": "(Full-time) Experience with REST API integration."
+    },
+    {
+      "expected_reason": null,
+      "kind": "requirement",
+      "text": "(Full-time) Experience integrating REST APIs for production systems."
+    },
+    {
+      "expected_reason": "evidence_unfinished_tail",
+      "kind": "evidence",
+      "text": "Developed an application based on a neural network model that"
+    },
+    {
+      "expected_reason": "evidence_missing_sentence_boundary",
+      "kind": "evidence",
+      "text": "Built and managed a sales stack with validation rules and dashboard man"
+    },
+    {
+      "expected_reason": null,
+      "kind": "evidence",
+      "text": "Built and managed a sales stack with validation rules and dashboards."
+    },
+    {
+      "expected_reason": null,
+      "kind": "evidence",
+      "text": "Documented the deployment process for technical reviewers;"
+    }
+  ],
+  "policy": "successor_v8_sentence_boundary_v2",
+  "schema_version": 1
+}
