@@ -44,25 +44,26 @@ def evaluate_cases(cases: list[dict[str, Any]]) -> dict[str, Any]:
     for case in cases:
         actual = score_job_texts(case["job_text"], case["candidate_text"])
         expected = case["expected"]
+        actual_eligibility = actual["eligibility"]["status"]
+        actual_confidence = actual["confidence"]["level"]
+        actual_recommendation = actual["recommendation"]
         checks = {
             "score": expected["score_min"] <= actual["score"] <= expected["score_max"],
-            "eligibility": actual["eligibility"]["status"] == expected["eligibility"],
-            "confidence": actual["confidence"]["level"] == expected["confidence"],
-            "recommendation": actual["recommendation"] == expected["recommendation"],
+            "eligibility": actual_eligibility == expected["eligibility"],
+            "confidence": actual_confidence == expected["confidence"],
+            "recommendation": actual_recommendation == expected["recommendation"],
         }
         failures: list[str] = []
         if not checks["score"]:
             failures.append(
                 f"score {actual['score']} outside {expected['score_min']}-{expected['score_max']}"
             )
-        for field in ("eligibility", "confidence", "recommendation"):
-            actual_value = (
-                actual[field]["status"]
-                if field == "eligibility"
-                else actual[field]["level"]
-                if field == "confidence"
-                else actual[field]
-            )
+        actual_values = {
+            "eligibility": actual_eligibility,
+            "confidence": actual_confidence,
+            "recommendation": actual_recommendation,
+        }
+        for field, actual_value in actual_values.items():
             if not checks[field]:
                 failures.append(f"{field} {actual_value!r} != {expected[field]!r}")
 
