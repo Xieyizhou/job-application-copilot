@@ -37,8 +37,8 @@ class TrackerPageServices:
 def tracker_tab(services: TrackerPageServices) -> None:
     """Render the application list before the selected stage workflow."""
     services.render_page_header(
-        "Tracker",
-        "Keep application stages current and act on the next follow-up.",
+        "Applications",
+        "Track the roles you chose to pursue, from preparation through interview and outcome.",
     )
     if services.demo_mode_enabled():
         st.caption("Demo does not read or update Personal tracker records.")
@@ -50,6 +50,7 @@ def tracker_tab(services: TrackerPageServices) -> None:
         if status in VALID_STATUSES
     ]
     all_records = services.load_tracker_rows(sort_by="created_at", descending=True)
+    st.caption("Ready means materials are prepared; Applied and Interview are the active pipeline.")
     render_tracker_summary(st, all_records)
     filters = render_tracker_filters(st, status_options)
     records = services.load_tracker_rows(

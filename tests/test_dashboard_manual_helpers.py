@@ -186,6 +186,7 @@ class DashboardManualHelperTests(unittest.TestCase):
             company_generation_allowed=generation_allowed,
             current_workspace=Mock(return_value=object()),
             demo_mode_enabled=Mock(return_value=False),
+            go_to_page=Mock(),
             relative_path=lambda path: str(path),
             render_manual_company_confirmation=render_confirmation,
             render_page_header=Mock(),
@@ -251,10 +252,12 @@ class DashboardManualHelperTests(unittest.TestCase):
         self.assertEqual(state["manual_job_description"], "Clean JD")
 
         ui = MagicMock()
+        ui.button.side_effect = [False, True]
         services = dashboard_manual.ManualPageServices(
             company_generation_allowed=Mock(),
             current_workspace=Mock(),
             demo_mode_enabled=Mock(return_value=True),
+            go_to_page=Mock(),
             relative_path=Mock(),
             render_manual_company_confirmation=Mock(),
             render_page_header=Mock(),

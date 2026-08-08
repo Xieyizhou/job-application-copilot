@@ -6,12 +6,30 @@ import html
 
 import streamlit as st
 
+
 def decision_field_html(label: str, value: object) -> str:
     """Return one escaped field for the compact decision grid."""
+    icon = {
+        "Role Fit": "track_changes",
+        "Eligibility": "shield",
+        "Confidence": "trending_up",
+        "JD Quality": "description",
+    }.get(label, "info")
+    value_text = str(value)
+    tone = "success"
+    if any(marker in value_text.lower() for marker in ("partial", "review", "medium", "needs")):
+        tone = "warning"
+    if any(marker in value_text.lower() for marker in ("failed", "low", "not reliable")):
+        tone = "danger"
+    escaped_value = html.escape(value_text)
+    if label == "Role Fit" and value_text.endswith("/100"):
+        escaped_value = f'{html.escape(value_text.removesuffix("/100"))}<small>/100</small>'
     return (
-        '<div class="review-decision-field">'
+        f'<div class="review-decision-field review-decision-{tone}">'
+        f'<span class="review-decision-icon">{icon}</span>'
+        '<div class="review-decision-copy">'
         f'<div class="review-decision-label">{html.escape(label)}</div>'
-        f'<div class="review-decision-value">{html.escape(str(value))}</div>'
+        f'<div class="review-decision-value">{escaped_value}</div></div>'
         "</div>"
     )
 
@@ -33,8 +51,8 @@ def render_review_component_styles() -> None:
         .review-decision-grid {
             display:grid;
             grid-template-columns:repeat(4,minmax(0,1fr));
-            border-top:1px solid color-mix(in srgb,var(--text-color) 16%,transparent);
-            border-bottom:1px solid color-mix(in srgb,var(--text-color) 16%,transparent);
+            border:1px solid var(--app-border,#dfe3e8);border-radius:8px;
+            background:#f8f9fb;overflow:hidden;
             margin:.45rem 0 .5rem;
         }
         .review-decision-field {
@@ -42,16 +60,16 @@ def render_review_component_styles() -> None:
             min-width:0;
         }
         .review-decision-field + .review-decision-field {
-            border-left:1px solid color-mix(in srgb,var(--text-color) 12%,transparent);
+            border-left:1px solid var(--app-border,#dfe3e8);
         }
-        .review-decision-label {color:var(--text-color);opacity:.62;font-size:.72rem;line-height:1.2}
-        .review-decision-value {font-size:.94rem;font-weight:650;line-height:1.3;overflow-wrap:anywhere}
+        .review-decision-label {color:var(--app-muted,var(--text-color));font-size:.7rem;line-height:1.2}
+        .review-decision-value {color:var(--app-text,var(--text-color));font-size:.94rem;font-weight:700;line-height:1.3;overflow-wrap:anywhere;margin-top:.12rem}
         .review-action-note {
             color:var(--text-color);
             font-size:.88rem;
             line-height:1.35;
             margin:.35rem 0 .55rem;
-            opacity:.74;
+            color:var(--app-muted,var(--text-color));
         }
         .review-action-note-caution {
             border-left:3px solid #d97706;
@@ -61,11 +79,11 @@ def render_review_component_styles() -> None:
         .review-evidence-row {
             display:grid;grid-template-columns:minmax(0,1fr) auto;
             gap:.75rem;align-items:start;padding:.45rem 0;
-            border-bottom:1px solid color-mix(in srgb,var(--text-color) 10%,transparent);
+            border-bottom:1px solid var(--app-border,#dfe3e8);
             font-size:.9rem;line-height:1.35;
         }
         .review-evidence-row span {
-            color:var(--text-color);opacity:.58;font-size:.74rem;white-space:nowrap;
+            color:var(--app-muted,var(--text-color));font-size:.74rem;white-space:nowrap;
         }
         @media (max-width: 760px) {
             .review-decision-grid {grid-template-columns:repeat(2,minmax(0,1fr))}

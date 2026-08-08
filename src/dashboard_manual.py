@@ -45,6 +45,7 @@ class ManualPageServices:
     company_generation_allowed: Callable[[dict[str, Any]], bool]
     current_workspace: Callable[[], Any]
     demo_mode_enabled: Callable[[], bool]
+    go_to_page: Callable[[str], None]
     relative_path: Callable[[Path], str]
     render_manual_company_confirmation: Callable[[dict[str, Any], str], dict[str, Any]]
     render_page_header: Callable[[str, str | None], None]
@@ -538,12 +539,12 @@ def render_manual_add_extract_tab(services: ManualPageServices) -> None:
     if cleanup_message:
         st.success(cleanup_message)
     render_manual_workspace_styles()
-    jd_panel, verification_panel = st.columns([0.56, 0.44], gap="large")
-    with jd_panel, st.container(key="manual_jd_panel"):
+    jd_panel, verification_panel = st.columns([0.54, 0.46], gap="medium")
+    with jd_panel, st.container(border=True, key="manual_jd_panel"):
         uploaded_files = render_jd_capture(render_manual_upload_controls)
         job_description = str(st.session_state.get("manual_job_description", "") or "")
         render_jd_quality(job_description)
-    with verification_panel, st.container(height=540, border=False, key="manual_verify_panel"):
+    with verification_panel, st.container(border=True, key="manual_verify_panel"):
         payload = render_manual_job_form()
         save_manual_form_submission(payload, uploaded_files)
         with st.expander("Maintenance", expanded=False):
@@ -695,6 +696,15 @@ def manual_job_target_tab(services: ManualPageServices) -> None:
         "Add Target Job",
         "Capture the complete posting once so fit, documents, and interview prep share the same source.",
     )
+    with st.container(key="manual_back_bar"):
+        if st.button(
+            "Back to Review Jobs",
+            key="manual_back_to_review_jobs",
+            icon=":material/arrow_back:",
+            type="secondary",
+        ):
+            services.go_to_page("Review Jobs")
+            return
     if services.demo_mode_enabled():
         st.markdown('<div class="desktop-workspace-marker"></div>', unsafe_allow_html=True)
         st.caption("Demo uses bundled sample jobs. Personal workspace saves new target jobs locally.")

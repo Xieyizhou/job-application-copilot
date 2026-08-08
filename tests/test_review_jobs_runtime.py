@@ -23,21 +23,20 @@ def run_child_check() -> None:
     app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
     app.session_state["workspace_mode"] = "Demo"
     app.run(timeout=30)
-    app.radio[0].set_value("Review Jobs").run(timeout=30)
+    next(button for button in app.button if button.label == "Review Jobs").click().run(timeout=30)
     assert list(app.exception) == []
     assert "Choose a job" not in [selectbox.label for selectbox in app.selectbox]
     assert "Number of recommendations" not in [slider.label for slider in app.slider]
     job_buttons = [button.label for button in app.button if " · " in button.label]
     assert len(job_buttons) == 3
     assert "Review" not in [button.label for button in app.button]
-    assert not any(
-        "Demo workspace uses" in str(info.value)
-        for info in app.info
-    )
+    assert not any("Demo workspace uses" in str(info.value) for info in app.info)
 
     app.run(timeout=30)
     assert list(app.exception) == []
-    app.radio[0].set_value("Add Target Job").run(timeout=30)
+    next(button for button in app.button if button.label == "Add target job").click().run(
+        timeout=30
+    )
     assert list(app.exception) == []
     assert "Return to Personal Workspace" in [button.label for button in app.button]
     assert not any("Demo workspace uses" in str(info.value) for info in app.info)

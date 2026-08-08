@@ -30,23 +30,47 @@ EXPECTED_ZIP_NAMES = {
 
 
 class DemoPackageTests(unittest.TestCase):
-    def test_fit_page_prioritizes_top_evidence_and_collapses_diagnostics(self) -> None:
+    def test_resume_setup_can_enter_read_only_demo(self) -> None:
+        app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
+        app.session_state["workspace_mode"] = "Personal"
+        app.run(timeout=30)
+        next(button for button in app.button if button.label == "Resume").click().run(
+            timeout=30
+        )
+        self.assertTrue(
+            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+        )
+
+        next(
+            button for button in app.button if button.label == "Explore Read-only Demo"
+        ).click().run(timeout=30)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual(app.session_state["workspace_mode"], "Demo")
+        self.assertEqual(app.session_state["active_page"], "Dashboard")
+        self.assertFalse(
+            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+        )
+        self.assertTrue(any("Demo · Read-only" in str(item.value) for item in app.caption))
+
+    def test_fit_page_prioritizes_top_evidence_and_overlays_diagnostics(self) -> None:
         app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
         app.session_state["workspace_mode"] = "Demo"
         app.session_state["selected_review_tab"] = "Fit"
         app.run(timeout=30)
-        app.radio[0].set_value("Review Jobs").run(timeout=30)
+        next(button for button in app.button if button.label == "Review Jobs").click().run(
+            timeout=30
+        )
 
         self.assertEqual(list(app.exception), [])
         expander_labels = [expander.label for expander in app.expander]
-        self.assertIn("Evidence details", expander_labels)
-        self.assertNotIn("Requirement-to-resume evidence map", expander_labels)
+        self.assertNotIn("Analysis details", expander_labels)
+        self.assertTrue(any("Analysis" in markdown.value for markdown in app.markdown))
         self.assertTrue(
-            any("Direct support" in str(markdown.value) for markdown in app.markdown)
+            any("Requirement evidence" in str(markdown.value) for markdown in app.markdown)
         )
-        self.assertFalse(
-            any("similarity" in str(caption.value).lower() for caption in app.caption)
-        )
+        self.assertTrue(any("Direct" in str(markdown.value) for markdown in app.markdown))
+        self.assertFalse(any("similarity" in str(caption.value).lower() for caption in app.caption))
 
     def test_demo_docx_files_are_valid_and_neutral(self) -> None:
         expected_text = {
@@ -77,7 +101,9 @@ class DemoPackageTests(unittest.TestCase):
             for expected in expected_text[filename]:
                 self.assertIn(expected, text)
             self.assertEqual(document.core_properties.author, "Job Application Toolkit Demo")
-            self.assertEqual(document.core_properties.last_modified_by, "Job Application Toolkit Demo")
+            self.assertEqual(
+                document.core_properties.last_modified_by, "Job Application Toolkit Demo"
+            )
 
     def test_demo_zip_includes_all_sanitized_sample_materials(self) -> None:
         zip_bytes, package_files = dashboard.build_application_package_zip(DEMO_PACKAGE_DIR)
@@ -92,9 +118,22 @@ class DemoPackageTests(unittest.TestCase):
         app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
         app.session_state["workspace_mode"] = "Demo"
         app.run(timeout=30)
-        app.radio[0].set_value("Cover Letter").run(timeout=30)
+        next(button for button in app.button if button.label == "Cover Letters").click().run(
+            timeout=30
+        )
+        next(
+            button
+            for button in app.button
+            if button.label == "Supporting materials and details"
+        ).click().run(timeout=30)
 
         self.assertEqual(list(app.exception), [])
+        self.assertTrue(
+            any(
+                "cover-letter-editor-supporting" in str(markdown.value)
+                for markdown in app.markdown
+            )
+        )
         statuses = app.table[0].value.set_index("Material")["Status"].to_dict()
         self.assertEqual(
             statuses,
@@ -116,6 +155,13 @@ class DemoPackageTests(unittest.TestCase):
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)
+
+        next(button for button in app.button if button.label == "View Stored Match Report").click().run(
+            timeout=30
+        )
+        self.assertTrue(any(button.label == "Back" for button in app.button))
+        next(button for button in app.button if button.label == "Back").click().run(timeout=30)
+        self.assertTrue(any(button.label == "Hide supporting materials" for button in app.button))
 
     def test_demo_review_filter_and_sort_options_are_total(self) -> None:
         demo_workspace = dashboard.resolve_workspace("Demo")
@@ -171,7 +217,10 @@ class DemoPackageTests(unittest.TestCase):
                     matches = [
                         job
                         for job in jobs
-                        if (source == "all" or dashboard.source_display_name(str(job["source"])) == source)
+                        if (
+                            source == "all"
+                            or dashboard.source_display_name(str(job["source"])) == source
+                        )
                         and (recommendation == "all" or job["recommendation"] == recommendation)
                         and (confidence == "all" or job["confidence"] == confidence)
                     ]
@@ -179,12 +228,16 @@ class DemoPackageTests(unittest.TestCase):
 
         first_job, second_job = jobs[:2]
         self.assertIs(
-            dashboard.resolve_review_job_selection(jobs, "stale label", "data/demo/jobs/missing.md"),
+            dashboard.resolve_review_job_selection(
+                jobs, "stale label", "data/demo/jobs/missing.md"
+            ),
             first_job,
         )
         self.assertIs(
-            dashboard.resolve_review_job_selection(jobs, second_job["label"], str(first_job["path"])),
-            second_job,
+            dashboard.resolve_review_job_selection(
+                jobs, second_job["label"], str(first_job["path"])
+            ),
+            first_job,
         )
 
     def test_missing_demo_docx_is_unavailable_without_generation(self) -> None:

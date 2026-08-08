@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,8 @@ class FakeStreamlit:
     messages: list[tuple[str, str]] = field(default_factory=list)
     metrics: dict[str, object] = field(default_factory=dict)
     status_updates: list[dict[str, object]] = field(default_factory=list)
+    selectbox_value: str = "Remote"
+    selectbox_kwargs: dict[str, object] = field(default_factory=dict)
 
     def __getattr__(self, name: str) -> Any:
         if name in {"caption", "info", "warning", "error", "success", "markdown", "text", "write"}:
@@ -57,9 +60,13 @@ class FakeStreamlit:
         return str(kwargs.get("value", ""))
 
     def selectbox(self, label: str, options: list[str], **kwargs: object) -> str:
-        return "Remote"
+        self.selectbox_kwargs = dict(kwargs)
+        return self.selectbox_value
 
     def form(self, key: str) -> ContextBlock:
+        return ContextBlock(self)
+
+    def container(self, **kwargs: object) -> ContextBlock:
         return ContextBlock(self)
 
     def slider(self, label: str, **kwargs: object) -> int:
@@ -74,7 +81,7 @@ class FakeStreamlit:
     def status(self, *args: object, **kwargs: object) -> ContextBlock:
         return ContextBlock(self)
 
-    def columns(self, count: int | list[float]) -> list[ContextBlock]:
+    def columns(self, count: int | list[float], **kwargs: object) -> list[ContextBlock]:
         size = count if isinstance(count, int) else len(count)
         return [ContextBlock(self) for _ in range(size)]
 
@@ -183,6 +190,40 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
         self.assertIn("United Kingdom", dashboard_fetch.REGION_OPTIONS)
         self.assertEqual(dashboard_fetch.REGION_CONFIG["Singapore"]["adzuna_country"], "sg")
         self.assertEqual(dashboard_fetch.REGION_CONFIG["United Kingdom"]["adzuna_country"], "gb")
+
+    def test_region_control_suggests_markets_and_accepts_custom_locations(self) -> None:
+        fake = FakeStreamlit(selectbox_value="Berlin")
+        services = self.services(demo=False)
+        with patch.object(dashboard_fetch, "st", fake):
+            country, adzuna_location, jooble_location, supported = (
+                dashboard_fetch.render_fetch_region_fields(services)
+            )
+        self.assertIn("China", dashboard_fetch.REGION_OPTIONS)
+        self.assertIn("Canada", dashboard_fetch.REGION_OPTIONS)
+        self.assertTrue(fake.selectbox_kwargs["accept_new_options"])
+        self.assertIsNone(fake.selectbox_kwargs.get("index"))
+        self.assertEqual(country, "de")
+        self.assertEqual(adzuna_location, "Berlin")
+        self.assertEqual(jooble_location, "Berlin")
+        self.assertTrue(supported)
+
+    def test_source_selection_is_remembered_locally_after_search(self) -> None:
+        fake = FakeStreamlit(sources=["adzuna"])
+        services = self.services(demo=False)
+        with tempfile.TemporaryDirectory() as temp_dir, patch.object(
+            dashboard_fetch, "st", fake
+        ), patch.object(
+            dashboard_fetch, "jsearch_configured", return_value=True
+        ), patch(
+            "dashboard_fetch_preferences.FETCH_PREFERENCES_PATH",
+            Path(temp_dir) / "fetch_preferences.json",
+        ):
+            dashboard_fetch.render_fetch_options_form(
+                services,
+                adzuna_supported=True,
+            )
+            remembered = dashboard_fetch.load_fetch_sources(["jsearch"])
+        self.assertEqual(remembered, ["adzuna"])
 
     def test_result_summary_keeps_provider_totals_separate(self) -> None:
         outcome = dashboard_fetch.FetchSearchOutcome(

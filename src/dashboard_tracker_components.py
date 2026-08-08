@@ -59,7 +59,10 @@ def render_tracker_filters(ui: Any, status_options: list[str]) -> dict[str, Any]
 def render_tracker_table(ui: Any, rows: list[TrackerRow]) -> None:
     """Render the application list before any selected-record details."""
     if not rows:
-        ui.info("No tracker records match these filters. Save a reviewed job to start the pipeline.")
+        ui.info(
+            "No applications match these filters. Generating a cover letter for a reviewed job "
+            "creates a Ready application here."
+        )
         return
     ui.dataframe(
         [

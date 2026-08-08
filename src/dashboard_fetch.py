@@ -8,51 +8,35 @@ from typing import Any, Callable
 import streamlit as st
 
 from fetch_jobs import jsearch_configured
+from dashboard_fetch_preferences import (
+    FETCH_SOURCES,
+    load_fetch_sources,
+    save_fetch_sources,
+)
+from dashboard_fetch_controls import (
+    REGION_CONFIG,
+    REGION_OPTIONS,
+    render_advanced_fetch_options,
+    render_fetch_search_styles,
+    render_region_fields,
+)
 from dashboard_fetch_runner import FetchSearchOutcome, run_job_search
 from dashboard_regions import source_display_name
 from dashboard_search_profile import search_profile_from_path
 
 
+__all__ = ["REGION_CONFIG", "REGION_OPTIONS"]
+
+
 DEFAULT_FETCH_LIMIT_PER_SOURCE = 20
 MAX_FETCH_LIMIT_PER_SOURCE = 20
-REGION_OPTIONS = [
-    "Remote",
-    "Singapore",
-    "United Kingdom",
-    "United States",
-    "Canada",
-    "Australia",
-    "Custom",
-]
-ADZUNA_SUPPORTED_COUNTRIES = {
-    "sg", "gb", "us", "ca", "au", "nz", "de", "fr", "it", "nl", "pl", "br", "za", "in"
-}
-REGION_CONFIG = {
-    "Remote": {"adzuna_country": "us", "adzuna_location": "Remote", "jooble_location": "Remote"},
-    "Singapore": {
-        "adzuna_country": "sg",
-        "adzuna_location": "Singapore",
-        "jooble_location": "Singapore",
-    },
-    "United Kingdom": {
-        "adzuna_country": "gb",
-        "adzuna_location": "United Kingdom",
-        "jooble_location": "United Kingdom",
-    },
-    "United States": {
-        "adzuna_country": "us",
-        "adzuna_location": "United States",
-        "jooble_location": "United States",
-    },
-    "Canada": {"adzuna_country": "ca", "adzuna_location": "Canada", "jooble_location": "Canada"},
-    "Australia": {
-        "adzuna_country": "au",
-        "adzuna_location": "Australia",
-        "jooble_location": "Australia",
-    },
-    "Custom": {"adzuna_country": "us", "adzuna_location": "", "jooble_location": ""},
-}
-
+MISSING_JSEARCH_MESSAGE = (
+    "For automatic full job descriptions, add JSEARCH_API_KEY to `.env`. "
+    "Adzuna and Jooble can still discover jobs, but their responses contain snippets."
+)
+UNSUPPORTED_ADZUNA_MESSAGE = (
+    "Adzuna is not available for this region. Jooble can still search this location."
+)
 
 @dataclass(frozen=True)
 class FetchPageServices:
@@ -112,41 +96,18 @@ def initialize_fetch_query(services: FetchPageServices) -> str:
     if st.session_state.get("fetch_profile_key") != profile_key:
         st.session_state["fetch_profile_key"] = profile_key
         st.session_state["fetch_query"] = profile.query
-    query = st.text_input("Target role / query", key="fetch_query")
     if profile.source_ready:
         matched_keywords = ", ".join(keyword.title() for keyword in profile.keywords)
         detail = f" Resume signals: {matched_keywords}." if matched_keywords else ""
-        st.caption(f"Suggested from the uploaded resume; you can edit it before searching.{detail}")
+        help_text = f"Suggested from the uploaded resume; you can edit it.{detail}"
     else:
-        st.caption(
-            "Upload a resume to receive an automatic role suggestion, "
-            "or enter a query manually."
-        )
-    return query
+        help_text = "Upload a resume for an automatic suggestion, or enter a query manually."
+    return st.text_input("Target role / query", key="fetch_query", help=help_text)
 
 
 def render_fetch_region_fields(services: FetchPageServices) -> tuple[str, str, str, bool]:
     """Render region fields and return provider-specific locations."""
-    region = st.selectbox("Region", REGION_OPTIONS, index=0, key="fetch_region")
-    region_config = REGION_CONFIG[region]
-    adzuna_country = region_config["adzuna_country"]
-    adzuna_location = region_config["adzuna_location"]
-    jooble_location = region_config["jooble_location"]
-    if region == "Custom":
-        location_text = st.text_input("Custom Location", key="fetch_custom_location")
-        if services.show_debug_ui:
-            adzuna_country = st.text_input(
-                "Developer: Adzuna country",
-                value=adzuna_country,
-            )
-        adzuna_location = location_text
-        jooble_location = location_text
-    return (
-        adzuna_country,
-        adzuna_location,
-        jooble_location,
-        adzuna_country.lower() in ADZUNA_SUPPORTED_COUNTRIES,
-    )
+    return render_region_fields(st, show_debug_ui=services.show_debug_ui)
 
 
 def render_fetch_options_form(
@@ -156,57 +117,56 @@ def render_fetch_options_form(
 ) -> tuple[bool, list[str], int, int]:
     """Render provider and result-limit controls."""
     with st.form("fetch_jobs_form"):
-        recommendation_limit = st.slider(
-            "Number of recommendations",
-            min_value=services.min_recommendation_limit,
-            max_value=services.max_recommendation_limit,
-            value=services.default_recommendation_limit,
-            help="How many ranked jobs to display after filtering and duplicate removal.",
-        )
         full_jd_source_ready = jsearch_configured()
+        default_sources = ["jsearch"] if full_jd_source_ready else ["adzuna", "jooble"]
+        remembered_sources = load_fetch_sources(default_sources)
         sources = st.multiselect(
             "Sources",
-            ["jsearch", "adzuna", "jooble"],
-            default=["jsearch"] if full_jd_source_ready else ["adzuna", "jooble"],
+            FETCH_SOURCES,
+            default=remembered_sources,
             format_func=source_display_name,
+            key="fetch_sources",
+            placeholder="Choose one or more job sources",
         )
         if not full_jd_source_ready:
-            st.info(
-                "For automatic full job descriptions, add JSEARCH_API_KEY to `.env`. "
-                "The existing Adzuna and Jooble keys can still discover jobs, "
-                "but their official search responses contain snippets."
-            )
+            st.info(MISSING_JSEARCH_MESSAGE)
         if "adzuna" in sources and not adzuna_supported:
-            st.warning(
-                "Adzuna is not available for this region. "
-                "Jooble can still search this location."
-            )
-        fetch_limit_per_source = st.slider(
-            "Jobs per source",
-            min_value=5,
-            max_value=MAX_FETCH_LIMIT_PER_SOURCE,
-            value=DEFAULT_FETCH_LIMIT_PER_SOURCE,
-            help="How many jobs to request from each source before filtering.",
+            st.warning(UNSUPPORTED_ADZUNA_MESSAGE)
+        recommendation_limit, fetch_limit_per_source = render_advanced_fetch_options(
+            st,
+            minimum_recommendations=services.min_recommendation_limit,
+            maximum_recommendations=services.max_recommendation_limit,
+            default_recommendations=services.default_recommendation_limit,
+            default_per_source=DEFAULT_FETCH_LIMIT_PER_SOURCE,
+            maximum_per_source=MAX_FETCH_LIMIT_PER_SOURCE,
         )
-        submitted = st.form_submit_button("Find Jobs", type="primary", width="stretch")
+        submitted = st.form_submit_button(
+            "Find Jobs",
+            type="primary",
+            icon=":material/search:",
+            width="content",
+        )
+        if submitted and sources != remembered_sources:
+            save_fetch_sources(sources)
     return submitted, sources, recommendation_limit, fetch_limit_per_source
 
 
 def render_fetch_search_form(services: FetchPageServices) -> FetchSearchRequest:
     """Render search controls and return one immutable request."""
-    query = initialize_fetch_query(services)
-    (
-        adzuna_country,
-        adzuna_location,
-        jooble_location,
-        adzuna_supported,
-    ) = render_fetch_region_fields(services)
-    submitted, sources, recommendation_limit, fetch_limit_per_source = (
-        render_fetch_options_form(
-            services,
-            adzuna_supported=adzuna_supported,
+    with st.container(border=True, key="fetch_search_panel"):
+        role_column, region_column = st.columns(2, gap="large")
+        with role_column:
+            query = initialize_fetch_query(services)
+        with region_column:
+            (
+                adzuna_country,
+                adzuna_location,
+                jooble_location,
+                adzuna_supported,
+            ) = render_fetch_region_fields(services)
+        submitted, sources, recommendation_limit, fetch_limit_per_source = (
+            render_fetch_options_form(services, adzuna_supported=adzuna_supported)
         )
-    )
     return FetchSearchRequest(
         submitted=submitted,
         query=query,
@@ -426,6 +386,7 @@ def render_fetch_debug(
 
 def fetch_jobs_tab(services: FetchPageServices) -> None:
     """Render the fetch-jobs workflow."""
+    render_fetch_search_styles(st)
     services.render_page_header(
         "Find Jobs",
         "Search supported job sources and save roles for review.",
@@ -433,8 +394,7 @@ def fetch_jobs_tab(services: FetchPageServices) -> None:
     if services.demo_mode_enabled():
         st.caption("Live search is unavailable in the read-only Demo workspace.")
     st.caption(
-        "JSearch returns full job descriptions for reliable scoring. "
-        "Adzuna and Jooble remain optional discovery sources and may return summaries."
+        "JSearch provides complete descriptions while Adzuna and Jooble may return summaries."
     )
     request = render_fetch_search_form(services)
     backend_outputs: list[str] = []

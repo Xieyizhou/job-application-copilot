@@ -61,6 +61,14 @@ TRACKING_QUERY_PARAMETERS = {
 }
 
 
+class JSearchNoResultsError(RuntimeError):
+    """Raised when JSearch returns no candidate jobs for a valid request."""
+
+
+class JSearchNoFullDescriptionsError(RuntimeError):
+    """Raised when JSearch candidates omit the full description field."""
+
+
 def cap_max_results(max_results: int) -> int:
     """Keep API requests conservative and predictable."""
     if max_results < 1:
@@ -289,11 +297,15 @@ def fetch_jsearch_jobs(
         raw_jobs = response_data
     if not isinstance(raw_jobs, list):
         raw_jobs = []
+    if not raw_jobs:
+        raise JSearchNoResultsError("JSearch returned no jobs for this query and location.")
     jobs = [normalize_jsearch_job(job, location) for job in raw_jobs if isinstance(job, dict)]
-    jobs = [job for job in jobs if job.get("description")][:max_results]
-    if not jobs:
-        raise RuntimeError("No JSearch jobs with full descriptions were found for this query and location.")
-    return jobs
+    full_description_jobs = [job for job in jobs if job.get("description")][:max_results]
+    if not full_description_jobs:
+        raise JSearchNoFullDescriptionsError(
+            "JSearch found candidate jobs, but none included a full description."
+        )
+    return full_description_jobs
 
 
 def clean_text(value: object) -> str:

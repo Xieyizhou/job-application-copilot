@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -15,7 +14,6 @@ from dashboard_review_styles import (
     decision_field_html,
     render_review_component_styles,
 )
-from dashboard_titles import get_job_display_title
 from output_paths import safe_slug
 from scoring_types import DashboardJob, TrackerRow
 
@@ -98,14 +96,14 @@ def render_review_action_buttons(
     on_select: Callable[[DashboardJob, str], None],
 ) -> None:
     """Render the single action derived for the selected job."""
-    if st.button(
+    st.button(
         action.label,
         key=f"{key_prefix}_primary",
         type="primary",
         width="content",
-    ):
-        on_select(job, action.target_section)
-        st.rerun()
+        on_click=on_select,
+        args=(job, action.target_section),
+    )
 
 
 def render_selected_review_header(
@@ -118,15 +116,6 @@ def render_selected_review_header(
     tracker_status = services.tracker_status_for_job(job, tracker_rows)
     package_status = job.get("package_status") or services.package_status_for_job(job, tracker_rows)
     presentation = build_fit_presentation(job)
-    st.markdown(
-        '<div class="review-selected-job-header">'
-        f'<div class="review-selected-job-title">{html.escape(str(job["company"]))} · '
-        f"{html.escape(get_job_display_title(job))}</div>"
-        f'<div class="review-selected-job-location">'
-        f'{html.escape(str(job.get("normalized_location", "")))}</div>'
-        "</div>",
-        unsafe_allow_html=True,
-    )
     decision_fields = [
         ("Role Fit", visible_role_fit(job)),
         (

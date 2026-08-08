@@ -66,10 +66,13 @@ def test_public_lifecycle_freezes_v4_through_v9_without_content() -> None:
 
 def test_local_lifecycle_integrity_includes_v9_assignments() -> None:
     ledger = load_source_lifecycle(LEDGER_PATH)
+    partition_root = PROJECT_ROOT / "data" / "ml" / "source_partitions"
+    if not (partition_root / "successor_v4" / "partition_manifest.json").is_file():
+        pytest.skip("Local source partitions are intentionally excluded from Git.")
 
     result = validate_local_partition_integrity(
         ledger,
-        PROJECT_ROOT / "data" / "ml" / "source_partitions",
+        partition_root,
     )
 
     assert result == {

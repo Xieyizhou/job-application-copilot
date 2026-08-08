@@ -93,7 +93,12 @@ def render_verification_form(
             with st.expander("Fields to verify", expanded=False):
                 for warning in warnings:
                     st.warning(warning)
-        submitted = st.form_submit_button("Save Target Job", type="primary", width="stretch")
+        can_save = bool(job_description.strip() and normalized_title)
+        if not can_save:
+            st.caption("Add the full job description and job title to enable saving.")
+        submitted = st.form_submit_button(
+            "Save Target Job", type="primary", width="stretch", disabled=not can_save
+        )
 
     return {
         "submitted": submitted,
