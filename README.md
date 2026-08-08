@@ -14,6 +14,10 @@ evidence trace, cover letter, and local application record.
 
 The read-only Demo uses fictional, sanitized data and requires no API credentials.
 
+### Dashboard
+
+![Dashboard](docs/assets/dashboard.png)
+
 ### Review Jobs
 
 ![Review Jobs](docs/assets/review_jobs.png)
@@ -55,7 +59,9 @@ flowchart LR
 The resume remains read-only; the application generates only a cover letter and
 supporting analysis.
 
-## ML and trust design
+## Machine Learning
+
+### Task and trust design
 
 The primary ML task is deliberately narrow:
 
@@ -76,7 +82,7 @@ product decisions.
 
 See the [Model Card](docs/MODEL_CARD.md) for evaluation results and promotion gates.
 
-### ML engineering case study
+### Engineering case study
 
 The learned evidence system was developed as a production-style ML lifecycle rather than
 a one-off fine-tuning experiment. It records failed candidates, isolates resume groups,
@@ -122,7 +128,7 @@ PyMuPDF, Pillow, JSearch, Adzuna, Jooble, pytest, Ruff, and mypy.
 
 ## Validation
 
-The portfolio release validation suite passes **532 tests and 160 subtests**, plus Ruff, mypy,
+The portfolio release validation suite passes **565 tests and 160 subtests**, plus Ruff, mypy,
 compileall, dependency, artifact-integrity, and privacy checks. Curated or teacher-proxy
 agreement is not reported as real-world model accuracy.
 
@@ -143,6 +149,8 @@ python -m pip check
 
 - Personal data, credentials, annotations, models, reports, and generated documents
   remain local and excluded from Git.
+- Mobile is a responsive companion for the same locally run Streamlit app—not a
+  hosted service, separate mobile client, cloud-sync layer, or remote inference path.
 - The application does not scrape restricted platforms, submit applications, alter
   employer systems, or predict hiring outcomes.
 - Employer-facing documents require human review.

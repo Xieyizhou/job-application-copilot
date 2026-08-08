@@ -56,7 +56,12 @@ SCREENING_KEYWORDS = {
 }
 HARD_RED_FLAG_PATTERNS = {
     "PhD required": ["phd required", "ph.d. required", "doctorate required"],
-    "PhD internship/candidate": ["phd internship", "ph.d. internship", "phd candidate", "ph.d. candidate"],
+    "PhD internship/candidate": [
+        "phd internship",
+        "ph.d. internship",
+        "phd candidate",
+        "ph.d. candidate",
+    ],
     "Master's required": ["master's required", "masters required", "m.s. required", "ms required"],
     "Graduate degree required": ["graduate degree required"],
     "Senior/research fellow": ["senior research fellow", "research fellow"],
@@ -89,10 +94,13 @@ from export_documents import (  # noqa: E402
 )
 from fetch_history import load_fetch_runs  # noqa: E402
 from fetch_jobs import jsearch_configured  # noqa: E402
-from jd_enrichment import enrich_saved_job_description  # noqa: E402
+from jd_enrichment import (  # noqa: E402
+    enrich_saved_job_description,
+    enrich_saved_job_description_from_url,
+    replace_saved_job_description,
+)
 import manual_jobs as manual_jobs_module  # noqa: E402
 from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
-from ml.web_candidate_shadow import enqueue_web_candidate_shadow  # noqa: E402
 from output_paths import safe_slug, timestamp_slug  # noqa: E402
 from tracker import add_application, update_status  # noqa: E402
 from dashboard_fit import (  # noqa: E402
@@ -206,6 +214,18 @@ from workspace import (  # noqa: E402
     resolve_workspace,
 )
 from scoring_types import DashboardJob, TrackerRow  # noqa: E402
+
+
+def enqueue_web_candidate_shadow(
+    job_text: str,
+    candidate_text: str,
+    *,
+    workspace_mode: str,
+) -> None:
+    """Load the optional ML shadow runtime only when Personal mode invokes it."""
+    from ml.web_candidate_shadow import enqueue_web_candidate_shadow as enqueue
+
+    enqueue(job_text, candidate_text, workspace_mode=workspace_mode)
 
 
 def run_with_captured_output(func: Any, *args: Any, **kwargs: Any) -> tuple[Any, str]:
@@ -350,9 +370,7 @@ def warnings_for_job(job_text: str) -> list[str]:
         if phrase in job_text.lower():
             warnings.append(f"Review {phrase} requirement manually")
     if is_uk_job_text(job_text):
-        warnings.append(
-            "UK HPI review: user may be eligible to apply, but should not claim current UK work authorization."
-        )
+        warnings.append("UK HPI review: user may be eligible to apply, but should not claim current UK work authorization.")
         if asks_for_uk_work_authorization(job_text):
             warnings.append("Confirm whether the employer accepts candidates planning to use the HPI visa route")
     return warnings
@@ -397,6 +415,7 @@ def analyze_job_for_dashboard(
 ) -> dict[str, Any]:
     """Return the canonical full analysis for one loaded dashboard job."""
     from streamlit.runtime.scriptrunner import get_script_run_ctx
+
     if use_cache is None:
         use_cache = get_script_run_ctx(suppress_warning=True) is not None
     if not job_text.strip():
@@ -542,10 +561,7 @@ def tracker_args_for_job(job: DashboardJob) -> SimpleNamespace:
         status="saved",
         resume_file="",
         cover_letter_file="",
-        notes=(
-            f"Saved from Review Jobs. Eligibility: {eligibility}. "
-            f"Scoring confidence: {confidence}. No application was submitted."
-        ),
+        notes=(f"Saved from Review Jobs. Eligibility: {eligibility}. Scoring confidence: {confidence}. No application was submitted."),
     )
 
 
@@ -712,7 +728,10 @@ def render_readiness_checklist(
                 "Material": "Uploaded Resume",
                 "Status": "Used unchanged",
             },
-            {"Material": "Cover Letter", "Status": readiness_status(source_exists=cover_letter_md_path.exists())},
+            {
+                "Material": "Cover Letter",
+                "Status": readiness_status(source_exists=cover_letter_md_path.exists()),
+            },
             {
                 "Material": "Cover Letter DOCX",
                 "Status": readiness_status(
@@ -721,13 +740,18 @@ def render_readiness_checklist(
                     read_only_sample=demo_mode_enabled(),
                 ),
             },
-            {"Material": "Match Report", "Status": readiness_status(source_exists=analysis_path.exists())},
+            {
+                "Material": "Match Report",
+                "Status": readiness_status(source_exists=analysis_path.exists()),
+            },
             {
                 "Material": "Internal Notes",
                 "Status": readiness_status(source_exists=bool(internal_notes_paths), optional=True),
             },
         ]
     )
+
+
 def generate_cover_letter_docx_for_package(package_dir: Path) -> tuple[Path | None, list[str]]:
     """Regenerate cover_letter.docx for a selected package when possible."""
     cover_letter_md_path = package_dir / "cover_letter.md"
@@ -825,6 +849,7 @@ def manual_page_services() -> ManualPageServices:
         company_generation_allowed=company_generation_allowed,
         current_workspace=current_workspace,
         demo_mode_enabled=demo_mode_enabled,
+        go_to_page=go_to_page,
         relative_path=relative_path,
         render_manual_company_confirmation=render_manual_company_confirmation,
         render_page_header=render_page_header,
@@ -993,6 +1018,7 @@ def review_page_services() -> ReviewPageServices:
         demo_mode_enabled=demo_mode_enabled,
         go_to_page=go_to_page,
         enrich_saved_job_description=enrich_saved_job_description,
+        enrich_saved_job_description_from_url=enrich_saved_job_description_from_url,
         jsearch_configured=jsearch_configured,
         key_requirements_from_text=key_requirements_from_text,
         load_package_notes=load_package_notes,
@@ -1006,6 +1032,7 @@ def review_page_services() -> ReviewPageServices:
         render_generation_success=render_generation_success,
         render_markdown_company_confirmation=render_markdown_company_confirmation,
         render_page_header=render_page_header,
+        replace_saved_job_description=replace_saved_job_description,
         run_with_captured_output=run_with_captured_output,
         sanitize_fit_text=sanitize_fit_text,
         save_recent_region_key=save_recent_region_key,

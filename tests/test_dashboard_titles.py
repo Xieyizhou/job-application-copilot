@@ -88,7 +88,7 @@ Location: Remote
                 )
 
 
-def run_custom_location_child() -> None:
+def run_searchable_region_child() -> None:
     import pyarrow
 
     pyarrow.set_memory_pool(pyarrow.system_memory_pool())
@@ -96,17 +96,19 @@ def run_custom_location_child() -> None:
 
     app = AppTest.from_file(PROJECT_ROOT / "src" / "dashboard.py")
     app.session_state["workspace_mode"] = "Demo"
+    app.session_state["active_page"] = "Find Jobs"
     app.run(timeout=30)
-    app.radio[0].set_value("Find Jobs").run(timeout=30)
     assert not list(app.exception)
     region = next(widget for widget in app.selectbox if widget.label == "Region")
-    region.set_value("Custom").run(timeout=30)
+    region.set_value("China").run(timeout=30)
     assert not list(app.exception)
-    assert "Custom Location" in [widget.label for widget in app.text_input]
+    updated_region = next(widget for widget in app.selectbox if widget.label == "Region")
+    assert updated_region.value == "China"
+    assert "Custom Location" not in [widget.label for widget in app.text_input]
 
 
-class CustomLocationRuntimeTests(unittest.TestCase):
-    def test_custom_location_appears_on_region_selection(self) -> None:
+class SearchableRegionRuntimeTests(unittest.TestCase):
+    def test_suggested_region_is_selected_without_a_second_field(self) -> None:
         result = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "--child"],
             cwd=PROJECT_ROOT,
@@ -120,6 +122,6 @@ class CustomLocationRuntimeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     if "--child" in sys.argv:
-        run_custom_location_child()
+        run_searchable_region_child()
     else:
         unittest.main()

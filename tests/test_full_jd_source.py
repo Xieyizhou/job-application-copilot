@@ -96,6 +96,30 @@ class JSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(jobs[0]["role"], "Machine Learning Engineer")
         self.assertEqual(jobs[0]["location"], "Singapore")
 
+    @patch("fetch_jobs.load_jsearch_api_key", return_value="test-key")
+    @patch("requests.get")
+    def test_fetch_distinguishes_no_results_from_missing_descriptions(
+        self, get: Mock, _load_key: Mock
+    ) -> None:
+        response = Mock()
+        response.raise_for_status.return_value = None
+        get.return_value = response
+        response.json.return_value = {"data": []}
+        with self.assertRaises(fetch_jobs.JSearchNoResultsError):
+            fetch_jobs.fetch_jsearch_jobs("sg", "rare role", "Singapore", 5)
+
+        response.json.return_value = {
+            "data": [
+                {
+                    "job_id": "summary-only",
+                    "employer_name": "Example",
+                    "job_title": "Rare role",
+                }
+            ]
+        }
+        with self.assertRaises(fetch_jobs.JSearchNoFullDescriptionsError):
+            fetch_jobs.fetch_jsearch_jobs("sg", "rare role", "Singapore", 5)
+
     def test_markdown_records_description_provenance(self) -> None:
         markdown = fetch_jobs.build_job_markdown(
             fetch_jobs.normalize_jsearch_job(

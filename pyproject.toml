@@ -33,6 +33,7 @@ files = [
   "src/dashboard_fit_sections.py",
   "src/dashboard_cover_letter.py",
   "src/dashboard_cover_letter_components.py",
+  "src/dashboard_cover_letter_materials.py",
   "src/dashboard_cover_letter_selection.py",
   "src/dashboard_review.py",
   "src/dashboard_repository.py",

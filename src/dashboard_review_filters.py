@@ -11,7 +11,7 @@ from dashboard_regions import (
     dynamic_source_options,
     filtered_region_option_keys,
 )
-from dashboard_review import REVIEW_INBOX_OPTIONS
+from dashboard_review import REVIEW_FIT_BANDS, REVIEW_INBOX_OPTIONS, review_fit_band_counts
 from scoring_types import DashboardJob, RegionOption, TrackerRow
 
 
@@ -100,11 +100,12 @@ def _apply_review_defaults(default_inbox_view: str) -> None:
         "review_recommendation_filter": "all",
         "review_tracker_filter": "all",
         "review_search_text": "",
+        "review_fit_band": "All",
         "region_search_query": "",
-        "review_minimum_score": 50,
-        "review_hide_hard_red_flags": True,
-        "review_hide_degree_required": True,
-        "review_hide_current_student_only": True,
+        "review_minimum_score": 0,
+        "review_hide_hard_red_flags": False,
+        "review_hide_degree_required": False,
+        "review_hide_current_student_only": False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -137,16 +138,17 @@ def reset_review_filters(
     st.session_state.update(
         {
             "review_search_text": "",
+            "review_fit_band": "All",
             "review_inbox_view": "All" if show_all else default_inbox_view,
             "review_sort_by": "Role Fit high to low",
             "selected_region_key": "all",
             "review_source_filter": "all",
             "review_recommendation_filter": "all",
             "review_tracker_filter": "all",
-            "review_minimum_score": 0 if show_all or is_demo else 50,
-            "review_hide_hard_red_flags": False if show_all else not is_demo,
-            "review_hide_degree_required": False if show_all else not is_demo,
-            "review_hide_current_student_only": False if show_all else not is_demo,
+            "review_minimum_score": 0,
+            "review_hide_hard_red_flags": False,
+            "review_hide_degree_required": False,
+            "review_hide_current_student_only": False,
         }
     )
 
@@ -215,7 +217,7 @@ def _render_advanced_filters(
     clear_filters: Callable[[], None],
 ) -> dict[str, Any]:
     with st.popover(
-        "Filter & sort",
+        "Filters",
         type="tertiary",
         icon=":material/tune:",
         width="stretch",
@@ -308,36 +310,35 @@ def render_review_filter_controls(
         reset_review_filters(state["default_inbox_view"], state["is_demo"])
 
     options_by_key = build_region_options(all_jobs)
-    if state["is_demo"]:
-        return _demo_review_filters(options_by_key, clear_filters)
-
-    inbox_view = st.segmented_control(
-        "Job inbox view",
-        state["inbox_options"],
-        key="review_inbox_view",
-        selection_mode="single",
-        label_visibility="collapsed",
-        on_change=reset_review_table_selection,
-    ) or state["default_inbox_view"]
-    search_col, filter_col = st.columns([0.76, 0.24])
+    base_filters = _demo_review_filters(options_by_key, clear_filters)
+    search_col, filter_col = st.columns([0.78, 0.22] if not state["is_demo"] else [1, 0.0001])
     with search_col:
         search_text = st.text_input(
             "Search company or role",
             key="review_search_text",
-            placeholder="Search jobs",
+            placeholder="Search jobs…",
             label_visibility="collapsed",
+            icon=":material/search:",
             on_change=reset_review_table_selection,
         )
-    with filter_col:
-        advanced_filters = _render_advanced_filters(
-            options_by_key,
-            state,
-            services,
-            clear_filters,
-        )
+    if not state["is_demo"]:
+        with filter_col:
+            base_filters.update(_render_advanced_filters(options_by_key, state, services, clear_filters))
+    counts = review_fit_band_counts(all_jobs)
+    fit_band = st.segmented_control(
+        "Fit group",
+        REVIEW_FIT_BANDS,
+        key="review_fit_band",
+        format_func=lambda band: f"{band} ({counts[band]})",
+        selection_mode="single",
+        label_visibility="collapsed",
+        width="stretch",
+        on_change=reset_review_table_selection,
+    ) or "All"
     return {
-        "inbox_view": inbox_view,
+        **base_filters,
+        "inbox_view": "All",
         "search_text": search_text,
-        **advanced_filters,
+        "fit_band": fit_band,
         "clear_filters": clear_filters,
     }

@@ -20,6 +20,7 @@ RECOMMENDATION_RANK = {
 }
 
 REVIEW_INBOX_OPTIONS = ["Recommended", "Needs attention", "Ready", "All"]
+REVIEW_FIT_BANDS = ("All", "Strong", "Review", "Weak")
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,27 @@ def is_strong_match(job: DashboardJob) -> bool:
         and str(job.get("recommendation", "")) == "Apply"
         and int(job.get("score") or 0) >= 80
     )
+
+
+def review_fit_band(job: DashboardJob | dict[str, Any]) -> str:
+    """Group jobs for the compact Saved jobs rail without changing model output."""
+    score = int(job.get("score") or 0)
+    eligibility = eligibility_status(job)
+    confidence = confidence_level(job.get("confidence"))
+    if eligibility == "failed" or score < 60:
+        return "Weak"
+    if eligibility == "manual_review" or confidence == "low" or score < 80:
+        return "Review"
+    return "Strong"
+
+
+def review_fit_band_counts(jobs: list[DashboardJob]) -> dict[str, int]:
+    """Count the natural Saved jobs distribution used by the rail filters."""
+    counts = {band: 0 for band in REVIEW_FIT_BANDS}
+    counts["All"] = len(jobs)
+    for job in jobs:
+        counts[review_fit_band(job)] += 1
+    return counts
 
 
 def sorted_review_jobs(jobs: list[DashboardJob], sort_by: str) -> list[DashboardJob]:

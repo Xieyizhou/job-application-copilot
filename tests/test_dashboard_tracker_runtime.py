@@ -110,7 +110,7 @@ class DashboardTrackerRuntimeTests(unittest.TestCase):
         self.assertEqual(fake.metrics["Active"], 0)
         self.assertEqual(fake.metrics["Interviews"], 0)
         self.assertEqual(services.load_tracker_rows.call_count, 2)
-        self.assertTrue(any("No tracker records" in message for _, message in fake.messages))
+        self.assertTrue(any("No applications" in message for _, message in fake.messages))
 
     def test_record_can_move_stage_through_injected_service(self) -> None:
         row = {

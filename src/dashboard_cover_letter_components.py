@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,8 +9,11 @@ from typing import Any
 import streamlit as st
 
 from dashboard_cover_letter_evidence import render_evidence_and_gaps
-from dashboard_packages import build_application_package_zip, existing_package_files, package_zip_filename
-from dashboard_review import tracker_follow_up_due, tracker_next_action
+from dashboard_cover_letter_materials import (
+    cover_letter_editor_mode,
+    render_secondary_materials,
+)
+from dashboard_packages import existing_package_files
 from dashboard_titles import display_title_from_value
 from output_paths import safe_slug
 from tracker import update_status
@@ -74,9 +75,8 @@ def render_cover_letter_document(
     services: Any,
 ) -> None:
     """Render the editable draft and actions in the right-side document pane."""
-    _render_draft(artifacts, package_key, services)
-    _render_application_status(tracker_row, services)
-    _render_secondary_materials(artifacts, tracker_row, package_key, services)
+    _render_draft(artifacts, tracker_row, package_key, services)
+    render_secondary_materials(artifacts, tracker_row, package_key, services)
 
 
 def _render_identity(tracker_row: dict[str, Any] | None) -> None:
@@ -95,15 +95,25 @@ def _render_readiness_statement(artifacts: CoverLetterArtifacts) -> None:
     )
 
 
-def _render_draft(artifacts: CoverLetterArtifacts, package_key: str, services: Any) -> None:
+def _render_draft(
+    artifacts: CoverLetterArtifacts,
+    tracker_row: dict[str, Any] | None,
+    package_key: str,
+    services: Any,
+) -> None:
     st.markdown("**Cover letter draft**")
     if not artifacts.markdown.exists():
         st.warning("The cover letter draft is missing. Generate it from Review Jobs first.")
         return
 
     draft = services.read_text_file(artifacts.markdown)
+    editor_mode = cover_letter_editor_mode(package_key)
+    st.markdown(
+        f'<div class="cover-letter-editor-state cover-letter-editor-{editor_mode}"></div>',
+        unsafe_allow_html=True,
+    )
     if services.demo_mode_enabled():
-        with st.container(border=True):
+        with st.container(border=True, key="cover_letter_demo_draft"):
             st.markdown(draft)
     else:
         edited_draft = st.text_area(
@@ -113,21 +123,7 @@ def _render_draft(artifacts: CoverLetterArtifacts, package_key: str, services: A
             key=f"cover_letter_editor_{package_key}",
             help="Edits are saved only when you use Save Draft.",
         )
-        edit_left, edit_right = st.columns([0.35, 0.65])
-        with edit_left:
-            if st.button("Save Draft", key=f"save_cover_letter_{package_key}", width="stretch"):
-                artifacts.markdown.write_text(edited_draft.rstrip() + "\n", encoding="utf-8")
-                generated_path, warnings = services.generate_cover_letter_docx_for_package(artifacts.package_dir)
-                if generated_path:
-                    st.success("Draft saved and DOCX refreshed.")
-                else:
-                    st.warning("Draft saved, but the DOCX could not be refreshed.")
-                if warnings:
-                    with st.expander("DOCX warnings", expanded=False):
-                        for warning in warnings:
-                            st.write(f"- {warning}")
-        with edit_right:
-            st.caption("Saving refreshes the employer-facing DOCX from this draft.")
+        _render_primary_actions(edited_draft, artifacts, tracker_row, package_key, services)
 
     if artifacts.docx.exists():
         st.download_button(
@@ -149,100 +145,47 @@ def _render_draft(artifacts: CoverLetterArtifacts, package_key: str, services: A
                 st.warning(str(warning))
 
 
-def _render_application_status(tracker_row: dict[str, Any] | None, services: Any) -> None:
-    if services.demo_mode_enabled():
-        return
-    action_left, action_right = st.columns(2)
-    with action_left:
-        if tracker_row and st.button("Mark as Applied", width="stretch"):
-            try:
-                database_path = services.current_workspace().tracker_database_path
-                if database_path is None:
-                    raise WorkspaceError("Tracker is unavailable in Demo workspace.")
-                services.run_with_captured_output(update_status, int(tracker_row["id"]), "applied", database_path)
-                st.success("Marked as applied.")
-                st.rerun()
-            except Exception as error:  # noqa: BLE001
-                st.error(str(error))
-    with action_right:
-        if st.button("Open Tracker", key="package_open_tracker", width="stretch"):
-            services.go_to_page("Tracker")
-
-
-def _render_secondary_materials(
+def _render_primary_actions(
+    edited_draft: str,
     artifacts: CoverLetterArtifacts,
     tracker_row: dict[str, Any] | None,
     package_key: str,
     services: Any,
 ) -> None:
-    with st.expander("Supporting materials and details", expanded=False):
-        if tracker_row:
-            services.render_action_callout(
-                tracker_next_action(tracker_row),
-                caution=tracker_follow_up_due(tracker_row),
-            )
-            notes = str(tracker_row.get("notes", "") or "").strip()
-            if notes:
-                st.caption(f"Tracker notes: {notes}")
-
-        services.render_readiness_checklist(
-            artifacts.markdown,
-            artifacts.docx,
-            artifacts.analysis,
-            artifacts.internal_notes,
+    save_column, applied_column = st.columns(2, gap="small")
+    with save_column:
+        save_clicked = st.button(
+            "Save Draft",
+            key=f"save_cover_letter_{package_key}",
+            help="Saving refreshes the employer-facing DOCX from this draft.",
+            width="stretch",
         )
-        _render_secondary_downloads(artifacts, package_key)
-        services.render_markdown_file(artifacts.analysis, "Stored Match Report")
-        internal_text = "\n\n".join(services.read_text_file(path) for path in artifacts.internal_notes)
-        if internal_text:
-            with st.expander("Internal Notes", expanded=False):
-                st.markdown(internal_text)
-        st.caption(f"Bundle folder: {services.relative_path(artifacts.package_dir)}")
-
-
-def _render_secondary_downloads(artifacts: CoverLetterArtifacts, package_key: str) -> None:
-    left, middle, right = st.columns(3)
-    with left:
-        if artifacts.analysis.exists():
-            st.download_button(
-                "Match Report",
-                data=artifacts.analysis.read_bytes(),
-                file_name=artifacts.analysis.name,
-                mime="text/markdown",
-                key=f"download_match_report_{package_key}",
-                width="stretch",
-            )
-    with middle:
-        _render_internal_notes_download(artifacts.internal_notes, package_key)
-    with right:
-        zip_bytes, zip_paths = build_application_package_zip(artifacts.package_dir)
-        if zip_paths:
-            st.download_button(
-                "Bundle ZIP",
-                data=zip_bytes,
-                file_name=package_zip_filename(artifacts.package_dir),
-                mime="application/zip",
-                key=f"download_full_package_zip_{package_key}",
-                width="stretch",
-            )
-
-
-def _render_internal_notes_download(paths: list[Path], package_key: str) -> None:
-    if not paths:
-        return
-    if len(paths) == 1:
-        data, name, mime = paths[0].read_bytes(), paths[0].name, "text/markdown"
-    else:
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for path in paths:
-                archive.write(path, arcname=path.name)
-        data, name, mime = buffer.getvalue(), "internal_notes.zip", "application/zip"
-    st.download_button(
-        "Internal Notes",
-        data=data,
-        file_name=name,
-        mime=mime,
-        key=f"download_internal_notes_{package_key}",
-        width="stretch",
-    )
+    with applied_column:
+        already_applied = str((tracker_row or {}).get("status", "")).lower() == "applied"
+        applied_clicked = st.button(
+            "Mark as Applied",
+            key=f"mark_cover_letter_applied_{package_key}",
+            disabled=tracker_row is None or already_applied,
+            width="stretch",
+        )
+    if save_clicked:
+        artifacts.markdown.write_text(edited_draft.rstrip() + "\n", encoding="utf-8")
+        generated_path, warnings = services.generate_cover_letter_docx_for_package(artifacts.package_dir)
+        if generated_path:
+            st.success("Draft saved and DOCX refreshed.")
+        else:
+            st.warning("Draft saved, but the DOCX could not be refreshed.")
+        if warnings:
+            with st.expander("DOCX warnings", expanded=False):
+                for warning in warnings:
+                    st.write(f"- {warning}")
+    if applied_clicked and tracker_row:
+        try:
+            database_path = services.current_workspace().tracker_database_path
+            if database_path is None:
+                raise WorkspaceError("Tracker is unavailable in Demo workspace.")
+            services.run_with_captured_output(update_status, int(tracker_row["id"]), "applied", database_path)
+            st.success("Marked as applied.")
+            st.rerun()
+        except Exception as error:  # noqa: BLE001
+            st.error(str(error))
