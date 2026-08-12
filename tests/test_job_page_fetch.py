@@ -6,7 +6,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from job_page_fetch import JobPageFetchError, extract_job_page, fetch_job_page
+from job_page_fetch import JobPageFetchError, extract_job_page, fetch_job_page, fetch_public_ats_job
 
 
 DESCRIPTION = """Responsibilities
@@ -49,6 +49,29 @@ class JobPageExtractionTests(unittest.TestCase):
 
         self.assertEqual(page.extractor, "job_page_container")
         self.assertIn("data-quality checks", page.description)
+
+    @patch("job_page_fetch._fetch_public_json")
+    def test_greenhouse_public_api_adapter(self, fetch_json: Mock) -> None:
+        fetch_json.return_value = {
+            "title": "Data Engineer",
+            "content": "<p>Build reliable pipelines.</p><p>Python and SQL required.</p>",
+        }
+        page = fetch_public_ats_job("https://boards.greenhouse.io/acme/jobs/12345")
+        assert page is not None
+        self.assertEqual(page.extractor, "greenhouse_public_api")
+        self.assertIn("Python and SQL required", page.description)
+
+    @patch("job_page_fetch._fetch_public_json")
+    def test_lever_public_api_adapter(self, fetch_json: Mock) -> None:
+        fetch_json.return_value = {
+            "text": "ML Engineer",
+            "descriptionPlain": "Build production machine learning systems.",
+            "lists": [{"text": "Requirements", "content": "<li>Python</li><li>SQL</li>"}],
+        }
+        page = fetch_public_ats_job("https://jobs.lever.co/acme/abc-123")
+        assert page is not None
+        self.assertEqual(page.extractor, "lever_public_api")
+        self.assertIn("Requirements", page.description)
 
     @patch("job_page_fetch._public_http_url", return_value=True)
     @patch("job_page_fetch.requests.get")

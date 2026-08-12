@@ -44,6 +44,31 @@ def analyzed_job(job_text: str, candidate_text: str = MATCHING_CANDIDATE) -> dic
 
 
 class CanonicalDashboardAnalysisTests(unittest.TestCase):
+    def test_canonical_analysis_replaces_stale_jd_quality(self) -> None:
+        job = {
+            "jd_quality": {
+                "display_label": "Requirements missing",
+                "reliable_scoring_ready": False,
+            }
+        }
+        analysis = {
+            "analysis_available": True,
+            "score": 26,
+            "recommendation": "Skip or Low Priority",
+            "eligibility": {"status": "passed", "reasons": []},
+            "confidence": {"level": "high"},
+            "score_breakdown": [],
+            "jd_quality": {
+                "display_label": "Scoring-ready",
+                "reliable_scoring_ready": True,
+            },
+        }
+
+        updated = dashboard.apply_canonical_analysis(job, analysis)
+
+        self.assertEqual(updated["jd_quality"]["display_label"], "Scoring-ready")
+        self.assertTrue(updated["jd_quality"]["reliable_scoring_ready"])
+
     def test_personal_web_shadow_does_not_change_analysis_result(self) -> None:
         job = {
             "company": "Fictional Signal Works",

@@ -11,8 +11,10 @@ def render_review_workspace_styles() -> None:
         """
         <style>
         .st-key-review_job_list_panel {
-            height:calc(100vh - 4.7rem);overflow:hidden;
+            height:calc(100vh - 4.7rem);overflow-y:auto;overflow-x:hidden;min-height:0;
             margin-top:0 !important;min-width:0 !important;
+            overscroll-behavior:contain;scrollbar-gutter:stable;
+            scrollbar-width:auto;scrollbar-color:var(--app-border-strong,#aeb6c1) transparent;
         }
         .st-key-review_detail_shell {
             height:calc(100vh - 4.7rem);max-height:calc(100vh - 4.7rem);
@@ -96,10 +98,18 @@ def render_review_workspace_styles() -> None:
             box-shadow:inset 0 -2px 0 var(--app-accent,#d94f55) !important;
         }
         .st-key-review_job_list {
-            height:calc(100vh - 14.5rem) !important;min-height:24rem;overflow-y:auto;
-            overscroll-behavior:contain;scrollbar-gutter:stable;
-            scrollbar-width:thin;scrollbar-color:var(--app-border-strong,#cdd3da) transparent;
+            display:block !important;height:auto !important;min-height:0 !important;overflow:visible !important;
         }
+        @media (min-width:761px) {
+            .st-key-review_job_list_panel {
+                height:calc(100vh - 4.7rem) !important;max-height:calc(100vh - 4.7rem) !important;
+                overflow-y:auto !important;overflow-x:hidden !important;
+            }
+            .st-key-review_job_list_panel .st-key-review_job_list {display:block !important}
+            .st-key-review_job_list_panel .st-key-review_mobile_job_picker {display:none !important}
+        }
+        .st-key-review_job_list_panel::-webkit-scrollbar {width:10px}
+        .st-key-review_job_list_panel::-webkit-scrollbar-thumb {background:#aeb6c1;border-radius:10px;border:2px solid transparent;background-clip:padding-box}
         [class*="st-key-review_job_row_"] {
             background:transparent;border-bottom:1px solid var(--app-border,#dfe3e8);
             padding:.72rem .78rem .66rem;border-left:3px solid transparent;
@@ -157,7 +167,7 @@ def render_review_workspace_styles() -> None:
             .selected-job-context-role {font-size:1.05rem}
             .selected-job-context-meta {font-size:.76rem}
         }
-        @media (max-width:1299px) {
+        @media (max-width:760px) {
             [data-testid="stHorizontalBlock"]:has(.st-key-review_job_list_panel):has(.st-key-review_detail_shell) {
                 flex-direction:column !important;gap:.65rem !important;
             }
@@ -199,14 +209,6 @@ def render_review_workspace_styles() -> None:
             .st-key-review_detail_tabs [data-baseweb="button-group"] {gap:0 !important}
             .st-key-review_detail_tabs [data-baseweb="button-group"] button {
                 min-width:6.5rem !important;padding-left:.5rem !important;padding-right:.5rem !important;
-            }
-        }
-        @media (min-width:1100px) and (max-width:1299px) {
-            .st-key-review_detail_shell {
-                height:calc(100vh - 4.7rem) !important;
-                max-height:calc(100vh - 4.7rem) !important;
-                overflow-y:auto !important;overflow-x:hidden !important;
-                padding-bottom:1.35rem !important;
             }
         }
         @media (max-width:760px) {

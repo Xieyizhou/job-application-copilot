@@ -126,4 +126,7 @@ def apply_canonical_analysis(job: DashboardJob, analysis: dict[str, Any]) -> Das
     updated["eligibility"] = dict(analysis.get("eligibility", {}))
     updated["confidence"] = dict(analysis.get("confidence", {}))
     updated["score_breakdown"] = list(analysis.get("score_breakdown", []))
+    analysis_quality = analysis.get("jd_quality")
+    if isinstance(analysis_quality, dict) and analysis_quality:
+        updated["jd_quality"] = dict(analysis_quality)
     return updated

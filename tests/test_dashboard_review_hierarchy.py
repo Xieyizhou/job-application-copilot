@@ -26,6 +26,7 @@ from dashboard_review_components import (
     visible_role_fit,
 )
 from dashboard_review_chrome import saved_job_context
+from dashboard_evidence_map import display_requirement
 from dashboard_review_styles import action_note_html, decision_field_html
 from dashboard_review_selector import (
     compact_review_table_row,
@@ -83,6 +84,13 @@ def sample_job(*, confidence: str = "high") -> dict[str, object]:
 
 
 class ReviewHierarchyTests(unittest.TestCase):
+
+    def test_requirement_labels_use_sentence_case_without_lowering_acronyms(self) -> None:
+        self.assertEqual(display_requirement("Design production ML systems"), "design production ML systems")
+        self.assertEqual(display_requirement("Python"), "Python")
+        self.assertEqual(display_requirement("PyTorch/JAX"), "PyTorch/JAX")
+        self.assertEqual(display_requirement("GPU-based training"), "GPU-based training")
+        self.assertEqual(display_requirement("SQL"), "SQL")
     def test_programmatic_review_navigation_syncs_the_visible_tab(self) -> None:
         state: dict[str, object] = {}
         job = {"path": Path("/jobs/example.md"), "label": "Example"}
@@ -155,6 +163,28 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertEqual(hard_constraint(job), "No hard constraint detected.")
         self.assertEqual(jd_quality_label(job), "Complete")
         self.assertEqual(len(accepted_semantic_matches(job["analysis_result"])), 3)
+
+    def test_jd_quality_label_prefers_canonical_analysis_quality(self) -> None:
+        job = sample_job()
+        job["jd_quality"] = {
+            "display_label": "Requirements missing",
+            "reliable_scoring_ready": False,
+        }
+        job["analysis_result"]["jd_quality"] = {
+            "display_label": "Scoring-ready",
+            "reliable_scoring_ready": True,
+        }
+
+        self.assertEqual(jd_quality_label(job), "Scoring-ready")
+
+    def test_structured_scoring_ready_overrides_stale_legacy_quality(self) -> None:
+        job = sample_job(confidence="high")
+        job["jd_quality"] = {"display_label": "Requirements missing"}
+        job["confidence"]["job_description_quality"] = {
+            "requirement_statement_count": 12,
+        }
+
+        self.assertEqual(jd_quality_label(job), "Scoring-ready")
 
     def test_decision_fields_escape_untrusted_values(self) -> None:
         decision = decision_field_html("Recommendation", "Manual Review <unsafe>")
@@ -335,8 +365,8 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertIn("currentColor", style_source)
         self.assertIn("--primary-color", style_source)
         self.assertIn("stBaseButton-secondary", style_source)
-        self.assertIn("@media (max-width:1299px)", style_source)
-        self.assertIn('@media (min-width:1100px) and (max-width:1299px)', style_source)
+        self.assertIn("@media (max-width:760px)", style_source)
+        self.assertIn("@media (min-width:761px)", style_source)
         self.assertIn("overflow-y:auto !important;overflow-x:hidden !important", style_source)
         self.assertIn("-webkit-line-clamp:2", style_source)
         self.assertIn("[0.28, 0.72]", source)

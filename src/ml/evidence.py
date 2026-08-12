@@ -40,11 +40,12 @@ CONCEPT_ALIASES = {
     "automation": ("automate", "automated", "automation", "workflow automation"),
     "machine_learning": (
         "machine learning", "classification", "predictive model", "predictive models",
-        "model training", "scikit-learn", "sklearn",
+        "model training", "training workflow", "training workflows", "pytorch", "jax",
+        "onnx", "scikit-learn", "sklearn", "ml pipeline", "ml systems",
     ),
     "model_evaluation": (
         "model evaluation", "cross-validation", "cross validation", "f1", "confusion matrix",
-        "precision", "recall", "roc auc",
+        "precision", "recall", "roc auc", "evaluation pipeline", "evaluation pipelines", "evals",
     ),
     "communication": (
         "communicate", "communication", "presented", "presentation", "stakeholder",
@@ -52,7 +53,7 @@ CONCEPT_ALIASES = {
     ),
     "software_delivery": (
         "production system", "production systems", "deployed", "deployment", "api",
-        "service", "services", "software development",
+        "service", "services", "software development", "inference", "onnx packaging",
     ),
     "delivery_automation": (
         "continuous integration", "continuous delivery", "ci cd", "cicd", "ci/cd",
@@ -270,27 +271,62 @@ def extract_resume_evidence_records(resume_text: str) -> list[dict[str, Any]]:
     """Extract factual resume statements with their original section names."""
     records: list[dict[str, Any]] = []
     current_section = "Resume evidence"
+    pending: dict[str, Any] | None = None
+
+    def flush_pending() -> None:
+        nonlocal pending
+        if pending is not None:
+            records.append(pending)
+            pending = None
+
     for line_index, raw_line in enumerate(resume_text.splitlines()):
         stripped = raw_line.strip()
         if not stripped:
+            flush_pending()
             continue
         if stripped.startswith("#"):
+            flush_pending()
             heading = clean_source_line(stripped.lstrip("#"))
             if heading:
                 current_section = heading
             continue
+        plain_heading = (
+            bool(re.fullmatch(r"[A-Z][A-Z &/+\-]{2,}", stripped))
+            and len(stripped.split()) <= 6
+        )
+        if plain_heading:
+            flush_pending()
+            current_section = stripped.title()
+            continue
         is_bullet = bool(re.match(r"^[-*•]\s+", stripped))
+        if is_bullet:
+            flush_pending()
         line = clean_source_line(stripped)
         if not line or "@" in line or line.lower().startswith(("http://", "https://")):
+            flush_pending()
             continue
+        continuation = (
+            pending is not None
+            and not is_bullet
+            and not str(pending["text"]).rstrip().endswith((".", "!", "?"))
+        )
+        if continuation:
+            combined = f"{pending['text']} {line}".strip()
+            if len(combined.split()) <= 120:
+                pending["text"] = combined
+                continue
+            flush_pending()
+        elif pending is not None:
+            flush_pending()
         word_count = len(line.split())
-        if word_count < 4 or word_count > 80:
+        if word_count < 4 or word_count > 120:
             continue
         if not is_bullet and current_section.lower() in {
             "resume evidence", "contact", "summary", "profile", "education", "skills",
         }:
             continue
-        records.append({"text": line, "section": current_section, "line_index": line_index})
+        pending = {"text": line, "section": current_section, "line_index": line_index}
+    flush_pending()
     return records
 
 
@@ -379,9 +415,10 @@ def build_semantic_evidence_index(
     *,
     model_path: Path = DEFAULT_MODEL_PATH,
     max_requirements: int = 8,
+    requirement_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Map each important requirement to its strongest truthful resume statement."""
-    requirements = extract_requirement_records(job_text)[:max_requirements]
+    requirements = (requirement_records or extract_requirement_records(job_text))[:max_requirements]
     evidence_records = extract_resume_evidence_records(resume_text)
     pair_keys = [
         (requirement["text"], evidence["text"])

@@ -15,6 +15,8 @@ from company_verification import normalize_company_name, verification_from_markd
 from dashboard_desktop_styles import render_review_workspace_styles
 from dashboard_jd_recovery import render_full_jd_recovery, render_jd_workspace_styles
 from dashboard_jd_document import format_job_description_body
+from structured_jd import structure_job_description
+from dashboard_structured_jd import render_structured_job
 from dashboard_review_chrome import render_saved_jobs_header, render_selected_job_context
 from dashboard_regions import (
     job_matches_region_option,
@@ -295,10 +297,10 @@ def render_review_jd_section(
         services=services,
         job_url=str(job.get("job_url", "")),
     )
+    structured = structure_job_description(job_text)
     body = extract_job_description_body(job_text, str(job.get("preview", "")))
     body = format_job_description_body(body, get_job_display_title(job))
-    with st.container(border=False, key="jd_document_body"):
-        st.markdown(body)
+    render_structured_job(structured, body)
     if services.show_debug_ui:
         with st.expander("Advanced: job metadata", expanded=False):
             st.write(f"Markdown path: {services.relative_path(selected_path)}")

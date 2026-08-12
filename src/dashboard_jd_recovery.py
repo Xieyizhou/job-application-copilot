@@ -8,6 +8,8 @@ from typing import Any, Callable, Protocol
 
 import streamlit as st
 
+from job_page_fetch import JobPageFetchError, extract_job_page
+
 
 class JDRecoveryServices(Protocol):
     """Operations needed by the recovery controls."""
@@ -75,13 +77,31 @@ def _paste_full_jd_dialog(
         height=300,
         placeholder="Paste the complete responsibilities and qualifications here.",
     )
+    saved_page = st.file_uploader(
+        "Or import the HTML of the job page you opened",
+        type=["html", "htm"],
+        key=f"{key_prefix}_saved_job_page",
+        help=(
+            "Use your browser's Save Page command, then import the HTML locally. "
+            "Nothing is sent to a remote server."
+        ),
+    )
+    imported_jd = ""
+    if saved_page is not None:
+        try:
+            decoded = saved_page.getvalue().decode("utf-8", errors="replace")
+            imported_jd = extract_job_page(decoded, "local-browser-capture").description
+            st.success("The opened browser page exposed a structured job description.")
+        except JobPageFetchError as error:
+            st.warning(str(error))
+    candidate_jd = pasted_jd.strip() or imported_jd.strip()
     if st.button(
         "Verify and save",
         key=f"{key_prefix}_save_manual_full_jd",
         type="primary",
-        disabled=not pasted_jd.strip(),
+        disabled=not candidate_jd,
     ):
-        result = services.replace_saved_job_description(selected_path, pasted_jd)
+        result = services.replace_saved_job_description(selected_path, candidate_jd)
         if result.get("updated"):
             _set_notice(key_prefix, "success", str(result["message"]))
         else:
@@ -108,6 +128,12 @@ def render_jd_workspace_styles() -> None:
         .jd-document-head {display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:.35rem 0 .28rem}
         .jd-document-head strong {font-size:1rem;letter-spacing:-.015em}
         .jd-document-head span {font-size:.72rem;color:#687280}
+        .jd-fact-strip {display:flex;flex-wrap:wrap;gap:.55rem;margin:.55rem 0 .8rem}
+        .jd-fact-strip>div {display:flex;flex-direction:column;gap:.08rem;min-width:9rem;padding:.55rem .7rem;
+            border:1px solid var(--app-border,#dfe3e8);border-radius:.55rem;background:#fafbfc}
+        .jd-fact-strip span {font-size:.65rem;color:#737d89;text-transform:uppercase;letter-spacing:.04em}
+        .jd-fact-strip strong {font-size:.78rem;color:#252b34}
+        .jd-overview {max-width:78ch;margin:.4rem 0 .8rem;color:#4b5563;font-size:.8rem;line-height:1.55}
         .st-key-jd_document_body {
             border-top:1px solid var(--app-border,#dfe3e8);padding:1rem .35rem 1.6rem;
             font-size:.84rem;line-height:1.65;max-width:68rem;color:#303640;

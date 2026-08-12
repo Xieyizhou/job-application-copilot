@@ -13,6 +13,40 @@ from dashboard_evidence_styles import render_evidence_map_styles
 EvidenceStatus = Literal["Direct", "Partial", "No Support"]
 Sanitizer = Callable[[Any], str]
 
+_PROPER_FIRST_WORDS = {
+    "AI",
+    "AWS",
+    "Azure",
+    "C++",
+    "GCP",
+    "GPU",
+    "Java",
+    "JavaScript",
+    "Kubernetes",
+    "LLM",
+    "NLP",
+    "ONNX",
+    "Python",
+    "PyTorch",
+    "SQL",
+    "TensorFlow",
+}
+
+
+def display_requirement(requirement: str) -> str:
+    """Use sentence-style labels while preserving acronyms and product names."""
+    value = requirement.strip()
+    first_word = value.split(maxsplit=1)[0] if value else ""
+    if (
+        not value
+        or first_word in _PROPER_FIRST_WORDS
+        or any(name in first_word for name in _PROPER_FIRST_WORDS)
+        or first_word.isupper()
+        or any(char.isdigit() for char in first_word)
+    ):
+        return value
+    return value[:1].lower() + value[1:]
+
 
 class EvidenceCard(TypedDict):
     """Stable UI contract shared by transparent and learned evidence matchers."""
@@ -189,7 +223,7 @@ def render_evidence_map(
             with requirement_column:
                 st.markdown(
                     '<div class="evidence-map-requirement">'
-                    f'<strong>{html.escape(sanitize(card["requirement"]))}</strong>'
+                    f'<strong>{html.escape(sanitize(display_requirement(card["requirement"])))}</strong>'
                     f'<span>{html.escape(sanitize(card["context"]))}</span>'
                     "</div>",
                     unsafe_allow_html=True,

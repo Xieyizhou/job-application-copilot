@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit
+import re
 
 import requests
 
@@ -227,9 +228,89 @@ def extract_job_page(html_text: str, source_url: str) -> FetchedJobPage:
     )
 
 
+def _fetch_public_json(url: str) -> dict[str, Any]:
+    """Read one bounded public ATS JSON response."""
+    if not _public_http_url(url):
+        raise JobPageFetchError("The ATS endpoint is not publicly reachable.")
+    try:
+        response = requests.get(url, headers=REQUEST_HEADERS, timeout=(5, 20))
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise JobPageFetchError(f"The public ATS endpoint could not be reached: {error}") from error
+    if len(response.content) > MAX_RESPONSE_BYTES:
+        raise JobPageFetchError("The ATS response was too large to process safely.")
+    try:
+        payload = response.json()
+    except (ValueError, requests.JSONDecodeError) as error:
+        raise JobPageFetchError("The ATS endpoint did not return valid JSON.") from error
+    if not isinstance(payload, dict):
+        raise JobPageFetchError("The ATS endpoint returned an unexpected payload.")
+    return payload
+
+
+def _fetch_greenhouse(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"boards.greenhouse.io", "job-boards.greenhouse.io"}:
+        return None
+    match = re.search(r"/(?:embed/job_app\?for=)?([^/?#]+)(?:/jobs/|.*[?&]token=)(\d+)", parsed.path + ("?" + parsed.query if parsed.query else ""))
+    if not match:
+        parts = [part for part in parsed.path.split("/") if part]
+        job_index = parts.index("jobs") if "jobs" in parts else -1
+        if job_index < 1 or job_index + 1 >= len(parts):
+            return None
+        board, job_id = parts[job_index - 1], parts[job_index + 1]
+    else:
+        board, job_id = match.group(1), match.group(2)
+    payload = _fetch_public_json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}")
+    description = _clean_html_text(str(payload.get("content", "")))
+    if not description:
+        raise JobPageFetchError("Greenhouse returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="greenhouse_public_api",
+        title=str(payload.get("title", "")),
+        company=board.replace("-", " ").replace("_", " ").title(),
+    )
+
+
+def _fetch_lever(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"jobs.lever.co", "jobs.eu.lever.co"}:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    company, job_id = parts[0], parts[1]
+    api_host = "api.eu.lever.co" if parsed.hostname == "jobs.eu.lever.co" else "api.lever.co"
+    payload = _fetch_public_json(f"https://{api_host}/v0/postings/{company}/{job_id}")
+    sections = [str(payload.get("descriptionPlain", "") or "")]
+    for item in payload.get("lists", []) if isinstance(payload.get("lists"), list) else []:
+        if isinstance(item, dict):
+            sections.extend([str(item.get("text", "")), _clean_html_text(str(item.get("content", "")))])
+    description = "\n\n".join(section.strip() for section in sections if section.strip())
+    if not description:
+        raise JobPageFetchError("Lever returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="lever_public_api",
+        title=str(payload.get("text", "")),
+        company=company.replace("-", " ").title(),
+    )
+
+
+def fetch_public_ats_job(url: str) -> FetchedJobPage | None:
+    """Use stable public ATS APIs before attempting generic page extraction."""
+    return _fetch_greenhouse(url) or _fetch_lever(url)
+
+
 def fetch_job_page(url: str) -> FetchedJobPage:
     """Fetch a public HTTP(S) job page with bounded, validated redirects."""
     current_url = str(url or "").strip()
+    ats_result = fetch_public_ats_job(current_url)
+    if ats_result is not None:
+        return ats_result
     for _redirect in range(MAX_REDIRECTS + 1):
         if not _public_http_url(current_url):
             raise JobPageFetchError("The original job URL is invalid or is not publicly reachable.")

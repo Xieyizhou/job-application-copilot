@@ -30,7 +30,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 12
 MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
-DASHBOARD_SCORING_VERSION = "canonical-v5-full-jd-gate"
+DASHBOARD_SCORING_VERSION = "canonical-v8-structured-full-jd-quality"
 SCREENING_KEYWORDS = {
     "python": 8,
     "pandas": 8,

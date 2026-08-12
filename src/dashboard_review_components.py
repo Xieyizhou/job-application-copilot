@@ -31,7 +31,23 @@ class ReviewComponentServices(Protocol):
 
 def jd_quality_label(job: DashboardJob | dict[str, Any]) -> str:
     """Return the concise JD-quality label used in default UI."""
-    quality = dict(job.get("jd_quality", {}) or {})
+    analysis = dict(job.get("analysis_result", {}) or {})
+    quality = dict(analysis.get("jd_quality", {}) or {})
+    direct_quality_label = str(dict(job.get("jd_quality", {}) or {}).get("display_label", ""))
+    confidence = dict(job.get("confidence", {}) or {})
+    recovered_quality = dict(confidence.get("job_description_quality", {}) or {})
+    recovered_count = max(
+        int(confidence.get("active_requirement_count", 0) or 0),
+        int(recovered_quality.get("requirement_statement_count", 0) or 0),
+    )
+    if (
+        confidence_level(confidence) in {"medium", "high"}
+        and recovered_count >= 4
+        and direct_quality_label in {"Requirements missing", "Needs full JD"}
+    ):
+        return "Scoring-ready"
+    if not quality:
+        quality = dict(job.get("jd_quality", {}) or {})
     if not quality:
         confidence = dict(job.get("confidence", {}) or {})
         quality = dict(confidence.get("job_description_quality", {}) or {})

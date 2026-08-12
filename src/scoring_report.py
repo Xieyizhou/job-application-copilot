@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 from ml.evidence import build_semantic_evidence_index
 from output_paths import application_package_dir
-from scoring_engine import explain_final_decision, score_job_texts
+from scoring_engine import (
+    apply_role_focus_adjustment,
+    calibrate_score_for_evidence,
+    explain_final_decision,
+    final_recommendation,
+    score_job_texts,
+)
 from scoring_matching import (
     choose_relevant_themes,
     collect_report_matches,
@@ -21,9 +28,110 @@ from scoring_types import (
     RoleAlignment,
     ScoreBreakdownItem,
     ScoringConfidence,
+    ScoringResult,
     StructuredAnalysis,
 )
 from workspace import Workspace
+from structured_jd import StructuredJob, pipeline_trace, requirement_records, structure_job_description
+
+
+def _structured_requirement_score(
+    structured: StructuredJob,
+    semantic_evidence: dict[str, Any],
+    legacy: ScoringResult,
+) -> dict[str, Any]:
+    """Score extracted requirements while retaining the deterministic result as audit data."""
+    rows = list(structured["requirements"])
+    matches = list(semantic_evidence.get("matches", []) or [])
+    by_text = {str(row.get("requirement", "")): row for row in matches}
+    matched: list[str] = []
+    partial: list[str] = []
+    missing: list[str] = []
+    earned = 0.0
+    possible = 0.0
+    for value in rows:
+        row = dict(value)
+        text = str(row.get("text", ""))
+        weight = 0.5 if row.get("type") == "preferred" else 0.75 if row.get("type") == "responsibility" else 1.0
+        possible += weight
+        evidence = dict(by_text.get(text, {}) or {})
+        if not evidence.get("accepted"):
+            missing.append(text)
+            continue
+        if evidence.get("match_type") == "Direct support":
+            matched.append(text)
+            earned += weight
+        else:
+            partial.append(text)
+            earned += weight * 0.6
+    coverage_score = round(100 * earned / possible) if possible else 0
+    role_alignment = legacy["role_alignment"]
+    observed_score, role_adjustment = apply_role_focus_adjustment(coverage_score, role_alignment)
+    confidence = cast(ScoringConfidence, dict(legacy["confidence"]))
+    confidence["active_requirement_count"] = len(rows)
+    confidence["reasons"] = []
+    quality = dict(confidence.get("job_description_quality", {}) or {})
+    if len(rows) < 4:
+        confidence["level"] = "low"
+        confidence["reasons"].append("Fewer than four structured requirements were extracted.")
+    elif len(rows) >= 8 and quality.get("explicit_full_source"):
+        confidence["level"] = "high"
+        confidence["reasons"].append(
+            "At least eight source-backed requirements were recovered from the full posting."
+        )
+        quality.update(
+            {
+                "label": "scoring_ready",
+                "display_label": "Scoring-ready",
+                "appears_incomplete": False,
+                "provisional_scoring_ready": True,
+                "reliable_scoring_ready": True,
+                "requirement_statement_count": max(
+                    len(rows), int(quality.get("requirement_statement_count", 0) or 0)
+                ),
+                "next_action": "Review the extracted requirements before trusting the fit result.",
+            }
+        )
+    elif quality.get("appears_incomplete"):
+        confidence["level"] = "low"
+        confidence["reasons"].append("The saved job description still appears incomplete.")
+    elif len(rows) >= 8:
+        confidence["level"] = "high"
+        confidence["reasons"].append("At least eight source-backed requirements were extracted.")
+    else:
+        confidence["level"] = "medium"
+        confidence["reasons"].append("Four to seven source-backed requirements were extracted.")
+    score, calibration = calibrate_score_for_evidence(observed_score, confidence)
+    confidence["coverage_score"] = coverage_score
+    confidence["observed_score"] = observed_score
+    confidence["score_calibration"] = calibration
+    confidence["job_description_quality"] = quality
+    recommendation = final_recommendation(score, legacy["eligibility"], confidence)
+    breakdown = [
+        {
+            "category": "Structured requirement coverage",
+            "earned": float(score),
+            "possible": 100,
+            "active_terms": [str(row.get("text", "")) for row in rows],
+            "matched": matched,
+            "partial": partial,
+            "missing": missing,
+            "note": "Source-backed requirements matched to the strongest resume evidence.",
+        }
+    ]
+    return {
+        "score": score,
+        "coverage_score": coverage_score,
+        "observed_score": observed_score,
+        "score_calibration": calibration,
+        "role_focus_adjustment": role_adjustment,
+        "confidence": confidence,
+        "recommendation": recommendation,
+        "score_breakdown": breakdown,
+        "matched": matched,
+        "partial": partial,
+        "missing": missing,
+    }
 
 
 def find_resume_evidence(themes: list[str]) -> list[str]:
@@ -199,6 +307,42 @@ def explain_overall_score(
 def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = "") -> StructuredAnalysis:
     """Return structured, dependency-light fit analysis for UI display."""
     result = score_job_texts(job_text, resume_text)
+    legacy_score = result["score"]
+    structured_job = structure_job_description(job_text)
+    structured_records = requirement_records(structured_job)
+    semantic_limit = min(32, max(12, len(structured_records)))
+    semantic_evidence = build_semantic_evidence_index(
+        job_text,
+        resume_text,
+        max_requirements=semantic_limit,
+        requirement_records=structured_records or None,
+    )
+    scoring_method = "deterministic_keyword_fallback"
+    legacy_requirement_count = int(result["confidence"].get("active_requirement_count", 0) or 0)
+    # Controlled migration: fill the legacy parser's blind spots without changing
+    # already-recognized product results. The audit fields keep both paths visible.
+    legacy_quality = dict(result["confidence"].get("job_description_quality", {}) or {})
+    structured_takeover = (
+        len(structured_records) >= 4
+        and (
+            legacy_requirement_count <= 2
+            or (
+                legacy_quality.get("explicit_full_source")
+                and int(legacy_quality.get("requirement_statement_count", 0) or 0) == 0
+            )
+        )
+    )
+    if structured_takeover:
+        promoted = _structured_requirement_score(structured_job, semantic_evidence, result)
+        result["score"] = promoted["score"]
+        result["coverage_score"] = promoted["coverage_score"]
+        result["observed_score"] = promoted["observed_score"]
+        result["score_calibration"] = promoted["score_calibration"]
+        result["role_focus_adjustment"] = promoted["role_focus_adjustment"]
+        result["confidence"] = promoted["confidence"]
+        result["recommendation"] = promoted["recommendation"]
+        result["score_breakdown"] = promoted["score_breakdown"]
+        scoring_method = "structured_requirement_evidence_v1"
     job_keywords = result["job_keywords"]
     parsed_job = result["parsed_job"]
     score_breakdown = result["score_breakdown"]
@@ -207,7 +351,6 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     score = result["score"]
     recommendation = result["recommendation"]
     main_reason = explain_final_decision(score, recommendation, result["eligibility"], result["confidence"])
-    semantic_evidence = build_semantic_evidence_index(job_text, resume_text)
 
     matched_strengths = [
         (
@@ -278,6 +421,10 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         "semantic_evidence": semantic_evidence,
         "jd_quality": dict(result["confidence"].get("job_description_quality", {})),
         "raw_analysis": raw_analysis,
+        "scoring_method": scoring_method,
+        "legacy_score": legacy_score,
+        "structured_job": structured_job,
+        "jd_pipeline": pipeline_trace(job_text, structured_job, semantic_evidence),
     }
 
 
