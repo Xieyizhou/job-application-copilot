@@ -310,7 +310,7 @@ def extract_resume_evidence_records(resume_text: str) -> list[dict[str, Any]]:
             and not is_bullet
             and not str(pending["text"]).rstrip().endswith((".", "!", "?"))
         )
-        if continuation:
+        if continuation and pending is not None:
             combined = f"{pending['text']} {line}".strip()
             if len(combined.split()) <= 120:
                 pending["text"] = combined
