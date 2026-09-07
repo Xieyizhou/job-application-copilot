@@ -165,6 +165,12 @@ def render_evidence_map_styles() -> None:
                 flex:1 1 auto !important;
             }
             .evidence-map-title {margin-bottom:.35rem}
+            [data-testid="stHorizontalBlock"]:has(.evidence-map-title) {
+                flex-wrap:wrap !important;
+            }
+            [data-testid="stHorizontalBlock"]:has(.evidence-map-title) > [data-testid="stColumn"] {
+                flex:1 1 100% !important;width:100% !important;min-width:0 !important;
+            }
             .st-key-evidence_map_segment [data-baseweb="button-group"] {gap:0 !important;overflow-x:auto}
             .st-key-evidence_view_analysis {justify-content:flex-start;margin-top:0}
             .evidence-map-table-head {display:none}

@@ -196,6 +196,12 @@ def render_review_workspace_styles() -> None:
             .selected-job-context {white-space:normal;flex-wrap:wrap;gap:.35rem .55rem}
             .selected-job-context-role {font-size:1.05rem;max-width:calc(100% - 2.2rem)}
             .selected-job-context-meta {font-size:.76rem}
+            [data-testid="stHorizontalBlock"]:has(.selected-job-context) {
+                flex-wrap:wrap !important;
+            }
+            [data-testid="stHorizontalBlock"]:has(.selected-job-context) > [data-testid="stColumn"] {
+                flex:1 1 100% !important;width:100% !important;min-width:0 !important;
+            }
             .st-key-review_detail_shell [data-baseweb="button-group"] {
                 display:flex;flex-wrap:nowrap;overflow-x:auto;
                 scrollbar-width:none;padding-bottom:1px;
