@@ -35,6 +35,23 @@ def build_streamlit_argv(extra_args: Sequence[str] | None = None) -> list[str]:
     return ["streamlit", "run", str(DASHBOARD_PATH), *(extra_args or [])]
 
 
+def run_smoke_test() -> int:
+    """Import supported startup dependencies without creating Personal data."""
+    try:
+        from streamlit.web import cli as streamlit_cli  # noqa: F401
+
+        if str(SRC_DIR) not in sys.path:
+            sys.path.insert(0, str(SRC_DIR))
+        import browser_companion  # noqa: F401
+        import dashboard  # noqa: F401
+        import workspace  # noqa: F401
+    except Exception as error:  # Startup import failures must be visible to CI and users.
+        print(f"Dashboard smoke test error: {error}", file=sys.stderr)
+        return 1
+    print("Dashboard startup smoke test passed.")
+    return 0
+
+
 def main(extra_args: Sequence[str] | None = None) -> int:
     """Configure Arrow before importing and starting Streamlit."""
     try:
@@ -42,6 +59,10 @@ def main(extra_args: Sequence[str] | None = None) -> int:
     except RuntimeError as error:
         print(f"Dashboard launcher error: {error}", file=sys.stderr)
         return 1
+
+    resolved_args = list(sys.argv[1:] if extra_args is None else extra_args)
+    if resolved_args == ["--smoke-test"]:
+        return run_smoke_test()
 
     from streamlit.web import cli as streamlit_cli
 
@@ -73,7 +94,7 @@ def main(extra_args: Sequence[str] | None = None) -> int:
     except OSError as error:
         print(f"Browser companion unavailable: {error}", file=sys.stderr)
 
-    sys.argv = build_streamlit_argv(sys.argv[1:] if extra_args is None else extra_args)
+    sys.argv = build_streamlit_argv(resolved_args)
     try:
         streamlit_cli.main()
     finally:

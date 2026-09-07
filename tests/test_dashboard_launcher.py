@@ -44,6 +44,14 @@ class DashboardLauncherTests(unittest.TestCase):
             self.assertEqual(run_dashboard.main([]), 1)
         self.assertIn("native allocator unavailable", print_mock.call_args.args[0])
 
+    def test_smoke_test_uses_supported_entry_without_launching_server(self) -> None:
+        with (
+            patch.object(run_dashboard, "configure_arrow_memory_pool", return_value="system"),
+            patch.object(run_dashboard, "run_smoke_test", return_value=0) as smoke_test,
+        ):
+            self.assertEqual(run_dashboard.main(["--smoke-test"]), 0)
+        smoke_test.assert_called_once_with()
+
     def test_import_does_not_launch_streamlit(self) -> None:
         result = subprocess.run(
             [sys.executable, "-c", "import run_dashboard; print('imported')"],
