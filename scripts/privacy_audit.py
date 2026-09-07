@@ -103,6 +103,7 @@ AGENT_PROMPT_CONTENT_PATTERNS = {
 ALLOWED_EMAILS = {
     "candidate@example.com",
     "you@example.com",
+    "alex.morgan@example.com",  # Fictional read-only Demo contact.
 }
 
 ALLOWED_LINKEDIN_PATHS = {
