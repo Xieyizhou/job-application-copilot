@@ -95,9 +95,13 @@ service updates the saved job only after URL/company/role and JD-quality checks 
 
 ## Validation
 
-The portfolio release validation suite passes **565 tests and 160 subtests**, plus Ruff, mypy,
+The current validation suite passes **640 tests and 198 subtests**, plus Ruff, mypy,
 compileall, dependency, artifact-integrity, and privacy checks. Curated or teacher-proxy
 agreement is not reported as real-world model accuracy.
+
+The [code simplification review](docs/CODE_SIMPLIFICATION_REVIEW.md) records the full
+feature matrix, architecture changes, compatibility notes, and rollback checkpoints.
+The core runner includes both pytest functions and unittest classes.
 
 Main checks:
 
