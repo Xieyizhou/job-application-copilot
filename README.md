@@ -137,8 +137,9 @@ so third-party type stubs are parsed for the installed interpreter.
 
 - Personal data, credentials, annotations, models, reports, and generated documents
   remain local and excluded from Git.
-- Desktop is the v1.0.0 acceptance target. Narrow-screen acceptance is deferred;
-  the app remains locally run, with no hosted service or cloud sync.
+- Desktop is the v1.0.0 acceptance target; narrow-screen acceptance is deferred.
+  Narrow-screen controls remain part of the same locally run Streamlit app, not a
+  hosted service or cloud-sync client.
 - The application does not scrape restricted platforms, submit applications, alter
   employer systems, or predict hiring outcomes.
 - Employer-facing documents require human review.
