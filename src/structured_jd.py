@@ -257,8 +257,14 @@ def _segments(body: str) -> list[tuple[str, str, float]]:
         "let's stay connected": "Legal Notice",
     }
     for marker, heading in flat_markers.items():
+        # A prose mention (for example a Demo disclaimer) is not a section heading.
+        pattern = (
+            r"(?im)(?:^(?:#{1,6}\s*)?job description(?=\s|:)|\bjob description(?=\s*:))"
+            if marker == "job description"
+            else rf"(?i)(?<![a-z]){re.escape(marker)}(?=\s|:)"
+        )
         prepared = re.sub(
-            rf"(?i)(?<![a-z]){re.escape(marker)}(?=\s|:)",
+            pattern,
             f"\n## {heading}\n",
             prepared,
         )
