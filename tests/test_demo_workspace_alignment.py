@@ -37,6 +37,13 @@ def load_demo_jobs() -> list[dict[str, object]]:
 
 
 class DemoWorkspaceAlignmentTests(unittest.TestCase):
+    def test_demo_report_displays_current_resume_evidence(self) -> None:
+        report = (DEMO_PACKAGE / "analysis.md").read_text(encoding="utf-8")
+        evidence = report.split("## Relevant Resume Evidence", 1)[1].split("\n## ", 1)[0]
+        self.assertNotIn("Candidate source contains keywords related to", evidence)
+        self.assertIn("Built a classification pipeline with Python and scikit-learn.", evidence)
+        self.assertIn("Analyzed a fictional public dataset using SQL, Python, and statistics.", evidence)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.jobs = load_demo_jobs()
