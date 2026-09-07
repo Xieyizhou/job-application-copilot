@@ -1,39 +1,38 @@
 # v1.0.0 release acceptance
 
-This report separates automated evidence from manual acceptance. A row may be marked
-Passed only with a dated result from the final candidate commit. Credentials, Personal
+This report separates automated evidence from manual acceptance. Dated manual evidence identifies the code under test; final CI must cover the release commit. Credentials, Personal
 data, raw browser captures, and sensitive logs stay local.
 
 ## Candidate identity
 
-- Candidate code commit: `45db0d6`
+- Candidate code commit: `73aea72`
 - Final `main` commit: pending
 - Pull request: [#4](https://github.com/Xieyizhou/job-application-copilot/pull/4)
-- Candidate CI: [run 34088123757](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34088123757)
+- Previous passing CI (final candidate rerun pending): [run 34088123757](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34088123757)
 - Release tag and URL: pending
 
 ## Automated gates
 
 | Gate | Environment | Status | Evidence |
 | --- | --- | --- | --- |
-| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Passed on candidate | CI passed; local: 324 passed + 198 subtests, 76.1% |
-| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Passed on candidate | CI: 319 passed, 1 documented private-data skip, 80.7% |
-| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Passed on candidate | CI run 34088123757 and local validation |
-| Scoring benchmark and privacy audit | Linux, Python 3.11 | Passed on candidate | Local benchmark 48/48; privacy audit passed |
-| Public v21 contract | Linux, Python 3.11/3.12 | Passed on candidate | CI run 34088123757; product integration intentionally false |
-| Base install and supported launcher | macOS, Python 3.11/3.12 | Passed on candidate CI | Both macOS matrix jobs passed in run 34088123757 |
+| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI passed; local: 329 passed + 198 subtests on `73aea72` (local) |
+| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI: 319 passed, 1 documented private-data skip, 80.7% |
+| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Previously passed; rerun pending | CI run 34088123757 and local validation |
+| Scoring benchmark and privacy audit | Linux, Python 3.11 | Previously passed; rerun pending | Local benchmark 48/48; privacy audit passed |
+| Public v21 contract | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI run 34088123757; product integration intentionally false |
+| Base install and supported launcher | macOS, Python 3.11/3.12 | Previously passed; rerun pending | Both macOS matrix jobs passed in run 34088123757 |
 
 ## Manual product acceptance
 
 | Area | Required evidence | Status |
 | --- | --- | --- |
-| Clean install, first/repeat start, occupied port, stop/restart | Dated macOS notes for Python 3.11 and 3.12 | Pending |
-| Demo isolation and read-only behavior | Fixed fictional sample; no Personal writes | Pending |
-| Sanitized Personal upgrade | Backup used; original data unchanged | Pending |
-| Import, deduplication, JD quality, scoring, evidence | Fixed fictional inputs and explained diffs | Pending |
-| Cover letter, confirmation, DOCX/evidence export, tracker, archive | Fixed fictional inputs and artifact checklist | Pending |
-| Empty/partial/duplicate/parse failure/timeout/fallback cases | Expected error and recovery recorded | Pending |
-| Desktop and narrow layout; critical reruns | Screenshot checklist with fictional data | Pending |
+| Clean base install, first/repeat start, occupied port, stop/restart | macOS 26.6.2 arm64, Python 3.11.9 / 3.12.13 | Passed, 2026-09-07; fresh source archives, virtual environments and HOME; real HTTP/SIGINT lifecycle |
+| Demo isolation and read-only behavior | Fixed fictional sample; no Personal writes | Passed; disabled imports/search writes, workspace switch, unchanged resume |
+| Sanitized Personal upgrade | Historical `62f181a` fictional workspace copied to candidate | Passed; 10 file hashes unchanged, score/Tracker/DOCX load correctly |
+| Import, deduplication, JD quality, scoring, evidence | Fictional text/Markdown and live public ATS | Passed; 8 live Lever records, repeat search 0 new / 8 already seen; partial JD remains unscored |
+| Cover letter, confirmation, DOCX/evidence export, tracker, archive | Fictional inputs, UI downloads and local artifact inspection | Passed; manual-claim checkbox required, DOCX render checked, ZIP 5 entries; Tracker and archive lifecycle verified |
+| Empty/partial/duplicate/parse failure/timeout/fallback cases | UI errors, local parser tests and live fetch results | Passed; empty title/query, duplicate and unsafe URL rejected; invalid PDF/image/EXE safe failure; unavailable postings not counted as success |
+| Desktop layout and critical reruns | 1280 × 720 screenshots with fictional data | Passed, 2026-09-07; narrow screens deferred by release owner |
 
 ## Browser and public ATS acceptance
 
@@ -41,9 +40,9 @@ data, raw browser captures, and sensitive logs stay local.
 | --- | --- | --- | --- |
 | Chrome unpacked companion | Clean macOS browser profile | Passed: load, live import, invalid token, offline recovery | 2026-09-07; user-operated independent Chrome, saved result verified locally |
 | Edge unpacked companion | Outside stable support scope | Not verified; experimental compatibility | 2026-09-07; scope narrowed by release owner |
-| Greenhouse public posting | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
-| Lever public posting | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
-| Ordinary-page fallback | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
+| Greenhouse public posting | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
+| Lever public posting | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
+| Ordinary-page fallback | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
 | Invalid token and offline recovery | Chrome on macOS | Passed | 2026-09-07; invalid-token rejection, offline error, same-token restart recovery |
 
 Credential-backed Adzuna, Jooble, and JSearch checks are experimental. Record only whether
@@ -62,7 +61,7 @@ Safari extension import is outside scope. This is a support-scope change, not an
   [Lever](https://jobs.lever.co/portcast/e66df487-0622-480f-8506-532b3db5db28), and
   [ordinary HTML](https://careers.unilever.com/en/job/athens/data-analyst/34155/99818333104).
   These checks called the real `fetch_job_page` entry point; they did not submit applications.
-  Browser import of these pages remains separate and pending.
+  Native Chrome import of the saved Greenhouse posting was separately verified.
 - The sampled AssistRx Workable URL redirected to a company listing with `not_found=true`.
   Two Jobs By Workable samples returned HTTP 410; another timed out. These unavailable
   postings were not counted as successful extraction. Linked-Markdown recovery has a
@@ -70,19 +69,35 @@ Safari extension import is outside scope. This is a support-scope change, not an
 - A second launcher previously deleted an active companion's connection metadata before
   failing to bind its occupied port. Regression commit `19564d9` reproduces the failure;
   fix `e96de46` preserves the active connection. Launcher/companion tests: 13 passed.
-- Source archives with fresh Python 3.11 and 3.12 virtual environments and isolated home
-  directories are being validated without developer credentials, models, or caches.
-  Python 3.11 pip initially reported no pandas distribution; an independent resolver
-  subsequently found a compatible wheel. Python 3.12 pip timed out downloading from
-  `files.pythonhosted.org`. Installation retries remain pending; neither local clean
-  environment has passed the install gate. Do not treat the import-only CI smoke as proof of
-  a rendered local application or the complete first/repeat-start lifecycle.
-- On the isolated source copy, using preinstalled dependencies (not the new-install gate),
-  fictional Personal initialization, manifest-copy reload, cover-letter/DOCX generation,
-  `ready -> applied` Tracker update, byte-for-byte original resume preservation, and Demo
-  write rejection passed. DOCX opened successfully with expected fictional identity and
-  company text and no export warnings. DOCX rendered to one page and passed visual review for clipping, overlap, and text
-  layout; UI confirmation remains pending; same-format reload is not proof of a historical-version upgrade.
+- Fresh base dependencies installed successfully on both Python versions using the Tsinghua
+  PyPI mirror after official-index timeouts. The same pinned requirements were used with
+  no developer credentials, models, caches, or historical Personal data. Both supported
+  launchers passed first start, occupied-port rejection without corrupting the active
+  connection, SIGINT shutdown of both services, and restart with the original token.
+  Optional development/ML installation and clean-environment suites are still running.
+- Rendered Personal setup, resume upload, manual text and Markdown import, full/partial JD
+  quality, scoring and evidence passed. Public Company ATS search returned eight Lever
+  records; repeating it returned zero new records and eight duplicates. Empty queries and
+  missing provider credentials produced clear errors. Demo remained read-only.
+- Historical upgrade used a newly generated fictional workspace from `62f181a`, copied
+  to the candidate. The old and upgraded copies retained all ten file hashes, Tracker
+  state, score and readable DOCX. No original Personal data was used or changed.
+- Cover-letter generation, manual factual-claim confirmation, DOCX and bundle downloads
+  passed in the desktop UI. The DOCX rendered to one readable page. Local artifact checks
+  verified five ZIP entries, unchanged resume, Tracker applied/interview/archived states,
+  job archive content preservation and cache invalidation after JD/workspace changes.
+- A saved full-JD record intentionally uses structured evidence scoring (87 for the fixed
+  Northstar sample), while the legacy raw Demo fixture uses keyword fallback (92). These
+  existing provenance rules explain the difference. A separate bug made new exported
+  reports retain the fallback score; regression `f01e47e` and fix `73aea72` align new report,
+  Tracker and dashboard scores. The rendered generation summary and report now both show
+  87. Historical exports are not rewritten.
+- Base-only Personal startup exposed an eager optional sklearn import, fixed in `65ac9fd`.
+  Empty Visa Note metadata no longer creates a false work-authorization warning (`b392e41`).
+  Demo report evidence now uses actual fictional resume snippets (`8d92001`). Each change
+  has an independently committed reproducing test.
+- Desktop screenshots and the demonstration GIF were refreshed from the fictional workspace.
+  Narrow-screen acceptance was explicitly deferred by the release owner on 2026-09-07.
 - The browser tool's security policy blocks extension-management pages. The user manually
   loaded the Chrome extension in an independent profile, then imported the live Capco
   posting successfully. The saved record was independently verified as `browser_companion`

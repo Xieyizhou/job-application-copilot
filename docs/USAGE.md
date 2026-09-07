@@ -9,7 +9,7 @@ Windows is not currently supported.
 ```bash
 git clone https://github.com/Xieyizhou/job-application-copilot.git
 cd job-application-copilot
-python3 -m venv .venv
+python3.12 -m venv .venv  # python3.11 is also supported
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt

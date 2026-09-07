@@ -72,7 +72,7 @@ automated tests, but this release does not claim Windows support.
 ```bash
 git clone https://github.com/Xieyizhou/job-application-copilot.git
 cd job-application-copilot
-python3 -m venv .venv
+python3.12 -m venv .venv  # python3.11 is also supported
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -81,6 +81,10 @@ python run_dashboard.py
 
 Choose **Explore Read-only Demo** in the sidebar. Personal mode accepts Markdown, TXT,
 DOCX, and text-based PDF resumes.
+
+Local release acceptance used macOS 26.6.2 on Apple Silicon, Python 3.11.9 and
+3.12.13, and Chrome 152.0.7977.76 for native extension import. See the
+[acceptance report](docs/RELEASE_ACCEPTANCE.md) for evidence and unverified scope.
 
 ## Optional live job search
 

@@ -28,14 +28,24 @@ All notable public changes are documented here.
   artifacts remain local and are excluded from the public repository.
 - Employer-facing output remains gated by explicit human review.
 
+### Fixed
+
+- Preserved the active companion connection when a second launcher encounters an occupied port.
+- Kept base Personal startup independent of optional ML packages.
+- Allowed manually entered titles to reach form validation when title inference is empty.
+- Distinguished JD headings from prose and ignored empty visa metadata in risk warnings.
+- Added advertised Markdown recovery for job pages with incomplete HTML extraction.
+- Aligned newly generated report and Tracker scores with the dashboard analysis; historical exports remain snapshots.
+- Refreshed Demo evidence and made narrow review controls readable.
+
 ### Known limitations
 
 - The stable desktop acceptance target is macOS with Python 3.11 or 3.12; Windows is not
   supported in this release.
 - Browser-import acceptance covers Chrome on macOS. Edge is unverified and experimental;
   Safari extension import is outside the release scope.
-- Credential-backed job-search services are experimental unless listed as verified in the
-  final release acceptance report.
+- Credential-backed job-search services remain experimental; minimal live searches passed,
+  but broader provider behavior and quotas were not exhaustively validated.
 - Private training data and unpublished model weights are not distributed, so the public
   repository validates the v21 contract but cannot reproduce private training.
 
