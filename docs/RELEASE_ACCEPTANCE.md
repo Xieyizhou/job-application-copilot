@@ -5,22 +5,22 @@ data, raw browser captures, and sensitive logs stay local.
 
 ## Candidate identity
 
-- Candidate code commit: `73aea72`
+- Candidate code commit: `73aea72`; documentation/media candidate: `1ff31f6`
 - Final `main` commit: pending
 - Pull request: [#4](https://github.com/Xieyizhou/job-application-copilot/pull/4)
-- Previous passing CI (final candidate rerun pending): [run 34088123757](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34088123757)
+- Candidate CI: [run 34094266245](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34094266245), all seven jobs passed on `1ff31f6`
 - Release tag and URL: pending
 
 ## Automated gates
 
 | Gate | Environment | Status | Evidence |
 | --- | --- | --- | --- |
-| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI passed; local: 329 passed + 198 subtests on `73aea72` (local) |
-| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI: 319 passed, 1 documented private-data skip, 80.7% |
-| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Previously passed; rerun pending | CI run 34088123757 and local validation |
-| Scoring benchmark and privacy audit | Linux, Python 3.11 | Previously passed; rerun pending | Local benchmark 48/48; privacy audit passed |
-| Public v21 contract | Linux, Python 3.11/3.12 | Previously passed; rerun pending | CI run 34088123757; product integration intentionally false |
-| Base install and supported launcher | macOS, Python 3.11/3.12 | Previously passed; rerun pending | Both macOS matrix jobs passed in run 34088123757 |
+| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI passed; local: 329 passed + 198 subtests; CI 75.8%, local 76.4% coverage |
+| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI: 319 passed, 1 documented private-data skip, 80.7% |
+| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Passed on `1ff31f6` | CI run 34094266245 and local validation |
+| Scoring benchmark and privacy audit | Linux, Python 3.11 | Passed on `1ff31f6` | Local benchmark 48/48; privacy audit passed |
+| Public v21 contract | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI run 34094266245; product integration intentionally false |
+| Base install and supported launcher | macOS, Python 3.11/3.12 | Passed on `1ff31f6` | Both macOS matrix jobs passed in run 34094266245 |
 
 ## Manual product acceptance
 
@@ -40,9 +40,9 @@ data, raw browser captures, and sensitive logs stay local.
 | --- | --- | --- | --- |
 | Chrome unpacked companion | Clean macOS browser profile | Passed: load, live import, invalid token, offline recovery | 2026-09-07; user-operated independent Chrome, saved result verified locally |
 | Edge unpacked companion | Outside stable support scope | Not verified; experimental compatibility | 2026-09-07; scope narrowed by release owner |
-| Greenhouse public posting | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
-| Lever public posting | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
-| Ordinary-page fallback | Live representative posting; no application submitted | Previously passed; rerun pending | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
+| Greenhouse public posting | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
+| Lever public posting | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
+| Ordinary-page fallback | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
 | Invalid token and offline recovery | Chrome on macOS | Passed | 2026-09-07; invalid-token rejection, offline error, same-token restart recovery |
 
 Credential-backed Adzuna, Jooble, and JSearch checks are experimental. Record only whether
@@ -75,6 +75,8 @@ Safari extension import is outside scope. This is a support-scope change, not an
   launchers passed first start, occupied-port rejection without corrupting the active
   connection, SIGINT shutdown of both services, and restart with the original token.
   Optional development/ML installation and clean-environment suites are still running.
+  Python 3.12 mypy uses `--python-version 3.12`: its installed NumPy stubs use Python 3.12
+  syntax. The default Python 3.11 compatibility target remains checked by CI.
 - Rendered Personal setup, resume upload, manual text and Markdown import, full/partial JD
   quality, scoring and evidence passed. Public Company ATS search returned eight Lever
   records; repeating it returned zero new records and eight duplicates. Empty queries and
@@ -91,7 +93,7 @@ Safari extension import is outside scope. This is a support-scope change, not an
   existing provenance rules explain the difference. A separate bug made new exported
   reports retain the fallback score; regression `f01e47e` and fix `73aea72` align new report,
   Tracker and dashboard scores. The rendered generation summary and report now both show
-  87. Historical exports are not rewritten.
+  87, and the new Tracker stored 87 before its UI transition from Ready to Applied. Historical exports are not rewritten.
 - Base-only Personal startup exposed an eager optional sklearn import, fixed in `65ac9fd`.
   Empty Visa Note metadata no longer creates a false work-authorization warning (`b392e41`).
   Demo report evidence now uses actual fictional resume snippets (`8d92001`). Each change
@@ -108,11 +110,16 @@ Safari extension import is outside scope. This is a support-scope change, not an
   token after restart on runtime source `5c630c2`; both health endpoints returned 200.
   An unsaved Portcast posting was rejected with “Save this job in JobCopilot first”;
   independent inspection confirmed Capco remained complete and contained no Portcast text.
-- Candidate privacy audit passed (332 files). Historical pattern scans checked 905 blobs
-  for common credential signatures/sensitive paths and 875 UTF-8 blobs with the repository's
-  generic privacy rules, with no findings. These scans exclude binary visual inspection and
-  are not a guarantee that all sensitive content has been ruled out. Final screenshots,
-  attachments, and any newly introduced history still need review.
+- Candidate privacy audit passed (337 files). Historical scans checked 948 blobs,
+  including 909 UTF-8 text blobs. One phone-pattern match was a documented Chrome version
+  in an earlier README commit; the current README uses a version prefix. No credential or
+  local-identifier finding remained unexplained. Historical binary review covered seven
+  DOCX files (including XML metadata), first-frame/static contact sheets, and OCR of 272
+  unique GIF samples/static images. GIF sampling used approximately one-second intervals,
+  not every animation frame. The only DOCX contact matches were explicit fictional
+  example identities. All seven new screenshot/GIF assets were visually reviewed as well.
+  Pattern scans and sampled review are bounded checks, not a guarantee of exhaustive detection.
+- GitHub private vulnerability reporting is enabled; the documented security channel is live.
 - ML CI skips only `test_local_lifecycle_integrity_includes_v9_assignments` because the
   private `source_partitions/successor_v4/partition_manifest.json` is intentionally absent.
   The public lifecycle contract and all other 319 ML tests pass; no core tests are skipped.

@@ -129,12 +129,16 @@ python scripts/privacy_audit.py
 python -m pip check
 ```
 
+The default mypy target is Python 3.11, matching the compatibility CI job. In a Python
+3.12 environment with optional ML dependencies, run `python -m mypy --python-version 3.12`
+so third-party type stubs are parsed for the installed interpreter.
+
 ## Privacy and product boundaries
 
 - Personal data, credentials, annotations, models, reports, and generated documents
   remain local and excluded from Git.
-- Mobile is a responsive companion for the same locally run Streamlit app—not a
-  hosted service, separate mobile client, cloud-sync layer, or remote inference path.
+- Desktop is the v1.0.0 acceptance target. Narrow-screen acceptance is deferred;
+  the app remains locally run, with no hosted service or cloud sync.
 - The application does not scrape restricted platforms, submit applications, alter
   employer systems, or predict hiring outcomes.
 - Employer-facing documents require human review.
@@ -151,7 +155,7 @@ data/demo/            Fictional read-only demo assets
 data/ml/              Local-only data and model artifacts; excluded from Git
 ```
 
-The portfolio release intentionally omits private data and one-off v1–v20 experiment
+The public release intentionally omits private data and one-off v1–v20 experiment
 launchers. Their failures and design consequences remain documented in the ML case study.
 The exact v21 release contract, reusable objective components, lifecycle controls, Web
 adapter, and tests remain public; a clean clone validates the contract but cannot retrain

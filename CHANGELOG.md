@@ -41,7 +41,7 @@ All notable public changes are documented here.
 ### Known limitations
 
 - The stable desktop acceptance target is macOS with Python 3.11 or 3.12; Windows is not
-  supported in this release.
+  supported in this release. Narrow-screen acceptance is deferred.
 - Browser-import acceptance covers Chrome on macOS. Edge is unverified and experimental;
   Safari extension import is outside the release scope.
 - Credential-backed job-search services remain experimental; minimal live searches passed,

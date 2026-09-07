@@ -209,3 +209,29 @@ git status --short
 ```
 
 The app never submits applications or automates third-party job platforms.
+
+
+## Upgrade and rollback
+
+1. Stop Job Copilot before copying a workspace, so the SQLite database and companion
+   metadata are not being written. Keep a dated backup of the entire
+   `data/local_workspace/` directory outside the checkout, and retain the original resume.
+   Back up local configuration such as `.env` separately; never upload it with a bug report.
+2. Install the release in a separate checkout and a fresh virtual environment using the
+   steps above. To select this release, use `git checkout v1.0.0`. Keep the previous
+   checkout and environment until verification is complete.
+3. Copy the backed-up `data/local_workspace/` into the new checkout. v1.0.0 preserves the
+   workspace, SQLite, job-document and model-artifact formats; no destructive migration
+   command is required. Open Personal mode and check the resume, saved jobs, Tracker and
+   a generated document before resuming work.
+4. Existing reports remain historical snapshots. Newly generated reports use the same
+   scoring path as the dashboard. Raw legacy Demo jobs can use keyword fallback while
+   verified full-JD records use structured evidence; this explains differences between
+   those input formats without changing the persisted format.
+
+If a blocking problem appears, stop the new version, preserve any newly created local
+work separately, and run the previous checkout with the pre-upgrade backup and its own
+virtual environment. Do not overwrite the only copy of your current workspace. For source
+fixes, use a new patch release or explicit revert commits; published tags are immutable.
+Internal Python import changes and individual rollback commits are listed in the
+[code simplification review](CODE_SIMPLIFICATION_REVIEW.md#python-接口迁移).
