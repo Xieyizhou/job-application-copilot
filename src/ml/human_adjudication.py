@@ -6,7 +6,7 @@ import hashlib
 from typing import Any, Iterable
 
 from ml.annotation import SUPPORT_LABELS, latest_task_states, validate_queue
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.candidate_judgments import (
     CandidateJudgmentError,
     normalized_candidate_labels,

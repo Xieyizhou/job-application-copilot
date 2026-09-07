@@ -27,19 +27,8 @@ from company_verification import (
 )
 from company_ats import search_configured_ats_boards
 from dotenv import load_dotenv
-from fetch_history import (
-    append_fetch_run,
-    job_summary_for_run,
-    load_job_index,
-    make_canonical_job_key,
-    new_fetch_run_id,
-    normalize_source,
-    now_timestamp,
-    path_from_record,
-    relative_path,
-    upsert_markdown_metadata,
-    write_job_index,
-)
+from fetch_history import append_fetch_run, job_summary_for_run, load_job_index, make_canonical_job_key, new_fetch_run_id, normalize_source, now_timestamp, path_from_record, upsert_markdown_metadata, write_job_index
+from output_paths import relative_path
 from output_paths import date_slug, safe_slug
 from ml.jd_quality import classify_jd_quality
 

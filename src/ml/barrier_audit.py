@@ -7,7 +7,7 @@ import math
 import re
 from typing import Any, Hashable, Iterable, TypeVar
 
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 
 
 BLIND_TASK_FIELDS = {

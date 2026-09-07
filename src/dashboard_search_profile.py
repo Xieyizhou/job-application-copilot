@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import re
+from document_text import normalize_comparison_text
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -84,14 +85,9 @@ ROLE_SIGNALS: tuple[tuple[str, tuple[tuple[str, int], ...]], ...] = (
 )
 
 
-def normalize_resume_text(text: str) -> str:
-    """Normalize punctuation so resume signals match without fuzzy guesses."""
-    return " ".join(re.sub(r"[^a-z0-9+#]+", " ", text.lower()).split())
-
-
 def infer_search_profile(text: str) -> SearchProfile:
     """Return the strongest supported role and up to three visible keywords."""
-    normalized = normalize_resume_text(text)
+    normalized = normalize_comparison_text(text)
     if not normalized:
         return SearchProfile("Entry Level", (), False)
 

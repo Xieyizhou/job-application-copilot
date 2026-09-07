@@ -11,7 +11,7 @@ import random
 from typing import Any
 
 from ml.annotation import validate_queue
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.candidate_judgments import (
     normalized_candidate_labels,
     validate_complete_candidate_labels,

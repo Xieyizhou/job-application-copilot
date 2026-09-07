@@ -7,7 +7,7 @@ import json
 import math
 from typing import Any, Iterable
 
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 
 
 EVIDENCE_ARTIFACT_SCHEMA_VERSION = 2

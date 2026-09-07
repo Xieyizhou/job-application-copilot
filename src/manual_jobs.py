@@ -1,6 +1,8 @@
 """Manual job record persistence and metadata updates."""
 
 from __future__ import annotations
+
+from output_paths import local_timestamp
 import json
 import re
 from datetime import datetime
@@ -53,11 +55,6 @@ def ensure_manual_job_dirs() -> None:
     """Create manual job directories if they are missing."""
     MANUAL_SAVED_JOBS_DIR.mkdir(parents=True, exist_ok=True)
     MANUAL_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def utc_timestamp() -> str:
-    """Return an ISO-like timestamp for local JSONL records."""
-    return datetime.now().replace(microsecond=0).isoformat()
 
 
 def normalize_record_key(company: str, title: str, url: str) -> tuple[str, str, str]:
@@ -237,7 +234,7 @@ def save_manual_job(
 ) -> dict[str, Any]:
     """Persist a manual job as JSONL plus a human-readable Markdown file."""
     ensure_manual_job_dirs()
-    now = utc_timestamp()
+    now = local_timestamp()
     job_id = safe_slug(f"{company}_{title}_{now}")
     md_filename = f"{safe_slug(company)}-{safe_slug(title)}-{datetime.now().strftime('%Y%m%d')}-{job_id[:10]}.md"
     markdown_path = MANUAL_SAVED_JOBS_DIR / md_filename
@@ -340,7 +337,7 @@ def update_manual_job(record_id: str, *, status: str, notes: str) -> dict[str, A
             continue
         record["status"] = status
         record["notes"] = notes
-        record["updated_at"] = utc_timestamp()
+        record["updated_at"] = local_timestamp()
         updated_record = record
         markdown_path = PROJECT_ROOT / str(record.get("markdown_path", ""))
         if markdown_path.exists():
@@ -374,7 +371,7 @@ def sync_manual_job_from_markdown(record_id: str, markdown_path: Path) -> dict[s
         record["job_description"] = extract_description_body(markdown_text)
         for record_key, field_name in metadata_fields.items():
             record[record_key] = read_markdown_field(markdown_text, field_name)
-        record["updated_at"] = utc_timestamp()
+        record["updated_at"] = local_timestamp()
         updated_record = record
         break
     if updated_record is not None:
@@ -401,7 +398,7 @@ def confirm_manual_job_company(record_id: str, company: str) -> dict[str, Any] |
         )
         record.update(company_fields)
         record["company"] = company_fields["company_normalized"] or company.strip()
-        record["updated_at"] = utc_timestamp()
+        record["updated_at"] = local_timestamp()
         updated_record = record
         markdown_path = PROJECT_ROOT / str(record.get("markdown_path", ""))
         if markdown_path.exists():

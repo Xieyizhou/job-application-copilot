@@ -14,7 +14,7 @@ from ml.barrier_contracts import (
     validate_generated_case,
     validate_review,
 )
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 
 
 REJECT_FLAGS = {"privacy_risk", "near_duplicate"}

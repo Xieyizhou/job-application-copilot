@@ -1,5 +1,7 @@
 """Shared Markdown metadata and document formatting primitives."""
 
+import re
+
 from pathlib import Path
 
 
@@ -40,3 +42,8 @@ def read_text_file(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return ""
+
+
+def normalize_comparison_text(text: str) -> str:
+    """Normalize punctuation so resume signals match without fuzzy guesses."""
+    return " ".join(re.sub(r"[^a-z0-9+#]+", " ", text.lower()).split())

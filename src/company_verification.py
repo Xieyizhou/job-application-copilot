@@ -6,10 +6,11 @@ cleaned, scored, and either trusted at high confidence or confirmed by the user.
 
 from __future__ import annotations
 
+from output_paths import local_timestamp
+
 from document_text import read_markdown_field
 
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -123,11 +124,6 @@ ORG_SUFFIX_PATTERN = (
     r"(?:AI|Bank|Capital|Company|Corp\.?|Corporation|Foundation|Group|Holdings|Inc\.?|Investment|"
     r"Labs?|Limited|LLC|LP|Ltd\.?|Pte\.?\s+Ltd\.?|Research|Systems|Technologies|University)"
 )
-
-
-def utc_timestamp() -> str:
-    """Return a compact local timestamp for confirmation metadata."""
-    return datetime.now().replace(microsecond=0).isoformat()
 
 
 def clean_one_line(value: object) -> str:
@@ -539,7 +535,7 @@ def company_verification_fields(
     if confirmed_by_user and normalized:
         validation["needs_review"] = False
         validation["confidence"] = "high"
-        confirmed_at = confirmed_at or utc_timestamp()
+        confirmed_at = confirmed_at or local_timestamp()
     return {
         "company_raw": raw_company,
         "company_normalized": normalized,
@@ -655,7 +651,7 @@ def confirm_markdown_company(path: Path, company: str) -> dict[str, Any]:
             "job_url": read_markdown_field(text, "Job URL"),
         },
         confirmed_by_user=True,
-        confirmed_at=utc_timestamp(),
+        confirmed_at=local_timestamp(),
     )
     upsert_markdown_fields(path, {"Company": fields["company_normalized"] or company, **markdown_metadata_from_verification(fields)})
     return fields

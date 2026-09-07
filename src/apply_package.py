@@ -11,6 +11,8 @@ It does not submit applications or interact with job platforms.
 
 from __future__ import annotations
 
+from output_paths import relative_path
+
 from job_urls import sanitize_job_url
 
 import argparse
@@ -90,14 +92,6 @@ def collect_uk_review_notes(analysis_report: str) -> list[str]:
         if note in analysis_report:
             notes.append(note)
     return notes
-
-
-def relative_path(path: Path) -> str:
-    """Return a project-relative path when possible for cleaner tracker records."""
-    try:
-        return str(path.relative_to(PROJECT_ROOT))
-    except ValueError:
-        return str(path)
 
 
 def parse_job_metadata(job_description_path: Path) -> dict[str, str]:
@@ -209,7 +203,7 @@ def create_application_package(
         recommendation=recommendation,
         status="ready",
         resume_file="",
-        cover_letter_file=relative_path(cover_letter_docx_path),
+        cover_letter_file=relative_path(cover_letter_docx_path, PROJECT_ROOT),
         notes=build_tracker_notes(match_score, recommendation),
     )
     tracker_id = add_application(tracker_args, workspace.tracker_database_path)

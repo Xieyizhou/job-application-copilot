@@ -6,6 +6,8 @@ applications, scrape websites, or expose API credentials.
 
 from __future__ import annotations
 
+from output_paths import relative_path
+
 from dashboard_regions import _normalize_match_text as normalize_text
 
 from scoring_extraction import is_uk_job
@@ -229,14 +231,6 @@ def list_job_description_files(search_text: str = "") -> list[Path]:
         is_job_description=clean_job_description_path,
         search_text=search_text,
     )
-
-
-def relative_path(path: Path) -> str:
-    """Show project-relative paths when possible."""
-    try:
-        return str(path.relative_to(PROJECT_ROOT))
-    except ValueError:
-        return str(path)
 
 
 def relocate_fetched_jobs_to_workspace(paths: list[object], source: str) -> list[Path]:
