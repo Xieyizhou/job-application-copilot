@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from typing import Callable
 
@@ -12,7 +14,7 @@ from dashboard_home_components import (
     render_recent_opportunities,
 )
 from dashboard_review import job_needs_full_jd, review_fit_band
-from scoring_types import DashboardJob, TrackerRow
+from scoring_types import DashboardJob
 
 
 @dataclass(frozen=True)
@@ -23,8 +25,6 @@ class HomePageServices:
     demo_mode_enabled: Callable[[], bool]
     go_to_page: Callable[[str], None]
     load_screened_jobs: Callable[..., list[DashboardJob]]
-    load_tracker_rows: Callable[..., list[TrackerRow]]
-    render_page_header: Callable[[str, str | None], None]
 
 
 def home_summary(
@@ -43,7 +43,7 @@ def home_summary(
 def dashboard_tab(services: HomePageServices) -> None:
     """Render the current workflow state and the most useful next action."""
     render_home_styles()
-    services.render_page_header(
+    render_page_header(
         "Dashboard",
         "Move from fresh opportunities to evidence-backed applications.",
     )

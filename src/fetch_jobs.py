@@ -9,6 +9,8 @@ It does not submit applications or scrape job boards.
 
 from __future__ import annotations
 
+from job_urls import sanitize_job_url
+
 import argparse
 import html
 import os
@@ -17,7 +19,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 from company_verification import (
     company_verification_fields,
@@ -52,16 +54,6 @@ LOCAL_WORKSPACE_ROOT = PROJECT_ROOT / "data" / "local_workspace"
 API_REQUEST_DELAY_SECONDS = 0
 DEFAULT_MAX_RESULTS = 8
 MAX_RESULTS_PER_SOURCE = 20
-TRACKING_QUERY_PARAMETERS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "app_id",
-    "app_key",
-    "aztt",
-}
 AGGREGATOR_HOST_MARKERS = ("adzuna.", "jooble.")
 
 
@@ -645,44 +637,6 @@ def unique_output_path(output_dir: Path, base_filename: str) -> Path:
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return output_dir / f"{base_filename}_{timestamp}.md"
-
-
-def sanitize_job_url(job_url: str) -> str:
-    """Remove tracking parameters and canonicalize common Adzuna redirect URLs."""
-    if not job_url:
-        return ""
-
-    split_url = urlsplit(job_url)
-
-    # Adzuna API results often contain /land/ad/<id> links with tracking
-    # parameters. The cleaner public details URL is easier to save and compare.
-    land_ad_match = re.match(r"^/land/ad/(\d+)", split_url.path)
-    if "adzuna." in split_url.netloc.lower() and land_ad_match:
-        return urlunsplit(
-            (
-                split_url.scheme,
-                split_url.netloc,
-                f"/details/{land_ad_match.group(1)}",
-                "",
-                "",
-            )
-        )
-
-    safe_query_pairs = [
-        (key, value)
-        for key, value in parse_qsl(split_url.query, keep_blank_values=True)
-        if key.lower() not in TRACKING_QUERY_PARAMETERS
-    ]
-    safe_query = urlencode(safe_query_pairs)
-    return urlunsplit(
-        (
-            split_url.scheme,
-            split_url.netloc,
-            split_url.path,
-            safe_query,
-            split_url.fragment,
-        )
-    )
 
 
 def has_recoverable_original_url(job_url: object) -> bool:

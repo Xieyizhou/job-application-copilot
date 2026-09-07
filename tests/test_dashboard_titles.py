@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dashboard_titles
+
 import subprocess
 import sys
 import unittest
@@ -26,7 +28,7 @@ class DashboardTitleTests(unittest.TestCase):
             "N/A",
         ]:
             with self.subTest(value=value):
-                self.assertTrue(dashboard.is_placeholder_job_title(value))
+                self.assertTrue(dashboard_titles.is_placeholder_job_title(value))
 
     def test_real_titles_containing_placeholder_words_remain_valid(self) -> None:
         for value in [
@@ -36,7 +38,7 @@ class DashboardTitleTests(unittest.TestCase):
             "Senior Data Manager",
         ]:
             with self.subTest(value=value):
-                self.assertFalse(dashboard.is_placeholder_job_title(value))
+                self.assertFalse(dashboard_titles.is_placeholder_job_title(value))
                 self.assertEqual(dashboard.resolve_canonical_job_title({"role": value}), value)
 
     def test_markdown_role_replaces_placeholder_object_role(self) -> None:

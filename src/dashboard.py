@@ -6,10 +6,16 @@ applications, scrape websites, or expose API credentials.
 
 from __future__ import annotations
 
+from dashboard_regions import _normalize_match_text as normalize_text
+
+from scoring_extraction import is_uk_job
+
+
+from dashboard_ui import sanitize_fit_text
+
 from document_text import read_text_file
 
 import contextlib
-import html
 import io
 import json
 import re
@@ -33,29 +39,6 @@ MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
 DASHBOARD_SCORING_VERSION = "canonical-v11-evidence-label-guards"
-SCREENING_KEYWORDS = {
-    "python": 8,
-    "pandas": 8,
-    "numpy": 5,
-    "scikit-learn": 8,
-    "sklearn": 8,
-    "machine learning": 12,
-    "model evaluation": 8,
-    "data visualization": 7,
-    "classification": 6,
-    "pca": 5,
-    "uav": 8,
-    "robotics": 5,
-    "sensor": 5,
-    "thermal": 5,
-    "route planning": 5,
-    "game ai": 6,
-    "reinforcement learning": 5,
-    "cnn": 5,
-    "econometrics": 5,
-    "statistics": 5,
-    "communication": 4,
-}
 HARD_RED_FLAG_PATTERNS = {
     "PhD required": ["phd required", "ph.d. required", "doctorate required"],
     "PhD internship/candidate": [
@@ -94,7 +77,6 @@ from export_documents import (  # noqa: E402
     export_cover_letter_to_docx,
     parse_job_metadata_from_package,
 )
-from fetch_history import load_fetch_runs  # noqa: E402
 from fetch_jobs import jsearch_configured  # noqa: E402
 from saved_job_deletion import archive_all_saved_jobs, archive_saved_job  # noqa: E402
 from jd_enrichment import (  # noqa: E402
@@ -111,11 +93,8 @@ from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_s
 from output_paths import safe_slug, timestamp_slug  # noqa: E402
 from tracker import add_application, update_status  # noqa: E402
 from dashboard_fit import (  # noqa: E402
-    apply_canonical_analysis,
-    build_fit_presentation,
     confidence_level,
     eligibility_status,
-    summarize_analysis_requirements,
 )
 from dashboard_fit_sections import render_fit_analysis_sections as render_compact_fit_sections  # noqa: E402
 from dashboard_analysis_service import (  # noqa: E402
@@ -123,25 +102,12 @@ from dashboard_analysis_service import (  # noqa: E402
     unavailable_dashboard_analysis,
 )
 from dashboard_company_verification import (  # noqa: E402
-    company_candidate_names,
-    company_generation_allowed,
-    compact_company_evidence,
-    render_company_verification_summary,
     render_manual_company_confirmation,
     render_markdown_company_confirmation,
 )
 from dashboard_fetch import (  # noqa: E402
     FetchPageServices,
     fetch_jobs_tab as render_fetch_jobs_page,
-)
-from dashboard_fetch_history import (  # noqa: E402
-    fetch_history_rows,
-    fetch_run_job_rows,
-    fetch_run_label,
-    render_fetch_history_section,
-    render_fetch_run_details,
-    render_fetch_run_job_cards,
-    render_fetch_run_job_table,
 )
 from dashboard_home import (  # noqa: E402
     HomePageServices,
@@ -153,44 +119,27 @@ from dashboard_cover_letter import (  # noqa: E402
 )
 from dashboard_packages import (  # noqa: E402
     INTERNAL_PACKAGE_FILES,
-    build_application_package_zip,
-    readiness_status,
 )
 from dashboard_manual import (  # noqa: E402
     ManualPageServices,
     manual_job_target_tab as render_manual_job_target_page,
 )
 from dashboard_regions import (  # noqa: E402
-    build_region_options,
-    dynamic_source_options,
-    job_matches_region_option,
     load_recent_region_keys,
-    normalize_location,
-    source_display_name,
 )
 from dashboard_repository import (  # noqa: E402
     build_dashboard_job_record as repository_build_dashboard_job_record,
-    deduplicate_dashboard_jobs,
-    infer_source_from_path,
-    job_description_preference,
-    job_duplicate_key,
     list_job_description_files as repository_list_job_description_files,
     load_screened_jobs as repository_load_screened_jobs,
     load_tracker_rows as repository_load_tracker_rows,
 )
 from dashboard_review import (  # noqa: E402
     RECOMMENDATION_RANK,
-    is_strong_match,
     review_inbox_view_matches,
-    review_job_next_action,
-    sorted_review_jobs,
-    tracker_follow_up_due,
-    tracker_next_action,
 )
 from dashboard_review_page import (  # noqa: E402
     ReviewPageServices,
     job_descriptions_tab as render_review_jobs_page,
-    resolve_review_job_selection,
 )
 from dashboard_shell import (  # noqa: E402
     PAGE_NAMES,
@@ -204,8 +153,7 @@ from dashboard_settings import (  # noqa: E402
     render_candidate_workspace_setup as render_workspace_setup_page,
     safety_notes_tab as render_settings_page,
 )
-from dashboard_titles import get_job_display_title, is_placeholder_job_title, resolve_canonical_job_title  # noqa: E402
-from document_text import read_markdown_field  # noqa: E402
+from dashboard_titles import resolve_canonical_job_title  # noqa: E402
 from dashboard_tracker import (  # noqa: E402
     TrackerPageServices,
     tracker_tab as render_tracker_page,
@@ -314,11 +262,6 @@ def relocate_fetched_jobs_to_workspace(paths: list[object], source: str) -> list
     return relocated
 
 
-def normalize_text(text: str) -> str:
-    """Normalize text for dashboard keyword matching."""
-    return " " + " ".join(text.lower().replace("-", " ").split()) + " "
-
-
 def save_recent_region_key(region_key: str) -> None:
     """Persist a small MRU list for the compact default region dropdown."""
     if demo_mode_enabled() or not region_key or region_key == "all":
@@ -339,23 +282,6 @@ def detect_dashboard_red_flags(job_text: str) -> list[str]:
     return red_flags
 
 
-def score_job_for_dashboard(job_text: str) -> int:
-    """Calculate a lightweight dashboard score without writing analysis files."""
-    normalized = normalize_text(job_text)
-    score = 45
-    for keyword, points in SCREENING_KEYWORDS.items():
-        if normalize_text(keyword).strip() in normalized:
-            score += points
-
-    for red_flag in detect_dashboard_red_flags(job_text):
-        if "5+" in red_flag or "PhD" in red_flag or "Senior" in red_flag:
-            score -= 25
-        else:
-            score -= 15
-
-    return max(0, min(100, score))
-
-
 def warnings_for_job(job_text: str) -> list[str]:
     """Return dashboard review warnings for incomplete or high-risk postings."""
     warnings = []
@@ -364,18 +290,11 @@ def warnings_for_job(job_text: str) -> list[str]:
     for phrase in ["work authorization", "visa", "citizenship", "sponsorship"]:
         if phrase in job_text.lower():
             warnings.append(f"Review {phrase} requirement manually")
-    if is_uk_job_text(job_text):
+    if is_uk_job(job_text):
         warnings.append("UK HPI review: user may be eligible to apply, but should not claim current UK work authorization.")
         if asks_for_uk_work_authorization(job_text):
             warnings.append("Confirm whether the employer accepts candidates planning to use the HPI visa route")
     return warnings
-
-
-def is_uk_job_text(job_text: str) -> bool:
-    """Return True when the saved role itself is UK based."""
-    from scoring_extraction import is_uk_job
-
-    return is_uk_job(job_text)
 
 
 def asks_for_uk_work_authorization(job_text: str) -> bool:
@@ -700,44 +619,6 @@ def load_package_notes(package_dir: Path) -> str:
     return ""
 
 
-def render_readiness_checklist(
-    cover_letter_md_path: Path,
-    cover_letter_docx_path: Path,
-    analysis_path: Path,
-    internal_notes_paths: list[Path],
-) -> None:
-    """Show package readiness without exposing raw paths in the main flow."""
-    st.markdown("**Application Materials**")
-    st.table(
-        [
-            {
-                "Material": "Uploaded Resume",
-                "Status": "Used unchanged",
-            },
-            {
-                "Material": "Cover Letter",
-                "Status": readiness_status(source_exists=cover_letter_md_path.exists()),
-            },
-            {
-                "Material": "Cover Letter DOCX",
-                "Status": readiness_status(
-                    source_exists=cover_letter_md_path.exists(),
-                    docx_exists=cover_letter_docx_path.exists(),
-                    read_only_sample=demo_mode_enabled(),
-                ),
-            },
-            {
-                "Material": "Match Report",
-                "Status": readiness_status(source_exists=analysis_path.exists()),
-            },
-            {
-                "Material": "Internal Notes",
-                "Status": readiness_status(source_exists=bool(internal_notes_paths), optional=True),
-            },
-        ]
-    )
-
-
 def generate_cover_letter_docx_for_package(package_dir: Path) -> tuple[Path | None, list[str]]:
     """Regenerate cover_letter.docx for a selected package when possible."""
     cover_letter_md_path = package_dir / "cover_letter.md"
@@ -755,100 +636,48 @@ def generate_cover_letter_docx_for_package(package_dir: Path) -> tuple[Path | No
     return cover_letter_docx_path, warnings
 
 
-def render_markdown_file(path: Path, title: str) -> None:
-    """Show one Markdown file in a simple expander."""
-    if not path.exists():
-        st.info(f"{title} not found.")
-        return
-
-    with st.expander(title, expanded=False):
-        st.markdown(read_text_file(path))
-
-
-def render_page_header(title: str, subtitle: str | None = None) -> None:
-    """Render a compact page heading below the top navigation."""
-    subtitle_html = ""
-    if subtitle:
-        subtitle_html = f'<div class="page-subtitle">{html.escape(subtitle)}</div>'
-    st.markdown(
-        f"""
-        <div class="page-header">
-          <div class="page-title">{html.escape(title)}</div>
-          {subtitle_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_action_callout(action: str, *, caution: bool = False) -> None:
-    """Render a consistent, compact next-action callout."""
-    message = f"Next best action: {action}"
-    if caution:
-        st.warning(message)
-    else:
-        st.info(message)
-
-
-def home_page_services() -> HomePageServices:
-    """Build the explicit dependency surface for Dashboard."""
-    return HomePageServices(
-        count_generated_packages=count_generated_packages,
-        demo_mode_enabled=demo_mode_enabled,
-        go_to_page=go_to_page,
-        load_screened_jobs=load_screened_jobs,
-        load_tracker_rows=load_tracker_rows,
-        render_page_header=render_page_header,
-    )
-
-
 def dashboard_tab() -> None:
-    """Render the home page through its explicitly injected services."""
-    render_home_page(home_page_services())
-
-
-def fetch_page_services() -> FetchPageServices:
-    """Build the explicit dependency surface for Find Jobs."""
-    return FetchPageServices(
-        current_workspace=current_workspace,
-        demo_mode_enabled=demo_mode_enabled,
-        go_to_page=go_to_page,
-        relocate_fetched_jobs_to_workspace=relocate_fetched_jobs_to_workspace,
-        render_fetch_history_section=render_fetch_history_section,
-        render_fetch_run_job_cards=render_fetch_run_job_cards,
-        render_fetch_run_job_table=render_fetch_run_job_table,
-        render_page_header=render_page_header,
-        run_with_captured_output=run_with_captured_output,
-        default_recommendation_limit=DEFAULT_RECOMMENDATION_LIMIT,
-        min_recommendation_limit=MIN_RECOMMENDATION_LIMIT,
-        max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
-        show_debug_ui=SHOW_DEBUG_UI,
+    """Compose the page with its stateful operations."""
+    render_home_page(
+        HomePageServices(
+            count_generated_packages=count_generated_packages,
+            demo_mode_enabled=demo_mode_enabled,
+            go_to_page=go_to_page,
+            load_screened_jobs=load_screened_jobs,
+        )
     )
 
 
 def fetch_jobs_tab() -> None:
-    """Render Find Jobs through the extracted discovery module."""
-    render_fetch_jobs_page(fetch_page_services())
-
-
-def manual_page_services() -> ManualPageServices:
-    """Build the explicit dependency surface for Add Target Job."""
-    return ManualPageServices(
-        company_generation_allowed=company_generation_allowed,
-        current_workspace=current_workspace,
-        demo_mode_enabled=demo_mode_enabled,
-        go_to_page=go_to_page,
-        relative_path=relative_path,
-        render_manual_company_confirmation=render_manual_company_confirmation,
-        render_page_header=render_page_header,
-        run_with_captured_output=run_with_captured_output,
-        switch_workspace_mode=switch_workspace_mode,
+    """Compose the page with its stateful operations."""
+    render_fetch_jobs_page(
+        FetchPageServices(
+            current_workspace=current_workspace,
+            demo_mode_enabled=demo_mode_enabled,
+            go_to_page=go_to_page,
+            relocate_fetched_jobs_to_workspace=relocate_fetched_jobs_to_workspace,
+            run_with_captured_output=run_with_captured_output,
+            default_recommendation_limit=DEFAULT_RECOMMENDATION_LIMIT,
+            min_recommendation_limit=MIN_RECOMMENDATION_LIMIT,
+            max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
+            show_debug_ui=SHOW_DEBUG_UI,
+        )
     )
 
 
 def manual_job_target_tab() -> None:
-    """Render Add Target Job through the extracted manual workflow module."""
-    render_manual_job_target_page(manual_page_services())
+    """Compose the page with its stateful operations."""
+    render_manual_job_target_page(
+        ManualPageServices(
+            current_workspace=current_workspace,
+            demo_mode_enabled=demo_mode_enabled,
+            go_to_page=go_to_page,
+            relative_path=relative_path,
+            render_manual_company_confirmation=render_manual_company_confirmation,
+            run_with_captured_output=run_with_captured_output,
+            switch_workspace_mode=switch_workspace_mode,
+        )
+    )
 
 
 JOB_CARD_METADATA_PREFIXES = {
@@ -924,44 +753,12 @@ def build_job_snippet(job: dict[str, Any], limit: int = 240) -> str:
     return clean_job_card_snippet(str(job.get("preview", "") or ""), limit)
 
 
-def key_requirements_from_text(job_text: str) -> list[str]:
-    """Extract a small requirements list from saved Markdown text."""
-    requirements: list[str] = []
-    in_requirements = False
-    for line in job_text.splitlines():
-        cleaned = line.strip()
-        lower_cleaned = cleaned.lower().strip("#:")
-        if any(marker in lower_cleaned for marker in ["requirements", "qualifications", "what you need"]):
-            in_requirements = True
-            continue
-        if in_requirements and cleaned.startswith("#"):
-            break
-        if in_requirements and cleaned.startswith(("-", "*")):
-            requirements.append(cleaned.lstrip("-* ").strip())
-        if len(requirements) >= 6:
-            break
-    return requirements
-
-
 def structured_fit_analysis(job: DashboardJob, job_text: str) -> dict[str, Any]:
     """Return the same canonical analysis already attached to the loaded job."""
     existing = job.get("analysis_result")
     if isinstance(existing, dict) and existing:
         return dict(existing)
     return analyze_job_for_dashboard(job, job_text)
-
-
-def sanitize_fit_text(value: Any) -> str:
-    """Hide local implementation filenames from user-facing fit text."""
-    text = str(value)
-    replacements = {
-        "`resume_source.md`": "the candidate profile",
-        "resume_source.md": "the candidate profile",
-        "resume_source.example.md": "the demo candidate profile",
-    }
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    return text
 
 
 def render_fit_analysis_sections(job: DashboardJob, job_text: str) -> None:
@@ -997,111 +794,83 @@ def render_generation_success(summary: dict[str, Any]) -> None:
     st.info("Open the Cover Letter page to preview and export the draft.")
 
 
-def review_page_services() -> ReviewPageServices:
-    """Build the explicit dependency surface for Review Jobs."""
-    return ReviewPageServices(
-        archive_all_saved_jobs=archive_all_saved_jobs,
-        archive_saved_job=archive_saved_job,
-        company_generation_allowed=company_generation_allowed,
-        complete_public_ats_jobs=complete_public_ats_jobs,
-        current_workspace=current_workspace,
-        default_review_inbox_view=default_review_inbox_view,
-        demo_mode_enabled=demo_mode_enabled,
-        go_to_page=go_to_page,
-        enrich_saved_job_description=enrich_saved_job_description,
-        enrich_saved_job_description_from_url=enrich_saved_job_description_from_url,
-        jsearch_configured=jsearch_configured,
-        key_requirements_from_text=key_requirements_from_text,
-        load_package_notes=load_package_notes,
-        load_screened_jobs=load_screened_jobs,
-        load_tracker_rows=load_tracker_rows,
-        package_dir_for_job=package_dir_for_job,
-        package_status_for_job=package_status_for_job,
-        public_ats_completion_candidates=public_ats_completion_candidates,
-        read_text_file=read_text_file,
-        relative_path=relative_path,
-        render_fit_analysis_sections=render_fit_analysis_sections,
-        render_generation_success=render_generation_success,
-        render_markdown_company_confirmation=render_markdown_company_confirmation,
-        render_page_header=render_page_header,
-        replace_saved_job_description=replace_saved_job_description,
-        run_with_captured_output=run_with_captured_output,
-        sanitize_fit_text=sanitize_fit_text,
-        save_recent_region_key=save_recent_region_key,
-        tracker_row_for_job=tracker_row_for_job,
-        tracker_status_for_job=tracker_status_for_job,
-        max_recommendation_limit=MAX_RECOMMENDATION_LIMIT,
-        show_debug_ui=SHOW_DEBUG_UI,
-    )
-
-
 def job_descriptions_tab() -> None:
-    """Render Review Jobs through the extracted page module."""
-    render_review_jobs_page(review_page_services())
-
-
-def tracker_page_services() -> TrackerPageServices:
-    """Build the explicit dependency surface for Tracker."""
-    return TrackerPageServices(
-        current_workspace=current_workspace,
-        demo_mode_enabled=demo_mode_enabled,
-        load_tracker_rows=load_tracker_rows,
-        render_action_callout=render_action_callout,
-        render_page_header=render_page_header,
-        run_with_captured_output=run_with_captured_output,
+    """Compose the page with its stateful operations."""
+    render_review_jobs_page(
+        ReviewPageServices(
+            archive_all_saved_jobs=archive_all_saved_jobs,
+            archive_saved_job=archive_saved_job,
+            complete_public_ats_jobs=complete_public_ats_jobs,
+            current_workspace=current_workspace,
+            default_review_inbox_view=default_review_inbox_view,
+            demo_mode_enabled=demo_mode_enabled,
+            go_to_page=go_to_page,
+            enrich_saved_job_description=enrich_saved_job_description,
+            enrich_saved_job_description_from_url=enrich_saved_job_description_from_url,
+            jsearch_configured=jsearch_configured,
+            load_package_notes=load_package_notes,
+            load_screened_jobs=load_screened_jobs,
+            load_tracker_rows=load_tracker_rows,
+            package_dir_for_job=package_dir_for_job,
+            package_status_for_job=package_status_for_job,
+            public_ats_completion_candidates=public_ats_completion_candidates,
+            relative_path=relative_path,
+            render_fit_analysis_sections=render_fit_analysis_sections,
+            render_generation_success=render_generation_success,
+            render_markdown_company_confirmation=render_markdown_company_confirmation,
+            replace_saved_job_description=replace_saved_job_description,
+            run_with_captured_output=run_with_captured_output,
+            save_recent_region_key=save_recent_region_key,
+            tracker_row_for_job=tracker_row_for_job,
+            tracker_status_for_job=tracker_status_for_job,
+            show_debug_ui=SHOW_DEBUG_UI,
+        )
     )
 
 
 def tracker_tab() -> None:
-    """Render Tracker through the extracted page module."""
-    render_tracker_page(tracker_page_services())
-
-
-def cover_letter_page_services() -> CoverLetterPageServices:
-    """Build the explicit dependency surface for Cover Letter."""
-    return CoverLetterPageServices(
-        current_workspace=current_workspace,
-        demo_mode_enabled=demo_mode_enabled,
-        generate_cover_letter_docx_for_package=generate_cover_letter_docx_for_package,
-        go_to_page=go_to_page,
-        latest_package_for_company_role=latest_package_for_company_role,
-        load_package_notes=load_package_notes,
-        load_tracker_rows=load_tracker_rows,
-        read_text_file=read_text_file,
-        relative_path=relative_path,
-        render_action_callout=render_action_callout,
-        render_markdown_file=render_markdown_file,
-        render_page_header=render_page_header,
-        render_readiness_checklist=render_readiness_checklist,
-        resolve_package_dir_from_tracker=resolve_package_dir_from_tracker,
-        run_with_captured_output=run_with_captured_output,
+    """Compose the page with its stateful operations."""
+    render_tracker_page(
+        TrackerPageServices(
+            current_workspace=current_workspace,
+            demo_mode_enabled=demo_mode_enabled,
+            load_tracker_rows=load_tracker_rows,
+            run_with_captured_output=run_with_captured_output,
+        )
     )
 
 
 def package_viewer_tab() -> None:
-    """Render Cover Letter through the extracted page module."""
-    render_cover_letter_page(cover_letter_page_services())
-
-
-def settings_page_services() -> SettingsPageServices:
-    """Build explicit shared services for Settings and workspace setup."""
-    return SettingsPageServices(
-        current_workspace=current_workspace,
-        demo_mode_enabled=demo_mode_enabled,
-        list_job_description_files=list_job_description_files,
-        load_tracker_rows=load_tracker_rows,
-        render_page_header=render_page_header,
+    """Compose the page with its stateful operations."""
+    render_cover_letter_page(
+        CoverLetterPageServices(
+            current_workspace=current_workspace,
+            demo_mode_enabled=demo_mode_enabled,
+            generate_cover_letter_docx_for_package=generate_cover_letter_docx_for_package,
+            latest_package_for_company_role=latest_package_for_company_role,
+            load_tracker_rows=load_tracker_rows,
+            relative_path=relative_path,
+            resolve_package_dir_from_tracker=resolve_package_dir_from_tracker,
+            run_with_captured_output=run_with_captured_output,
+        )
     )
 
 
 def safety_notes_tab() -> None:
-    """Render Settings through the extracted page module."""
-    render_settings_page(settings_page_services())
+    """Compose the page with its stateful operations."""
+    render_settings_page(
+        SettingsPageServices(
+            current_workspace=current_workspace,
+            demo_mode_enabled=demo_mode_enabled,
+            list_job_description_files=list_job_description_files,
+            load_tracker_rows=load_tracker_rows,
+        )
+    )
 
 
 def render_candidate_workspace_setup(workspace: Workspace) -> None:
     """Render Personal workspace setup through the extracted page module."""
-    render_workspace_setup_page(workspace, settings_page_services())
+    render_workspace_setup_page(workspace)
 
 
 def render_global_styles() -> None:

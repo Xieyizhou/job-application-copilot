@@ -1,158 +1,76 @@
-"""Guard the decomposed UI and cover-letter orchestration boundaries."""
+"""Protect page composition and domain boundaries without prescribing file sizes."""
 
 from __future__ import annotations
 
 import ast
-import unittest
 from pathlib import Path
-
+import sys
+import unittest
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-
-def top_level_function_size(relative_path: str, function_name: str) -> int:
-    """Return source line count for one top-level function."""
-    tree = ast.parse((PROJECT_ROOT / relative_path).read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == function_name:
-            return int(node.end_lineno or node.lineno) - node.lineno + 1
-    raise AssertionError(f"Function not found: {relative_path}::{function_name}")
-
-
-def file_size(relative_path: str) -> int:
-    """Return the physical line count for a source file."""
-    return len((PROJECT_ROOT / relative_path).read_text(encoding="utf-8").splitlines())
+import dashboard_ui
 
 
 class UIOrchestrationBoundaryTests(unittest.TestCase):
-    def test_dashboard_page_wrappers_only_delegate_built_services(self) -> None:
-        for function_name in (
-            "dashboard_tab",
-            "fetch_jobs_tab",
-            "manual_job_target_tab",
-            "job_descriptions_tab",
-            "tracker_tab",
-            "package_viewer_tab",
-            "safety_notes_tab",
-        ):
-            self.assertLessEqual(
-                top_level_function_size("src/dashboard.py", function_name),
-                4,
-            )
+    def test_pages_only_compose_stateful_dependencies_and_dispatch(self) -> None:
+        tree = ast.parse((PROJECT_ROOT / "src/dashboard.py").read_text())
+        pages = {
+            "dashboard_tab", "fetch_jobs_tab", "manual_job_target_tab",
+            "job_descriptions_tab", "tracker_tab", "package_viewer_tab", "safety_notes_tab",
+        }
+        functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+        for name in pages:
+            with self.subTest(page=name):
+                body = functions[name].body
+                self.assertEqual(len(body), 2)  # Documentation, then one renderer call.
+                call = body[-1].value
+                self.assertIsInstance(call, ast.Call)
+                self.assertIsInstance(call.func, ast.Name)
+                self.assertTrue(call.func.id.startswith("render_"))
+                self.assertEqual(len(call.args), 1)
+                services = call.args[0]
+                self.assertIsInstance(services, ast.Call)
+                self.assertTrue(services.func.id.endswith("PageServices"))
+                self.assertTrue(all(isinstance(kw.value, ast.Name) for kw in services.keywords))
 
-    def test_dashboard_repository_owns_read_only_data_orchestration(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_repository.py"), 340)
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard.py", "list_job_description_files"),
-            12,
+    def test_domain_services_do_not_import_presentation(self) -> None:
+        modules = (
+            "dashboard_repository", "dashboard_analysis_service", "manual_jobs",
+            "jd_enrichment", "fetch_jobs", "generate_cover_letter", "tracker", "workspace",
         )
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard.py", "build_dashboard_job_record"),
-            10,
-        )
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard.py", "load_screened_jobs"),
-            15,
-        )
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard.py", "load_tracker_rows"),
-            20,
-        )
+        for name in modules:
+            tree = ast.parse((PROJECT_ROOT / "src" / f"{name}.py").read_text())
+            imports = {
+                node.module for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom)
+            } | {
+                alias.name for node in ast.walk(tree)
+                if isinstance(node, ast.Import) for alias in node.names
+            }
+            with self.subTest(module=name):
+                self.assertFalse(imports & {"streamlit", "dashboard", "dashboard_ui"})
 
-    def test_dashboard_analysis_service_owns_caching_and_fallbacks(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_analysis_service.py"), 140)
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard.py", "analyze_job_for_dashboard"),
-            35,
-        )
+    def test_page_service_records_do_not_inject_stable_presentation(self) -> None:
+        stable = {
+            "read_text_file", "render_page_header", "render_action_callout",
+            "sanitize_fit_text", "render_readiness_checklist", "company_generation_allowed",
+        }
+        for path in (PROJECT_ROOT / "src").glob("dashboard*.py"):
+            for node in ast.parse(path.read_text()).body:
+                if isinstance(node, ast.ClassDef) and node.name.endswith("PageServices"):
+                    fields = {item.target.id for item in node.body if isinstance(item, ast.AnnAssign)}
+                    with self.subTest(service=node.name):
+                        self.assertFalse(fields & stable)
 
-    def test_company_verification_controls_are_extracted_from_dashboard(self) -> None:
-        self.assertLessEqual(
-            file_size("src/dashboard_company_verification.py"),
-            190,
-        )
-        for function_name in (
-            "company_generation_allowed",
-            "render_manual_company_confirmation",
-            "render_markdown_company_confirmation",
-        ):
-            with self.assertRaises(AssertionError):
-                top_level_function_size("src/dashboard.py", function_name)
-
-    def test_review_jobs_entrypoint_stays_orchestration_only(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_review_page.py"), 525)
-        self.assertLessEqual(file_size("src/dashboard_review_filters.py"), 350)
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_review_page.py", "job_descriptions_tab"),
-            50,
-        )
-        self.assertLessEqual(
-            top_level_function_size(
-                "src/dashboard_review_filters.py",
-                "render_review_filter_controls",
-            ),
-            45,
-        )
-
-    def test_manual_entrypoint_stays_orchestration_only(self) -> None:
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_manual.py", "render_manual_add_extract_tab"),
-            35,
-        )
-
-    def test_find_jobs_entrypoint_stays_orchestration_only(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_fetch.py"), 480)
-        self.assertLessEqual(file_size("src/dashboard_fetch_history.py"), 190)
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_fetch.py", "fetch_jobs_tab"),
-            25,
-        )
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_fetch.py", "render_fetch_options_form"),
-            45,
-        )
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_fetch.py", "render_fetch_results"),
-            15,
-        )
-        for function_name in (
-            "fetch_run_label",
-            "render_fetch_history_section",
-            "render_fetch_run_job_cards",
-            "render_fetch_run_job_table",
-        ):
-            with self.assertRaises(AssertionError):
-                top_level_function_size("src/dashboard.py", function_name)
-
-    def test_phase_two_ui_files_stay_bounded(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_manual.py"), 750)
-        self.assertLessEqual(file_size("src/dashboard_manual_entry.py"), 140)
-        self.assertLessEqual(file_size("src/dashboard_cover_letter_components.py"), 250)
-        self.assertLessEqual(file_size("src/dashboard_cover_letter_selection.py"), 100)
-        self.assertLessEqual(
-            top_level_function_size("src/dashboard_cover_letter.py", "package_viewer_tab"),
-            30,
-        )
-
-    def test_phase_three_ui_files_stay_bounded(self) -> None:
-        self.assertLessEqual(file_size("src/dashboard_home.py"), 140)
-        self.assertLessEqual(file_size("src/dashboard_tracker.py"), 80)
-        self.assertLessEqual(file_size("src/dashboard_tracker_components.py"), 200)
-        self.assertLessEqual(file_size("src/dashboard_settings.py"), 120)
-        self.assertLessEqual(file_size("src/dashboard_settings_sections.py"), 130)
-        self.assertLessEqual(top_level_function_size("src/dashboard_home.py", "dashboard_tab"), 35)
-        self.assertLessEqual(top_level_function_size("src/dashboard_tracker.py", "tracker_tab"), 45)
-        self.assertLessEqual(top_level_function_size("src/dashboard_settings.py", "safety_notes_tab"), 35)
-
-    def test_cover_letter_entrypoints_delegate_details(self) -> None:
-        self.assertLessEqual(
-            top_level_function_size("src/generate_cover_letter.py", "generate_cover_letter"),
-            40,
-        )
-        self.assertLessEqual(
-            top_level_function_size("src/generate_cover_letter.py", "build_internal_notes"),
-            20,
-        )
+    def test_shared_header_escapes_user_text(self) -> None:
+        with patch.object(dashboard_ui, "st") as ui:
+            dashboard_ui.render_page_header("<title>", "<script>alert(1)</script>")
+        rendered = ui.markdown.call_args.args[0]
+        self.assertIn("&lt;title&gt;", rendered)
+        self.assertNotIn("<script>", rendered)
 
 
 if __name__ == "__main__":

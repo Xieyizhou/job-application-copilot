@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -30,16 +32,9 @@ class CoverLetterPageServices:
     current_workspace: Callable[[], Any]
     demo_mode_enabled: Callable[[], bool]
     generate_cover_letter_docx_for_package: Callable[..., Any]
-    go_to_page: Callable[[str], None]
     latest_package_for_company_role: Callable[..., Any]
-    load_package_notes: Callable[[Path], str]
     load_tracker_rows: Callable[..., list[TrackerRow]]
-    read_text_file: Callable[[Path], str]
     relative_path: Callable[[Path], str]
-    render_action_callout: Callable[..., None]
-    render_markdown_file: Callable[[Path, str], None]
-    render_page_header: Callable[[str, str | None], None]
-    render_readiness_checklist: Callable[..., None]
     resolve_package_dir_from_tracker: Callable[[dict[str, Any]], Path | None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
 
@@ -62,7 +57,7 @@ def _render_cover_letter_panels(services: CoverLetterPageServices) -> None:
         vertical_alignment="top",
     )
     with context_panel, st.container(key="cover_letter_context_panel"):
-        services.render_page_header(
+        render_page_header(
             "Cover Letter",
             "Review the draft against your resume, edit it, and download the employer-facing DOCX.",
         )

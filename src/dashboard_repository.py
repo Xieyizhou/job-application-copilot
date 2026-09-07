@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
+
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -9,7 +12,6 @@ from typing import Any, Callable, cast
 from scoring_engine import extract_job_description_body
 from company_verification import verification_from_markdown, verification_status_label
 from dashboard_fit import apply_canonical_analysis, build_fit_presentation
-from dashboard_job_dedup import description_fingerprint
 from dashboard_regions import (
     infer_high_level_region,
     infer_location_from_path,
@@ -333,3 +335,12 @@ def load_tracker_rows(
         connection.row_factory = sqlite3.Row
         rows = connection.execute(query, params).fetchall()
     return cast(list[TrackerRow], [dict(row) for row in rows])
+
+
+def description_fingerprint(job_text: str) -> str:
+    """Return a stable fingerprint for exact-equivalent JD body text."""
+    body = extract_job_description_body(job_text)
+    normalized = re.sub(r"[^a-z0-9]+", " ", body.lower()).strip()
+    if len(normalized.split()) < 12:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()

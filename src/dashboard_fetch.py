@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from dashboard_fetch_history import render_fetch_history_section
+from dashboard_fetch_history import render_fetch_run_job_cards
+from dashboard_fetch_history import render_fetch_run_job_table
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -58,10 +63,6 @@ class FetchPageServices:
     current_workspace: Callable[[], Any]
     go_to_page: Callable[[str], None]
     relocate_fetched_jobs_to_workspace: Callable[..., list[Any]]
-    render_fetch_history_section: Callable[[], None]
-    render_fetch_run_job_cards: Callable[[list[dict[str, Any]], str], None]
-    render_fetch_run_job_table: Callable[[list[dict[str, Any]], str], None]
-    render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
     default_recommendation_limit: int
     min_recommendation_limit: int
@@ -316,7 +317,7 @@ def render_fetch_job_results(
                 "Try JSearch · Full JD, change the query, or add a target job manually."
             )
             st.markdown("**Preview-only results · not added to Saved Jobs**")
-            services.render_fetch_run_job_cards(
+            render_fetch_run_job_cards(
                 summary.skipped_jobs,
                 "No preview-only results in this search.",
             )
@@ -339,16 +340,16 @@ def render_fetch_job_results(
         if not new_jobs:
             continue
         st.markdown(f"**New jobs from {source_display_name(str(run.get('source', '')))}**")
-        services.render_fetch_run_job_cards(new_jobs, "No new jobs in this search.")
+        render_fetch_run_job_cards(new_jobs, "No new jobs in this search.")
     if summary.new_jobs:
         with st.expander("Compact table view", expanded=False):
-            services.render_fetch_run_job_table(
+            render_fetch_run_job_table(
                 summary.new_jobs,
                 "No new jobs in this search.",
             )
     if summary.skipped_jobs:
         with st.expander("Preview-only results · not saved", expanded=False):
-            services.render_fetch_run_job_cards(
+            render_fetch_run_job_cards(
                 summary.skipped_jobs,
                 "No preview-only results in this search.",
             )
@@ -381,7 +382,7 @@ def render_fetch_details(
         )
         if summary.seen_jobs:
             st.markdown("**Already seen jobs**")
-            services.render_fetch_run_job_table(
+            render_fetch_run_job_table(
                 summary.seen_jobs,
                 "No already seen jobs in this search.",
             )
@@ -426,13 +427,13 @@ def render_fetch_debug(
             st.markdown("**Internal fetch metadata**")
             st.text("\n\n".join(backend_outputs))
         st.markdown("**Raw fetch history**")
-        services.render_fetch_history_section()
+        render_fetch_history_section()
 
 
 def fetch_jobs_tab(services: FetchPageServices) -> None:
     """Render the fetch-jobs workflow."""
     render_fetch_search_styles(st)
-    services.render_page_header(
+    render_page_header(
         "Find Jobs",
         "Search supported job sources and save roles for review.",
     )

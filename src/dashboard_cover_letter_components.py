@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import read_text_file
+
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -133,7 +135,7 @@ def _render_draft(
         st.warning("The cover letter draft is missing. Generate it from Review Jobs first.")
         return
 
-    draft = services.read_text_file(artifacts.markdown)
+    draft = read_text_file(artifacts.markdown)
     editor_mode = cover_letter_editor_mode(package_key)
     st.markdown(
         f'<div class="cover-letter-editor-state cover-letter-editor-{editor_mode}"></div>',

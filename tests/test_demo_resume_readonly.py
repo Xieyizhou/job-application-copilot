@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from workspace import demo_workspace
 from dashboard_settings import render_candidate_workspace_setup
 st.session_state["workspace_mode"] = "Demo"
-render_candidate_workspace_setup(demo_workspace(), SimpleNamespace(render_page_header=lambda title, subtitle: st.header(title)))
+render_candidate_workspace_setup(demo_workspace())
 ''').run()
     assert not app.exception
     assert app.session_state["workspace_mode"] == "Demo"

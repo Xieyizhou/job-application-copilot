@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dashboard_repository
+
 import sys
 import unittest
 from pathlib import Path
@@ -11,7 +13,6 @@ from unittest.mock import Mock, patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-import dashboard
 import fetch_jobs
 
 
@@ -163,7 +164,7 @@ class DashboardEvidencePreferenceTests(unittest.TestCase):
             "description_word_count": 480,
         }
 
-        unique = dashboard.deduplicate_dashboard_jobs([snippet, full])
+        unique = dashboard_repository.deduplicate_dashboard_jobs([snippet, full])
 
         self.assertEqual(len(unique), 1)
         self.assertEqual(unique[0]["source"], "jsearch")
@@ -179,7 +180,7 @@ class DashboardEvidencePreferenceTests(unittest.TestCase):
             "description_fingerprint": "same-preview",
         }
 
-        unique = dashboard.deduplicate_dashboard_jobs(
+        unique = dashboard_repository.deduplicate_dashboard_jobs(
             [
                 {**shared, "location": "Singapore"},
                 {**shared, "location": "Remote"},
@@ -199,7 +200,7 @@ class DashboardEvidencePreferenceTests(unittest.TestCase):
             "description_fingerprint": "same-description",
         }
 
-        unique = dashboard.deduplicate_dashboard_jobs(
+        unique = dashboard_repository.deduplicate_dashboard_jobs(
             [
                 {**shared, "location": "Singapore"},
                 {**shared, "location": "Canada"},

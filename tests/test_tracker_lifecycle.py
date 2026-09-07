@@ -10,16 +10,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
-from tracker import (
-    add_application,
-    build_parser,
-    delete_application,
-    list_applications,
-    sanitize_job_url,
-    show_application,
-    update_status,
-    validate_status,
-)
+from tracker import add_application, build_parser, delete_application, list_applications, show_application, update_status, validate_status
+from job_urls import sanitize_job_url
 
 
 def application_args(**overrides: object) -> SimpleNamespace:

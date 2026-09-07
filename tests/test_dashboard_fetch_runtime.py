@@ -93,6 +93,12 @@ class FakeStreamlit:
 
 
 class DashboardFetchRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.render_fetch_history_section = self.enterContext(patch("dashboard_fetch.render_fetch_history_section"))
+        self.render_fetch_run_job_cards = self.enterContext(patch("dashboard_fetch.render_fetch_run_job_cards"))
+        self.render_fetch_run_job_table = self.enterContext(patch("dashboard_fetch.render_fetch_run_job_table"))
+        self.render_page_header = self.enterContext(patch("dashboard_fetch.render_page_header"))
+
     def services(self, *, demo: bool, run_result: dict[str, Any] | None = None) -> dashboard_fetch.FetchPageServices:
         run = Mock(return_value=(run_result or {}, "provider output"))
         return dashboard_fetch.FetchPageServices(
@@ -103,10 +109,6 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
             demo_mode_enabled=lambda: demo,
             go_to_page=Mock(),
             relocate_fetched_jobs_to_workspace=lambda paths, source: list(paths),
-            render_fetch_history_section=Mock(),
-            render_fetch_run_job_cards=Mock(),
-            render_fetch_run_job_table=Mock(),
-            render_page_header=Mock(),
             run_with_captured_output=run,
             default_recommendation_limit=12,
             min_recommendation_limit=5,
@@ -150,7 +152,7 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
         self.assertEqual(fake.metrics["Full JDs"], 3)
         self.assertEqual(fake.session_state["recommendation_limit"], 12)
         self.assertEqual(fake.session_state["latest_fetch_run_id"], "run-7")
-        services.render_fetch_run_job_cards.assert_called_once()
+        self.render_fetch_run_job_cards.assert_called_once()
         self.assertEqual(fake.status_updates[-1]["state"], "complete")
 
     def test_missing_source_is_reported_without_provider_call(self) -> None:
@@ -288,7 +290,7 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
         with patch.object(dashboard_fetch, "st", fake):
             dashboard_fetch.render_fetch_results(outcome, request, services)
 
-        services.render_fetch_run_job_cards.assert_called_once_with(
+        self.render_fetch_run_job_cards.assert_called_once_with(
             [preview],
             "No preview-only results in this search.",
         )

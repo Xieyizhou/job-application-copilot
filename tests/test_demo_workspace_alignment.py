@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import dashboard_fit
+import dashboard_review
+
 import re
 import sys
 import unittest
@@ -137,7 +140,7 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         self.assertEqual([job["role"] for job in needs_review], ["Machine Learning Intern"])
         self.assertEqual(len(all_jobs), 3)
         self.assertEqual(len(self.jobs), len(EXPECTED_JOBS))
-        self.assertEqual(sum(dashboard.is_strong_match(job) for job in self.jobs), 1)
+        self.assertEqual(sum(dashboard_review.is_strong_match(job) for job in self.jobs), 1)
         with patch.object(dashboard, "demo_mode_enabled", return_value=True):
             package_statuses = {job["role"]: dashboard.package_status_for_job(job, []) for job in self.jobs}
         self.assertEqual(package_statuses["Data Analyst"], "Demo cover letter")
@@ -154,7 +157,7 @@ class DemoWorkspaceAlignmentTests(unittest.TestCase):
         self.assertEqual(recommendation, analyst["recommendation"])
         self.assertIn(f"Eligibility: **{str(analyst['eligibility']['status']).title()}**", report)
         self.assertIn(f"Scoring Confidence: **{str(analyst['confidence']['level']).title()}**", report)
-        terms = dashboard.summarize_analysis_requirements(analyst["analysis_result"])
+        terms = dashboard_fit.summarize_analysis_requirements(analyst["analysis_result"])
         for term in terms["matched_required"] + terms["missing_required"]:
             self.assertRegex(report, rf"(?i)\b{re.escape(term)}\b")
 

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_action_callout
+from document_text import read_text_file
+
+from dashboard_packages import readiness_status
+
 import io
 import zipfile
 from pathlib import Path
@@ -102,7 +107,7 @@ def _render_materials_panel(
 ) -> None:
     with st.container(border=True, key="cover_letter_supporting_panel"):
         if tracker_row:
-            services.render_action_callout(
+            render_action_callout(
                 tracker_next_action(tracker_row),
                 caution=tracker_follow_up_due(tracker_row),
             )
@@ -110,11 +115,12 @@ def _render_materials_panel(
             if notes:
                 st.caption(f"Tracker notes: {notes}")
 
-        services.render_readiness_checklist(
+        render_readiness_checklist(
             artifacts.markdown,
             artifacts.docx,
             artifacts.analysis,
             artifacts.internal_notes,
+            demo_mode=services.demo_mode_enabled(),
         )
         _render_secondary_downloads(artifacts, package_key)
         _render_detail_actions(artifacts, package_key)
@@ -153,9 +159,9 @@ def _render_focused_detail(
 ) -> None:
     title = "Stored Match Report" if detail == "report" else "Internal Notes"
     if detail == "report":
-        content = services.read_text_file(artifacts.analysis) if artifacts.analysis.exists() else ""
+        content = read_text_file(artifacts.analysis) if artifacts.analysis.exists() else ""
     else:
-        content = "\n\n".join(services.read_text_file(path) for path in artifacts.internal_notes)
+        content = "\n\n".join(read_text_file(path) for path in artifacts.internal_notes)
     _, center, _ = st.columns([0.02, 0.96, 0.02])
     with center, st.container(border=True, key="cover_letter_focused_detail"):
         title_column, back_column = st.columns([0.78, 0.22], vertical_alignment="center")
@@ -219,4 +225,44 @@ def _render_internal_notes_download(paths: list[Path], package_key: str) -> None
         mime=mime,
         key=f"download_internal_notes_{package_key}",
         width="stretch",
+    )
+
+
+def render_readiness_checklist(
+    cover_letter_md_path: Path,
+    cover_letter_docx_path: Path,
+    analysis_path: Path,
+    internal_notes_paths: list[Path],
+    *,
+    demo_mode: bool,
+) -> None:
+    """Show package readiness without exposing raw paths in the main flow."""
+    st.markdown("**Application Materials**")
+    st.table(
+        [
+            {
+                "Material": "Uploaded Resume",
+                "Status": "Used unchanged",
+            },
+            {
+                "Material": "Cover Letter",
+                "Status": readiness_status(source_exists=cover_letter_md_path.exists()),
+            },
+            {
+                "Material": "Cover Letter DOCX",
+                "Status": readiness_status(
+                    source_exists=cover_letter_md_path.exists(),
+                    docx_exists=cover_letter_docx_path.exists(),
+                    read_only_sample=demo_mode,
+                ),
+            },
+            {
+                "Material": "Match Report",
+                "Status": readiness_status(source_exists=analysis_path.exists()),
+            },
+            {
+                "Material": "Internal Notes",
+                "Status": readiness_status(source_exists=bool(internal_notes_paths), optional=True),
+            },
+        ]
     )
