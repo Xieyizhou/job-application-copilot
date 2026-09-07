@@ -124,7 +124,7 @@ jobs:
               cat /tmp/job-copilot-streamlit.log
               exit 1
             fi
-            if curl --fail --silent http://127.0.0.1:18501/_stcore/health | grep -q '^ok$'; then
+            if curl --noproxy '*' --fail --silent http://127.0.0.1:18501/_stcore/health | grep -q '^ok$'; then
               exit 0
             fi
             sleep 1
