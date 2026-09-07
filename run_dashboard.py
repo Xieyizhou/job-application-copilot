@@ -73,7 +73,8 @@ def main(extra_args: Sequence[str] | None = None) -> int:
 
     companion = None
     connection_path = COMPANION_DIR / "connection.json"
-    connection_path.unlink(missing_ok=True)
+    # A second launcher must not remove the connection owned by a running instance.
+    # A successful bind replaces stale metadata; only its owner cleans it up below.
     try:
         workspace = personal_workspace()
         token = load_or_create_token(COMPANION_DIR / "token")
