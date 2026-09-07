@@ -64,7 +64,9 @@ supporting analysis.
 
 ## Quick start
 
-Requires Python 3.11 or 3.12.
+The stable desktop release supports Python 3.11 or 3.12 on macOS. Chrome and Edge are
+the supported browsers for the optional local import companion. Linux remains covered by
+automated tests, but this release does not claim Windows support.
 
 ```bash
 python3 -m venv .venv
@@ -95,9 +97,10 @@ service updates the saved job only after URL/company/role and JD-quality checks 
 
 ## Validation
 
-The current validation suite passes **640 tests and 198 subtests**, plus Ruff, mypy,
-compileall, dependency, artifact-integrity, and privacy checks. Curated or teacher-proxy
-agreement is not reported as real-world model accuracy.
+The release workflow runs the complete core and ML suites on Python 3.11 and 3.12, plus
+Ruff, mypy, compileall, dependency, scoring, v21 contract, privacy, and macOS launcher
+checks. Test collection is audited, but a fixed test count is not used as a release gate.
+Curated or teacher-proxy agreement is not reported as real-world model accuracy.
 
 The [code simplification review](docs/CODE_SIMPLIFICATION_REVIEW.md) records the full
 feature matrix, architecture changes, compatibility notes, and rollback checkpoints.
@@ -147,7 +150,8 @@ the private teacher dataset or download unpublished weights.
 ## Documentation
 
 [Usage](docs/USAGE.md) · [Scoring Method](docs/SCORING_METHOD.md) ·
-[Model Card](docs/MODEL_CARD.md) · [ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md)
+[Model Card](docs/MODEL_CARD.md) · [ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md) ·
+[Release acceptance](docs/RELEASE_ACCEPTANCE.md) · [Security](SECURITY.md)
 
 ## License
 

@@ -2,6 +2,10 @@
 
 ## Install and Run
 
+The v1 stable desktop release supports macOS with Python 3.11 or 3.12. Linux is
+continuously tested but is not part of the first-release desktop acceptance promise.
+Windows is not currently supported.
+
 ```bash
 git clone https://github.com/your-account/job-application-copilot.git
 cd job-application-copilot
@@ -16,6 +20,23 @@ The initial screen is the Personal workspace. Select **Explore Read-only Demo** 
 
 macOS users can also launch the app after setup by opening
 `open_dashboard.command`.
+
+### Optional document support
+
+DOCX and text-based PDF import are included in the base requirements. OCR for scanned
+documents additionally requires the system `tesseract` executable; install it separately
+and confirm `tesseract --version` works before starting Job Copilot. OCR quality varies by
+scan, so inspect the extracted candidate text before generating employer-facing material.
+
+### Startup troubleshooting
+
+- If port 8501 is occupied, run `python run_dashboard.py --server.port=8502`.
+- The browser companion uses `127.0.0.1:8765`. Stop the other process using that port,
+  then restart Job Copilot if Settings reports the companion unavailable.
+- A companion token is local to the Personal workspace. Copy the current token again after
+  resetting `data/local_workspace/`; an old or mistyped token is rejected.
+- Stop the app with Control-C. Both the Streamlit process and its companion service should
+  close; restart with the same supported command.
 
 ## Workspaces
 
@@ -68,6 +89,19 @@ The dashboard supports preset regions and custom locations. It ranks results
 after duplicate removal and local filtering. Configure JSearch for automatic
 full job descriptions. Adzuna and Jooble are treated as discovery-only sources
 because their official search APIs return snippets.
+
+Credential-backed search providers are experimental in v1.0.0. Their availability,
+quotas, and response shapes are controlled by third parties. Public Greenhouse and Lever
+recovery plus ordinary-page fallback are the credential-free supported paths; always
+review the recovered company, role, URL, and full JD before using a score.
+
+## Browser companion
+
+Chrome and Edge on macOS are supported for local page import. Follow
+[`browser_companion/README.md`](../browser_companion/README.md) to load the unpacked
+extension. The extension only contacts `127.0.0.1:8765`; it does not submit applications.
+If the token is invalid, copy it again from **Settings → Job sources**. If Job Copilot is
+offline, restart the app and retry the import after the Settings health indicator recovers.
 
 When a saved record contains only a snippet, open **Review Jobs → JD** and choose
 **Find and verify full JD**. The toolkit searches JSearch using the saved company,
