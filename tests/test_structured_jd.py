@@ -40,6 +40,15 @@ def test_structures_stable_sections_without_inventing_values() -> None:
     assert all(row["source_span"] == row["text"] for row in job["requirements"])
 
 
+def test_job_description_mention_in_prose_is_not_a_responsibility_heading() -> None:
+    job = structure_job_description(
+        "# Data Analyst\n\n"
+        "This is a fictional, sanitized job description created only for the public Demo workspace.\n\n"
+        "Requirements:\n- Python\n- SQL\n"
+    )
+    assert {row["text"] for row in job["requirements"]} == {"Python", "SQL"}
+
+
 def test_pipeline_trace_distinguishes_extraction_and_evidence_failures() -> None:
     job = structure_job_description(JD)
     trace = pipeline_trace(JD, job, {"accepted_count": 0})
