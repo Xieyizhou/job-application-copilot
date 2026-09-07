@@ -83,7 +83,7 @@ Choose **Explore Read-only Demo** in the sidebar. Personal mode accepts Markdown
 DOCX, and text-based PDF resumes.
 
 Local release acceptance used macOS 26.6.2 on Apple Silicon, Python 3.11.9 and
-3.12.13, and Chrome 152.0.7977.76 for native extension import. See the
+3.12.13, and Chrome v152.0.7977.76 for native extension import. See the
 [acceptance report](docs/RELEASE_ACCEPTANCE.md) for evidence and unverified scope.
 
 ## Optional live job search
