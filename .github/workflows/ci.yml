@@ -111,10 +111,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install base dependencies
-        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+        run: python -m pip install -r requirements.txt
+      - name: Check base startup imports
+        run: python run_dashboard.py --smoke-test
+      - name: Smoke-test real supported launcher startup and shutdown
+        run: python scripts/smoke_dashboard.py
+      - name: Install development checks
+        run: python -m pip install -r requirements-dev.txt
       - name: Verify supported launcher contract
         run: python -m pytest tests/test_dashboard_launcher.py tests/test_demo_package.py -q
-      - name: Smoke-test supported dashboard entry point
-        run: python run_dashboard.py --smoke-test
       - name: Check dependency consistency
         run: python -m pip check
