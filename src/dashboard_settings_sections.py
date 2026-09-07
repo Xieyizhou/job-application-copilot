@@ -85,8 +85,8 @@ def _render_sources(ui: Any, sources: dict[str, bool], *, workspace: Any, demo_m
         ui.write(f"{'Ready' if configured else 'Not configured'} · {label}")
     ui.caption("JSearch supports complete postings. Adzuna and Jooble may return discovery snippets.")
     ui.caption(
-        "Experimental services: JSearch, Adzuna, and Jooble have not completed live "
-        "release acceptance. Provider quotas, availability, and response formats may vary."
+        "Experimental services: JSearch, Adzuna, and Jooble have limited live validation. "
+        "Provider quotas, availability, and response formats may vary."
     )
     if not sources["JSearch · full JD"]:
         ui.info("Configure JSEARCH_API_KEY before relying on automatic full-JD retrieval.")

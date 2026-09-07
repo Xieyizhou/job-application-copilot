@@ -83,8 +83,8 @@ DOCX, and text-based PDF resumes.
 
 ## Optional live job search
 
-JSearch, Adzuna, and Jooble are experimental in v1.0.0: live release acceptance has
-not been completed for these credential-backed services.
+JSearch, Adzuna, and Jooble are experimental in v1.0.0. Each passed a minimal live
+search; broader provider behavior, quotas, and availability remain outside stable acceptance.
 
 Copy `.env.example` to `.env` and configure only the desired providers. The recovery path
 prefers public Greenhouse/Lever ATS endpoints, then structured JobPosting JSON-LD, safe
