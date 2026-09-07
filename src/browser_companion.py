@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from fetch_history import canonicalize_job_url, read_markdown_field
+from fetch_history import canonicalize_job_url
+from document_text import read_markdown_field
 from jd_enrichment import replace_saved_job_description
 
 

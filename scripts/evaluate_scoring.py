@@ -15,7 +15,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from analyze_job import score_job_texts  # noqa: E402
+from scoring_engine import score_job_texts  # noqa: E402
 
 
 DEFAULT_FIXTURE = PROJECT_ROOT / "tests" / "fixtures" / "scoring_cases.yaml"

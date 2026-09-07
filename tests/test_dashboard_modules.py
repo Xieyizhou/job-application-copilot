@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import document_text
+
 import io
 import sys
 import tempfile
@@ -113,7 +115,7 @@ class DashboardModuleContractTests(unittest.TestCase):
         self.assertIs(manual.current_workspace, dashboard.current_workspace)
         self.assertIs(review.tracker_status_for_job, dashboard.tracker_status_for_job)
         self.assertIs(tracker.load_tracker_rows, dashboard.load_tracker_rows)
-        self.assertIs(cover_letter.read_text_file, dashboard.read_text_file)
+        self.assertIs(cover_letter.read_text_file, document_text.read_text_file)
         self.assertIs(settings.render_page_header, dashboard.render_page_header)
 
     def test_workspace_switch_clears_cross_workspace_selection(self) -> None:

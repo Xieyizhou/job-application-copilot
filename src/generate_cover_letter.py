@@ -9,6 +9,12 @@ The generator is deterministic and local:
 
 from __future__ import annotations
 
+from ml.evidence_text import clean_source_line as clean_resume_evidence_line
+
+from document_text import format_bullets
+
+from document_text import clean_duplicated_punctuation
+
 import argparse
 import json
 import re
@@ -161,19 +167,6 @@ def contains_phrase(text: str, phrase: str) -> bool:
     return f" {normalize_text(phrase).strip()} " in normalize_text(text)
 
 
-def clean_duplicated_punctuation(text: str) -> str:
-    """Fix duplicated periods caused by company names ending in periods."""
-    replacements = {
-        "Pte..": "Pte.",
-        "Ltd..": "Ltd.",
-        "Inc..": "Inc.",
-        "Company..": "Company.",
-    }
-    for bad_text, clean_text in replacements.items():
-        text = text.replace(bad_text, clean_text)
-    return text
-
-
 def extract_markdown_field(job_text: str, field_name: str, default: str) -> str:
     """Extract a simple 'Field: value' line from a Markdown job description."""
     prefix = f"{field_name}:"
@@ -272,17 +265,6 @@ EVIDENCE_STOPWORDS = {
     "role", "work", "team", "job", "your", "our", "you", "are", "will", "have",
     "has", "was", "were", "their", "they", "but", "not", "all", "can", "who",
 }
-
-
-def clean_resume_evidence_line(raw_line: str) -> str:
-    """Normalize one resume line while preserving the candidate's factual wording."""
-    line = raw_line.strip()
-    line = re.sub(r"^[-*•]+\s*", "", line)
-    line = re.sub(r"^\d+[.)]\s*", "", line)
-    line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
-    line = re.sub(r"`([^`]+)`", r"\1", line)
-    line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
-    return re.sub(r"\s+", " ", line).strip()
 
 
 def evidence_terms(text: str) -> set[str]:
@@ -925,13 +907,6 @@ def validate_manual_cover_letter_draft(cover_letter: str) -> tuple[list[str], li
         if phrase in folded:
             warnings.append(f"Verify this sensitive identity statement before export: {phrase}")
     return errors, warnings
-
-
-def format_bullets(items: list[str]) -> str:
-    """Format a list as Markdown bullets."""
-    if not items:
-        return "- None found"
-    return "\n".join(f"- {item}" for item in items)
 
 
 def save_generated_file(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import read_markdown_field
+
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -52,17 +54,6 @@ ROLE_HEADING_TERMS = {
     "scientist",
     "specialist",
 }
-
-
-def read_markdown_field(markdown_text: str, field_name: str, default: str = "") -> str:
-    """Read a simple ``Field: value`` line from Markdown."""
-    prefix = f"{field_name}:"
-    for line in markdown_text.splitlines():
-        if line.lower().startswith(prefix.lower()):
-            value = line.split(":", 1)[1].strip()
-            if value and value.lower() != "not provided":
-                return value
-    return default
 
 
 def looks_like_internal_slug(value: str) -> bool:

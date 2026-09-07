@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, TypedDict
 
-from ml.evidence import clean_source_line
+from ml.evidence_text import clean_source_line
 from jd_text import normalize_jd_boundaries
 
 

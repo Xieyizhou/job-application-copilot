@@ -8,7 +8,6 @@ select = ["E4", "E7", "E9", "F"]
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E402"]
 "scripts/ml/*.py" = ["E402"]
-"src/analyze_job.py" = ["F401"]
 "src/dashboard.py" = ["F401"]
 "tests/*.py" = ["E402"]
 

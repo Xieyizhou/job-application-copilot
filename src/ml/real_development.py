@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from ml.annotation_generation import normalize_text
-from ml.evidence import useful_tokens
+from ml.evidence_text import useful_tokens
 from ml.source_text_quality import canonical_public_text
 
 

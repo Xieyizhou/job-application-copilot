@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from analyze_job import extract_job_description_body
+from scoring_engine import extract_job_description_body
 
 
 def description_fingerprint(job_text: str) -> str:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _mean
+
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from itertools import product
@@ -457,5 +459,3 @@ def select_rank_preserving_gate(
     return max(evaluated, key=key)
 
 
-def _mean(values: Sequence[bool] | Sequence[float]) -> float:
-    return float(np.mean(values)) if values else 0.0

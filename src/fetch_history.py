@@ -6,6 +6,8 @@ small JSONL/JSON sidecar instead of requiring a database migration.
 
 from __future__ import annotations
 
+from document_text import read_markdown_field
+
 import hashlib
 import json
 import re
@@ -118,17 +120,6 @@ def make_canonical_job_key(job: dict[str, Any], source: str | None = None) -> st
     )
     digest = hashlib.sha1(snippet.encode("utf-8")).hexdigest()[:16] if snippet else uuid.uuid4().hex[:16]
     return f"{normalized_source}|snippet:{digest}"
-
-
-def read_markdown_field(markdown_text: str, field_name: str, default: str = "") -> str:
-    """Read a simple Markdown metadata field."""
-    prefix = f"{field_name}:"
-    for line in markdown_text.splitlines():
-        if line.lower().startswith(prefix.lower()):
-            value = line.split(":", 1)[1].strip()
-            if value and value.lower() != "not provided":
-                return value
-    return default
 
 
 def relative_path(path: Path) -> str:

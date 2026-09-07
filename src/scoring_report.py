@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import format_bullets
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -222,13 +224,6 @@ def _enforce_evidence_consistency(
 def find_resume_evidence(themes: list[str]) -> list[str]:
     """Return resume-backed evidence bullets for the selected themes."""
     return [f"Candidate source contains keywords related to {theme}." for theme in themes]
-
-
-def format_bullets(items: list[str]) -> str:
-    """Format a list as Markdown bullets, or show a placeholder if empty."""
-    if not items:
-        return "- None found"
-    return "\n".join(f"- {item}" for item in items)
 
 
 def format_reason_messages(reasons: object) -> str:

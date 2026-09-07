@@ -16,7 +16,7 @@ from docx import Document
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from analyze_job import analyze_job
+from scoring_report import analyze_job
 from candidate_document import CandidateDocumentError, SCANNED_PDF_MESSAGE, parse_candidate_document
 from workspace import WorkspaceError, initialize_personal_workspace, personal_workspace
 

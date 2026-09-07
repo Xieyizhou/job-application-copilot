@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterable
 from uuid import uuid4
 
 from company_ats import learn_ats_board, load_ats_boards, search_configured_ats_boards
-from fetch_history import read_markdown_field
+from document_text import read_markdown_field
 from jd_enrichment import (
     AMBIGUITY_MARGIN,
     _rank_safe_candidates,

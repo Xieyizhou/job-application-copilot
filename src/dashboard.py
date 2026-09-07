@@ -6,6 +6,8 @@ applications, scrape websites, or expose API credentials.
 
 from __future__ import annotations
 
+from document_text import read_text_file
+
 import contextlib
 import html
 import io
@@ -87,7 +89,7 @@ SHORTLIST_REGION_OPTIONS = [
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from analyze_job import analyze_job_structured  # noqa: E402
+from scoring_report import analyze_job_structured  # noqa: E402
 from export_documents import (  # noqa: E402
     export_cover_letter_to_docx,
     parse_job_metadata_from_package,
@@ -202,12 +204,8 @@ from dashboard_settings import (  # noqa: E402
     render_candidate_workspace_setup as render_workspace_setup_page,
     safety_notes_tab as render_settings_page,
 )
-from dashboard_titles import (  # noqa: E402
-    get_job_display_title,
-    is_placeholder_job_title,
-    read_markdown_field,
-    resolve_canonical_job_title,
-)
+from dashboard_titles import get_job_display_title, is_placeholder_job_title, resolve_canonical_job_title  # noqa: E402
+from document_text import read_markdown_field  # noqa: E402
 from dashboard_tracker import (  # noqa: E402
     TrackerPageServices,
     tracker_tab as render_tracker_page,
@@ -243,14 +241,6 @@ def run_with_captured_output(func: Any, *args: Any, **kwargs: Any) -> tuple[Any,
     error_output = stderr_buffer.getvalue().strip()
     combined = "\n".join(part for part in [output, error_output] if part)
     return result, combined
-
-
-def read_text_file(path: Path) -> str:
-    """Read text safely for preview panels."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
 
 
 def clean_job_description_path(path: Path) -> bool:

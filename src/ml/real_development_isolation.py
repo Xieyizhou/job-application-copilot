@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ml.annotation_generation import normalize_text
-from ml.evidence import useful_tokens
+from ml.evidence_text import useful_tokens
 from ml.real_development import DevelopmentDataError
 
 

@@ -22,7 +22,7 @@ from company_verification import (
     normalize_company_name,
 )
 from output_paths import safe_slug
-from fetch_history import read_markdown_field
+from document_text import read_markdown_field
 from ml.jd_quality import (
     classify_jd_quality,
     extract_description_body,

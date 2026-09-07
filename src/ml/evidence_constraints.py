@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from typing import TypedDict
 
-from ml.evidence import ACTION_PATTERN, concept_tags, stated_years, useful_tokens
+from ml.evidence_text import ACTION_PATTERN
+from ml.evidence_text import concept_tags, stated_years, useful_tokens
 from ml.evidence_constraint_taxonomy import (
     ACRONYM_PATTERN,
     CLAUSE_SPLIT_PATTERN,

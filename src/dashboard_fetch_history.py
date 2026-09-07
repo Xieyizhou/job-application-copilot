@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import read_text_file
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,14 +16,6 @@ from fetch_history import load_fetch_runs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TextReader = Callable[[Path], str]
-
-
-def read_text_file(path: Path) -> str:
-    """Read a saved Markdown preview without raising for missing files."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
 
 
 def fetch_run_label(run: dict[str, Any]) -> str:

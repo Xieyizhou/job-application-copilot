@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from analyze_job import extract_job_description_body
+from scoring_engine import extract_job_description_body
 from company_verification import verification_from_markdown, verification_status_label
 from dashboard_fit import apply_canonical_analysis, build_fit_presentation
 from dashboard_job_dedup import description_fingerprint
@@ -15,11 +15,8 @@ from dashboard_regions import (
     infer_location_from_path,
     normalize_location,
 )
-from dashboard_titles import (
-    get_job_display_title,
-    read_markdown_field,
-    resolve_canonical_job_title,
-)
+from dashboard_titles import get_job_display_title, resolve_canonical_job_title
+from document_text import read_markdown_field
 from ml.jd_quality import classify_jd_quality
 from scoring_types import DashboardJob, TrackerRow
 

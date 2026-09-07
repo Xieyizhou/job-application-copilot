@@ -11,16 +11,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from analyze_job import (  # noqa: E402
-    DIRECT_MATCH_STRENGTH,
-    calculate_match_score,
-    calculate_score_breakdown,
-    evaluate_eligibility,
-    find_keywords,
-    infer_candidate_experience_profile,
-    parse_job_description,
-    score_job_texts,
-)
+from scoring_config import DIRECT_MATCH_STRENGTH
+from scoring_engine import calculate_match_score, calculate_score_breakdown, score_job_texts
+from scoring_eligibility import evaluate_eligibility
+from scoring_extraction import find_keywords, infer_candidate_experience_profile, parse_job_description
 
 
 CASES_PATH = PROJECT_ROOT / "tests" / "fixtures" / "scoring_cases.json"

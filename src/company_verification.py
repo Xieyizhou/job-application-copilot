@@ -6,6 +6,8 @@ cleaned, scored, and either trusted at high confidence or confirmed by the user.
 
 from __future__ import annotations
 
+from document_text import read_markdown_field
+
 import re
 from datetime import datetime
 from pathlib import Path
@@ -587,17 +589,6 @@ def upsert_markdown_fields(path: Path, fields: dict[str, str]) -> None:
         else:
             lines[existing_index] = line
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
-
-
-def read_markdown_field(markdown_text: str, field_name: str, default: str = "") -> str:
-    """Read a simple metadata field from Markdown."""
-    prefix = f"{field_name}:"
-    for line in markdown_text.splitlines():
-        if line.lower().startswith(prefix.lower()):
-            value = line.split(":", 1)[1].strip()
-            if value and value.lower() != "not provided":
-                return value
-    return default
 
 
 def parse_bool(value: Any) -> bool:

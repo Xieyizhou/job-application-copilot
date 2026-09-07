@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _validate_aligned
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -110,11 +112,3 @@ def _support_feature_matrix(
     )
 
 
-def _validate_aligned(
-    requirements: Sequence[str],
-    evidence: Sequence[str],
-) -> None:
-    if len(requirements) != len(evidence):
-        raise ValueError("requirements and evidence must have equal lengths")
-    if not requirements:
-        raise ValueError("at least one requirement/evidence pair is required")

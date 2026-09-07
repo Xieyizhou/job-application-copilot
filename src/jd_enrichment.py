@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from fetch_history import canonicalize_job_url, read_markdown_field, sync_job_index_record
+from fetch_history import canonicalize_job_url, sync_job_index_record
+from document_text import read_markdown_field
 from fetch_jobs import (
     JSearchNoFullDescriptionsError,
     JSearchNoResultsError,

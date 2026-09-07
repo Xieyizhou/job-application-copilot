@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 
+from ml.evidence_text import ACTION_PATTERN
+from ml.evidence_constraints import constraint_features
+
 
 DEGREES = (
     (3, r"\b(?:ph\.?d\.?|doctorate|doctoral)\b"),
@@ -26,10 +29,6 @@ ACTION_FAMILIES = (
 
 def label_checks(requirement: str, evidence: str) -> tuple[bool, list[str]]:
     """Return hard rejection and reasons to prohibit Direct for this exact pair."""
-    # Local import keeps the research feature module independent at import time.
-    from ml.evidence import ACTION_PATTERN
-    from ml.evidence_constraints import constraint_features
-
     reasons: list[str] = []
     required = [(level, match) for level, pattern in DEGREES for match in re.finditer(pattern, requirement, re.I)]
     levels = [level for level, _ in required]

@@ -7,7 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from analyze_job import analyze_job
+from scoring_report import analyze_job
 from tracker import initialize_database
 from src.workspace import (
     CandidateProfile,

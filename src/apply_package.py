@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import Any, TypedDict
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from analyze_job import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARNING, UK_HPI_NOTE, analyze_job
+from scoring_config import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARNING, UK_HPI_NOTE
+from scoring_report import analyze_job
 from company_verification import assert_cover_letter_company_verified, parse_bool
 from export_documents import export_application_package
 from generate_cover_letter import generate_cover_letter

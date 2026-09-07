@@ -9,7 +9,7 @@ import json
 import re
 
 from ml.annotation_generation import CONTACT_PATTERN, normalize_text
-from ml.evidence import clean_source_line, useful_tokens
+from ml.evidence_text import clean_source_line, useful_tokens
 
 
 LEGACY_SOURCE_TEXT_QUALITY = "legacy"

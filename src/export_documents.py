@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import clean_duplicated_punctuation
+
 import argparse
 import re
 import warnings
@@ -53,21 +55,6 @@ def validate_employer_content(label: str, markdown_text: str) -> list[str]:
             warnings.append(f"{label}: found forbidden standalone title 'Cover Letter'")
 
     return warnings
-
-
-def clean_duplicated_punctuation(text: str) -> str:
-    """Fix common duplicated periods before writing employer-facing content."""
-    replacements = {
-        "Pte..": "Pte.",
-        "Ltd..": "Ltd.",
-        "Inc..": "Inc.",
-        "Company..": "Company.",
-    }
-
-    for bad_text, clean_text in replacements.items():
-        text = text.replace(bad_text, clean_text)
-
-    return text
 
 
 def configure_document_styles(document: DocumentType) -> None:

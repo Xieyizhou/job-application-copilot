@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _mean
+
 from collections import Counter, defaultdict
 from typing import Any
 
-import numpy as np
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -60,10 +61,6 @@ def classification_metrics(
         .tolist(),
         "prediction_counts": dict(Counter(predictions)),
     }
-
-
-def _mean(values: list[bool] | list[float]) -> float:
-    return float(np.mean(values)) if values else 0.0
 
 
 def task_retrieval_metrics(
