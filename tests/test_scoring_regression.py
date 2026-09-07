@@ -5,6 +5,14 @@ from __future__ import annotations
 import json
 import sys
 import unittest
+
+
+def test_empty_manual_visa_metadata_is_not_an_employer_requirement() -> None:
+    from scoring_extraction import find_red_flags
+
+    text = '# Analyst\nVisa Note: Not provided\n\n## Job Description\nPython required.'
+    assert find_red_flags(text, 'Python experience') == []
+    assert find_red_flags(text.replace('Not provided', 'Visa sponsorship required'), 'Python experience')
 from pathlib import Path
 
 
