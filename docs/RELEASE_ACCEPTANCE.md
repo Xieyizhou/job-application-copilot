@@ -5,22 +5,22 @@ data, raw browser captures, and sensitive logs stay local.
 
 ## Candidate identity
 
-- Candidate code commit: `73aea72`; documentation/media candidate: `1ff31f6`
-- Final `main` commit: pending
+- Candidate code commit: `73aea72`; documentation/media candidate: `096d56d`
+- Final `main` commit and post-merge CI: recorded in the [immutable release notes](https://github.com/Xieyizhou/job-application-copilot/releases/tag/v1.0.0) after the merge gates pass.
 - Pull request: [#4](https://github.com/Xieyizhou/job-application-copilot/pull/4)
-- Candidate CI: [run 34094266245](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34094266245), all seven jobs passed on `1ff31f6`
-- Release tag and URL: pending
+- Candidate CI: [run 34095864293](https://github.com/Xieyizhou/job-application-copilot/actions/runs/34095864293), all seven jobs passed on `096d56d`
+- Release tag: `v1.0.0`; the release notes are the final commit/CI ledger.
 
 ## Automated gates
 
 | Gate | Environment | Status | Evidence |
 | --- | --- | --- | --- |
-| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI passed; local: 329 passed + 198 subtests; CI 75.8%, local 76.4% coverage |
-| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI: 319 passed, 1 documented private-data skip, 80.7% |
-| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Passed on `1ff31f6` | CI run 34094266245 and local validation |
-| Scoring benchmark and privacy audit | Linux, Python 3.11 | Passed on `1ff31f6` | Local benchmark 48/48; privacy audit passed |
-| Public v21 contract | Linux, Python 3.11/3.12 | Passed on `1ff31f6` | CI run 34094266245; product integration intentionally false |
-| Base install and supported launcher | macOS, Python 3.11/3.12 | Passed on `1ff31f6` | Both macOS matrix jobs passed in run 34094266245 |
+| Core suite and coverage >= 68% | Linux, Python 3.11/3.12 | Passed on `096d56d` | CI passed; local: 329 passed + 198 subtests; CI 75.8%; clean macOS 76.3% (3.11), 76.1% (3.12) coverage |
+| ML suite and coverage >= 80% | Linux, Python 3.11/3.12 | Passed on `096d56d` | CI: 319 passed, 1 documented private-data skip, 80.7% |
+| Ruff, mypy, compileall, pip check | Linux, Python 3.11 | Passed on `096d56d` | CI run 34095864293 and local validation |
+| Scoring benchmark and privacy audit | Linux, Python 3.11 | Passed on `096d56d` | Local benchmark 48/48; privacy audit passed |
+| Public v21 contract | Linux, Python 3.11/3.12 | Passed on `096d56d` | CI run 34095864293; product integration intentionally false |
+| Base install and supported launcher | macOS, Python 3.11/3.12 | Passed on `096d56d` | Both macOS matrix jobs passed in run 34095864293 |
 
 ## Manual product acceptance
 
@@ -40,9 +40,9 @@ data, raw browser captures, and sensitive logs stay local.
 | --- | --- | --- | --- |
 | Chrome unpacked companion | Clean macOS browser profile | Passed: load, live import, invalid token, offline recovery | 2026-09-07; user-operated independent Chrome, saved result verified locally |
 | Edge unpacked companion | Outside stable support scope | Not verified; experimental compatibility | 2026-09-07; scope narrowed by release owner |
-| Greenhouse public posting | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
-| Lever public posting | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
-| Ordinary-page fallback | Live representative posting; no application submitted | Passed on `1ff31f6` | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
+| Greenhouse public posting | Live representative posting; no application submitted | Passed; extractor unchanged since live verification | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
+| Lever public posting | Live representative posting; no application submitted | Passed; extractor unchanged since live verification | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
+| Ordinary-page fallback | Live representative posting; no application submitted | Passed; extractor unchanged since live verification | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
 | Invalid token and offline recovery | Chrome on macOS | Passed | 2026-09-07; invalid-token rejection, offline error, same-token restart recovery |
 
 Credential-backed Adzuna, Jooble, and JSearch checks are experimental. Record only whether
@@ -74,7 +74,11 @@ Safari extension import is outside scope. This is a support-scope change, not an
   no developer credentials, models, caches, or historical Personal data. Both supported
   launchers passed first start, occupied-port rejection without corrupting the active
   connection, SIGINT shutdown of both services, and restart with the original token.
-  Optional development/ML installation and clean-environment suites are still running.
+  Both Python versions passed development/ML installation and all clean-environment
+  checks: core 329 + 198 subtests (3.11: 76.3%; 3.12: 76.1%), ML 319 with one documented
+  skip (80.7%), benchmark 48/48, semantic fixture validation and the v21 public contract.
+  The semantic fixture result remains 23/24 (95.8%), F1 94.7%, with known case
+  `real-sem-005` unmatched; this is a measured model limitation, not hiring-outcome accuracy.
   Python 3.12 mypy uses `--python-version 3.12`: its installed NumPy stubs use Python 3.12
   syntax. The default Python 3.11 compatibility target remains checked by CI.
 - Rendered Personal setup, resume upload, manual text and Markdown import, full/partial JD
@@ -141,6 +145,27 @@ Safari extension import is outside scope. This is a support-scope change, not an
   preserving flattened explicit headings. All three fixed Demo scores remain unchanged
   (92, 92, 69); the Data Analyst requirement count changes from 9 to 8 as expected.
 
+## Independent rollback points
+
+Release fixes retain separate regression and implementation commits. Revert a selected
+implementation on a new branch, keep its regression test, and validate the resulting
+behavior before publishing a patch. Some reverts intentionally restore the reproduced bug;
+they are diagnostic rollback points, not automatically safe release candidates.
+
+| Regression | Implementation | Scope |
+| --- | --- | --- |
+| `d659034` | `00750f4` | Advertised Markdown JD recovery |
+| `19564d9` | `e96de46` | Preserve active companion on occupied port |
+| `9b45ede` | `45db0d6` | Distinguish prose from a JD heading |
+| `6071de9` | `abb9659` | Manually entered title submission |
+| `1bdba93` | `65ac9fd` | Base Personal startup without optional ML |
+| `3ef9a71` | `8d92001` | Demo evidence freshness |
+| `71f3978` | `b392e41` | Empty Visa Note warning |
+| `f01e47e` | `73aea72` | Dashboard/report/Tracker score agreement |
+
+The earlier internal-refactor rollback sequence remains in
+[the simplification review](CODE_SIMPLIFICATION_REVIEW.md#回滚与复现).
+
 ## Release blockers
 
 - Any failed supported macOS, Python, Chrome, Greenhouse, or Lever acceptance row.
@@ -152,6 +177,9 @@ Safari extension import is outside scope. This is a support-scope change, not an
 
 ## Sign-off
 
-Do not replace Pending with Passed until the evidence is tied to the final candidate. Before
-tagging, fetch remote tags again and stop if `v1.0.0` exists. After tagging, verify the source
-archive and documented startup from the immutable tag.
+Local acceptance and candidate CI have passed. The final documentation commit must pass
+CI before merge; the exact merged commit must then pass main CI, fresh installation and
+Demo startup before tagging. Those post-merge results and commit identities are recorded
+in the release notes, avoiding a self-referential source commit. Re-read remote tags and
+stop if `v1.0.0` exists. After tagging, verify the source archive and documented startup
+from the immutable tag.
