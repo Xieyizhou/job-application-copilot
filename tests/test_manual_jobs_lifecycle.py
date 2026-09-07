@@ -206,7 +206,7 @@ Experience with Python and SQL is required.
         weak = job_document.ExtractionResult("short", warning="weak", report={"warnings": ["weak"]})
         strong = job_document.ExtractionResult("x" * 600, report={"warnings": []})
         with patch.object(job_document, "extract_pdf_with_pdfplumber", return_value=weak), patch.object(
-            job_document, "extract_pdf_with_pymupdf", return_value=strong
+            job_document, "extract_pdf_with_pdfium", return_value=strong
         ):
             selected = job_document.extract_text_from_pdf(b"pdf")
         self.assertEqual(selected.text, strong.text)
@@ -214,8 +214,8 @@ Experience with Python and SQL is required.
 
         empty = job_document.ExtractionResult("", warning="unavailable", report={"method": "none"})
         with patch.object(job_document, "extract_pdf_with_pdfplumber", return_value=empty), patch.object(
-            job_document, "extract_pdf_with_pymupdf", return_value=empty
-        ), patch.object(job_document, "extract_pdf_with_pymupdf_ocr", return_value=empty):
+            job_document, "extract_pdf_with_pdfium", return_value=empty
+        ), patch.object(job_document, "extract_pdf_with_pdfium_ocr", return_value=empty):
             failed = job_document.extract_text_from_pdf(b"pdf")
         self.assertFalse(failed.text)
         self.assertIn("unavailable", failed.warning)

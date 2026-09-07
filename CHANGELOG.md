@@ -12,12 +12,15 @@ All notable public changes are documented here.
 - Public Greenhouse and Lever job-description recovery with safe ordinary-page fallback.
 - Local Chrome and Edge page-import companion.
 - Public MiniLM v21 validation contract and reproducible semantic checks.
+- PDF text extraction and OCR rendering through the permissively licensed PDFium backend.
 
 ### Changed
 
 - Simplified internal module boundaries while preserving public commands, extension
   messages, persisted workspace records, and model artifact formats.
 - Made JD completeness, eligibility, confidence, and role fit independent review signals.
+- Replaced the AGPL/commercial PyMuPDF dependency with pypdfium2 while preserving PDF
+  upload and OCR fallback behavior.
 
 ### Security and privacy
 

@@ -151,7 +151,8 @@ the private teacher dataset or download unpublished weights.
 
 [Usage](docs/USAGE.md) · [Scoring Method](docs/SCORING_METHOD.md) ·
 [Model Card](docs/MODEL_CARD.md) · [ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md) ·
-[Release acceptance](docs/RELEASE_ACCEPTANCE.md) · [Security](SECURITY.md)
+[Release acceptance](docs/RELEASE_ACCEPTANCE.md) · [Security](SECURITY.md) ·
+[Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## License
 

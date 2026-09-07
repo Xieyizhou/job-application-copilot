@@ -45,8 +45,8 @@ def extract_text_from_upload(filename: str, file_bytes: bytes) -> ExtractionResu
 def extract_text_from_pdf(file_bytes: bytes) -> ExtractionResult:
     """Extract PDF text using optional libraries without making startup brittle.
 
-    The pipeline tries text-native extraction first, then falls back to PyMuPDF.
-    If a PDF appears scanned/image-only, PyMuPDF page rendering plus Tesseract OCR
+    The pipeline tries text-native extraction first, then falls back to PDFium.
+    If a PDF appears scanned/image-only, PDFium page rendering plus Tesseract OCR
     is attempted only when both pytesseract and the tesseract binary are present.
     """
     reports = []
@@ -60,24 +60,24 @@ def extract_text_from_pdf(file_bytes: bytes) -> ExtractionResult:
     if plumber_result.report:
         reports.append(plumber_result.report)
 
-    pymupdf_result = extract_pdf_with_pymupdf(file_bytes)
-    if pymupdf_result.text and (
+    pdfium_result = extract_pdf_with_pdfium(file_bytes)
+    if pdfium_result.text and (
         not plumber_result.text
-        or len(pymupdf_result.text) > len(plumber_result.text)
-        or not pdf_extraction_is_low_quality(pymupdf_result)
+        or len(pdfium_result.text) > len(plumber_result.text)
+        or not pdf_extraction_is_low_quality(pdfium_result)
     ):
         if warnings:
-            pymupdf_result.warning = join_unique_warnings([*warnings, pymupdf_result.warning])
-        return pymupdf_result
+            pdfium_result.warning = join_unique_warnings([*warnings, pdfium_result.warning])
+        return pdfium_result
     if plumber_result.text:
         plumber_result.warning = join_unique_warnings([*warnings, plumber_result.warning])
         return plumber_result
-    if pymupdf_result.warning:
-        warnings.append(pymupdf_result.warning)
-    if pymupdf_result.report:
-        reports.append(pymupdf_result.report)
+    if pdfium_result.warning:
+        warnings.append(pdfium_result.warning)
+    if pdfium_result.report:
+        reports.append(pdfium_result.report)
 
-    ocr_result = extract_pdf_with_pymupdf_ocr(file_bytes)
+    ocr_result = extract_pdf_with_pdfium_ocr(file_bytes)
     if ocr_result.text:
         if warnings:
             ocr_result.warning = join_unique_warnings([*warnings, ocr_result.warning])
@@ -133,66 +133,71 @@ def extract_pdf_with_pdfplumber(file_bytes: bytes) -> ExtractionResult:
     return ExtractionResult(text, warning=warning, report=report)
 
 
-def extract_pdf_with_pymupdf(file_bytes: bytes) -> ExtractionResult:
-    """Extract all pages with PyMuPDF/fitz when available."""
+def extract_pdf_with_pdfium(file_bytes: bytes) -> ExtractionResult:
+    """Extract all pages with PDFium when available."""
     try:
-        import fitz
+        import pypdfium2 as pdfium
     except ImportError:
         return ExtractionResult(
             "",
-            warning="PyMuPDF is not installed; PDF fallback extraction is unavailable.",
-            report={"method": "pymupdf", "available": False},
+            warning="pypdfium2 is not installed; PDF fallback extraction is unavailable.",
+            report={"method": "pdfium", "available": False},
         )
 
     page_text = []
-    document = fitz.open(stream=file_bytes, filetype="pdf")
+    document = pdfium.PdfDocument(file_bytes)
     try:
-        metadata = dict(document.metadata or {})
+        metadata = dict(document.get_metadata_dict() or {})
         for page in document:
-            page_text.append(page.get_text("text") or "")
+            text_page = page.get_textpage()
+            try:
+                page_text.append(text_page.get_text_range() or "")
+            finally:
+                text_page.close()
+                page.close()
     finally:
         document.close()
     text = format_pdf_pages(page_text)
-    report = build_pdf_extraction_report("pymupdf", page_text, text, metadata)
+    report = build_pdf_extraction_report("pdfium", page_text, text, metadata)
     warning = "\n".join(report["warnings"])
     return ExtractionResult(text, warning=warning, report=report)
 
 
-def extract_pdf_with_pymupdf_ocr(file_bytes: bytes) -> ExtractionResult:
-    """OCR scanned PDFs only when PyMuPDF, Pillow, pytesseract, and Tesseract exist."""
+def extract_pdf_with_pdfium_ocr(file_bytes: bytes) -> ExtractionResult:
+    """OCR scanned PDFs only when PDFium, Pillow, pytesseract, and Tesseract exist."""
     if shutil.which("tesseract") is None:
         return ExtractionResult(
             "",
             warning="PDF text extraction may be incomplete. OCR is not available locally. Mac: brew install tesseract",
-            report={"method": "pymupdf_ocr", "available": False},
+            report={"method": "pdfium_ocr", "available": False},
         )
 
     try:
-        import fitz
-        from PIL import Image
+        import pypdfium2 as pdfium
         import pytesseract
     except ImportError:
         return ExtractionResult(
             "",
-            warning="PDF OCR dependencies are not installed. Install PyMuPDF, Pillow, and pytesseract or paste manually.",
-            report={"method": "pymupdf_ocr", "available": False},
+            warning="PDF OCR dependencies are not installed. Install pypdfium2, Pillow, and pytesseract or paste manually.",
+            report={"method": "pdfium_ocr", "available": False},
         )
 
-    import io
-
     page_text = []
-    document = fitz.open(stream=file_bytes, filetype="pdf")
+    document = pdfium.PdfDocument(file_bytes)
     try:
-        metadata = dict(document.metadata or {})
+        metadata = dict(document.get_metadata_dict() or {})
         for page in document:
-            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            image = Image.open(io.BytesIO(pixmap.tobytes("png")))
-            page_text.append(pytesseract.image_to_string(image) or "")
+            bitmap = page.render(scale=2)
+            try:
+                page_text.append(pytesseract.image_to_string(bitmap.to_pil()) or "")
+            finally:
+                bitmap.close()
+                page.close()
     finally:
         document.close()
 
     text = format_pdf_pages(page_text)
-    report = build_pdf_extraction_report("pymupdf_ocr", page_text, text, metadata)
+    report = build_pdf_extraction_report("pdfium_ocr", page_text, text, metadata)
     warning = "\n".join(report["warnings"])
     return ExtractionResult(text, warning=warning, report=report)
 
