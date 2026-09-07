@@ -135,6 +135,37 @@ class JobPageExtractionTests(unittest.TestCase):
 
     @patch("job_page_fetch._public_http_url", return_value=True)
     @patch("job_page_fetch.requests.get")
+    def test_fetch_uses_linked_markdown_job_description(self, get: Mock, _public: Mock) -> None:
+        html_response = Mock()
+        html_response.is_redirect = False
+        html_response.is_permanent_redirect = False
+        html_response.status_code = 200
+        html_response.headers = {"Content-Type": "text/html"}
+        html_response.content = b"html"
+        html_response.encoding = "utf-8"
+        html_response.text = (
+            '<html><head><title>Data Analyst - Example</title>'
+            '<link rel="alternate" type="text/markdown" '
+            'href="https://jobs.example.com/jobs/view/ABC123.md"></head><body></body></html>'
+        )
+        html_response.raise_for_status.return_value = None
+
+        markdown_response = Mock()
+        markdown_response.status_code = 200
+        markdown_response.headers = {"Content-Type": "text/markdown"}
+        markdown_response.content = DESCRIPTION.encode()
+        markdown_response.encoding = "utf-8"
+        markdown_response.text = DESCRIPTION
+        markdown_response.raise_for_status.return_value = None
+        get.side_effect = [html_response, markdown_response]
+
+        page = fetch_job_page("https://jobs.example.com/123")
+
+        self.assertEqual(page.extractor, "linked_job_markdown")
+        self.assertIn("data-quality checks", page.description)
+
+    @patch("job_page_fetch._public_http_url", return_value=True)
+    @patch("job_page_fetch.requests.get")
     def test_fetch_rejects_non_html_response(self, get: Mock, _public: Mock) -> None:
         response = Mock()
         response.is_redirect = False
