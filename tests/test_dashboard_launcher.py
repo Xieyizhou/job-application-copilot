@@ -90,6 +90,23 @@ class DashboardLauncherTests(unittest.TestCase):
             self.assertTrue(companion.stopped)
             self.assertFalse((companion_dir / "connection.json").exists())
 
+    def test_second_launch_preserves_running_companion_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            companion_dir = Path(temp_dir)
+            connection = companion_dir / "connection.json"
+            original = '{"endpoint":"http://127.0.0.1:8765","token":"fictional-token"}\n'
+            connection.write_text(original)
+            with (
+                patch.object(run_dashboard, "configure_arrow_memory_pool", return_value="system"),
+                patch.object(run_dashboard, "COMPANION_DIR", companion_dir),
+                patch("browser_companion.load_or_create_token", return_value="fictional-token"),
+                patch("browser_companion.start_browser_companion", side_effect=OSError("port occupied")),
+                patch("streamlit.web.cli.main", return_value=None),
+            ):
+                self.assertEqual(run_dashboard.main([]), 0)
+            self.assertTrue(connection.exists(), "Second launch removed the first app's connection")
+            self.assertEqual(connection.read_text(), original)
+
 
 if __name__ == "__main__":
     unittest.main()
