@@ -7,7 +7,7 @@ continuously tested but is not part of the first-release desktop acceptance prom
 Windows is not currently supported.
 
 ```bash
-git clone https://github.com/your-account/job-application-copilot.git
+git clone https://github.com/Xieyizhou/job-application-copilot.git
 cd job-application-copilot
 python3 -m venv .venv
 source .venv/bin/activate

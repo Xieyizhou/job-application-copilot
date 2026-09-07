@@ -69,6 +69,8 @@ the supported browsers for the optional local import companion. Linux remains co
 automated tests, but this release does not claim Windows support.
 
 ```bash
+git clone https://github.com/Xieyizhou/job-application-copilot.git
+cd job-application-copilot
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -80,6 +82,9 @@ Choose **Explore Read-only Demo** in the sidebar. Personal mode accepts Markdown
 DOCX, and text-based PDF resumes.
 
 ## Optional live job search
+
+JSearch, Adzuna, and Jooble are experimental in v1.0.0: live release acceptance has
+not been completed for these credential-backed services.
 
 Copy `.env.example` to `.env` and configure only the desired providers. The recovery path
 prefers public Greenhouse/Lever ATS endpoints, then structured JobPosting JSON-LD, safe
