@@ -145,14 +145,12 @@ from dashboard_review_page import (  # noqa: E402
 )
 from dashboard_shell import (  # noqa: E402
     PAGE_NAMES,
-    render_global_styles as render_shell_styles,
-    render_sidebar as render_shell_sidebar,
     run_app,
     switch_workspace_mode as switch_shell_workspace_mode,
 )
 from dashboard_settings import (  # noqa: E402
     SettingsPageServices,
-    render_candidate_workspace_setup as render_workspace_setup_page,
+    render_candidate_workspace_setup,
     safety_notes_tab as render_settings_page,
 )
 from dashboard_titles import resolve_canonical_job_title  # noqa: E402
@@ -653,69 +651,6 @@ def manual_job_target_tab() -> None:
     )
 
 
-JOB_CARD_METADATA_PREFIXES = {
-    "company",
-    "role",
-    "location",
-    "job url",
-    "source",
-    "source job id",
-    "created at",
-    "company raw",
-    "company normalized",
-    "company confidence",
-    "company needs review",
-    "company evidence",
-    "company candidates",
-    "company confirmed by user",
-    "company confirmed at",
-    "canonical job key",
-    "first seen at",
-    "last seen at",
-    "first seen fetch run id",
-    "last seen fetch run id",
-    "latest fetch run id",
-    "fetch run ids",
-}
-
-
-def clean_card_text(value: Any, fallback: str = "-") -> str:
-    """Return one-line text that cannot be interpreted as Markdown headings."""
-    text = " ".join(str(value or "").split())
-    text = re.sub(r"^[#>*_`\\-\\s]+", "", text).strip()
-    return text or fallback
-
-
-def is_card_metadata_line(line: str) -> bool:
-    """Return True for saved-job metadata lines that should not appear in cards."""
-    if ":" not in line:
-        return False
-    key = line.split(":", 1)[0].strip().lower().lstrip("#").strip()
-    return key in JOB_CARD_METADATA_PREFIXES
-
-
-def clean_job_card_snippet(preview: str, limit: int = 180) -> str:
-    """Build a short card snippet from job body text, not saved metadata."""
-    body_lines: list[str] = []
-    in_job_description = False
-    for raw_line in str(preview or "").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        normalized = line.lower().strip("# ").strip()
-        if normalized in {"job description", "description", "about the role"}:
-            in_job_description = True
-            continue
-        if is_card_metadata_line(line):
-            continue
-        if line.startswith("#") and not in_job_description:
-            continue
-        line = re.sub(r"^[#>*_`\\-\\s]+", "", line).strip()
-        if line:
-            body_lines.append(line)
-
-    snippet = " ".join(" ".join(body_lines).split())
-    return snippet[:limit].rstrip()
 
 
 def structured_fit_analysis(job: DashboardJob, job_text: str) -> dict[str, Any]:
@@ -833,31 +768,9 @@ def safety_notes_tab() -> None:
     )
 
 
-def render_candidate_workspace_setup(workspace: Workspace) -> None:
-    """Render Personal workspace setup through the extracted page module."""
-    render_workspace_setup_page(workspace)
-
-
-def render_global_styles() -> None:
-    """Apply the shared Streamlit shell styles."""
-    render_shell_styles(st)
-
-
 def switch_workspace_mode(mode: str) -> None:
     """Compatibility wrapper for workspace-mode state transitions."""
     switch_shell_workspace_mode(st.session_state, mode)
-
-
-def render_sidebar() -> None:
-    """Compatibility wrapper for the shared Personal-first sidebar."""
-    render_shell_sidebar(
-        st,
-        current_workspace=current_workspace,
-        list_job_description_files=list_job_description_files,
-        count_generated_packages=count_generated_packages,
-        load_tracker_rows=load_tracker_rows,
-        demo_mode_enabled=demo_mode_enabled,
-    )
 
 
 def main() -> None:
