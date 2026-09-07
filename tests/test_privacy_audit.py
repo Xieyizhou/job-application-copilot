@@ -15,6 +15,15 @@ from privacy_audit import agent_prompt_path_reason, scan_file
 
 
 class AgentPromptGuardTests(unittest.TestCase):
+    def test_fictional_demo_contact_is_allowed_but_other_email_is_detected(self) -> None:
+        findings = scan_file(PROJECT_ROOT / "src/dashboard_demo_resume.py", [])
+        self.assertFalse(any(finding.category == "email" for finding in findings))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "contact.txt"
+            path.write_text("contact" + "@" + "company.test", encoding="utf-8")
+            findings = scan_file(path, [])
+        self.assertTrue(any(finding.category == "email" for finding in findings))
+
     def test_reserved_agent_prompt_paths_are_blocked(self) -> None:
         blocked_paths = [
             Path("AGENTS.md"),

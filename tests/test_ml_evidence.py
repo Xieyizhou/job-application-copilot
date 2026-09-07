@@ -19,6 +19,32 @@ NO_MODEL = Path("/missing/portable-relevance-model.json")
 
 
 class SemanticEvidenceTests(unittest.TestCase):
+
+    def test_wrapped_resume_bullets_are_joined_before_matching(self) -> None:
+        resume = """EXPERIENCE
+• Built a reproducible ML research pipeline with deterministic PyTorch training,
+ONNX packaging, model evaluation, and production inference checks.
+• Delivered concise reports to project stakeholders.
+"""
+        records = extract_resume_evidence_records(resume)
+        self.assertEqual(len(records), 2)
+        self.assertIn("production inference checks", records[0]["text"])
+
+    def test_plain_resume_headings_do_not_merge_into_previous_bullets(self) -> None:
+        resume = """EDUCATION
+• Bachelor of Science in Cognitive Science.
+TECHNICAL SKILLS
+• Programming: Python, SQL, and Bash.
+EXPERIENCE
+• Built a reproducible training pipeline with PyTorch,
+ONNX packaging and production evaluation checks.
+Peer Educator, Example University
+• Delivered 60 instructional sessions.
+"""
+        records = extract_resume_evidence_records(resume)
+        self.assertNotIn("TECHNICAL SKILLS", records[0]["text"])
+        self.assertTrue(any("ONNX packaging" in record["text"] for record in records))
+
     def test_etl_workflow_semantically_supports_data_pipeline_requirement(self) -> None:
         score = score_evidence_pair(
             "Build production data pipelines",

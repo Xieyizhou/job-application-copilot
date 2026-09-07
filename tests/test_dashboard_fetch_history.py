@@ -25,6 +25,7 @@ class DashboardFetchHistoryTests(unittest.TestCase):
             "total_jobs_returned": 12,
             "new_jobs_count": 4,
             "duplicate_jobs_count": 8,
+            "skipped_jobs_count": 2,
             "fetch_status": "success",
         }
 
@@ -43,6 +44,7 @@ class DashboardFetchHistoryTests(unittest.TestCase):
                     "Total returned": 12,
                     "New jobs": 4,
                     "Already seen": 8,
+                    "Skipped previews": 2,
                     "Status": "success",
                 }
             ],

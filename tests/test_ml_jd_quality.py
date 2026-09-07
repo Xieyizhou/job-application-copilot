@@ -65,6 +65,37 @@ The employer provides health coverage, paid leave, learning support, and flexibl
         self.assertGreaterEqual(result["responsibility_statement_count"], 2)
         self.assertGreaterEqual(result["quality_score"], 70)
 
+    def test_verified_browser_import_overrides_discovery_provider_hint(self) -> None:
+        job = """# Data Analyst
+Source: Jooble
+Description Source: browser_companion
+JD Fetch Status: complete
+
+## Job Description
+Responsibilities
+You will analyze product and customer data to identify trends and explain business outcomes.
+You will build and maintain SQL transformations, recurring reports, and quality checks.
+You will collaborate with product, engineering, and operations partners on measurable questions.
+You will document metric definitions and support reliable dashboard delivery for stakeholders.
+
+Requirements
+Required experience with Python and SQL for practical data analysis and reporting work.
+Must have experience with data visualization, analytical communication, and stakeholder reviews.
+Knowledge of statistics, experiment design, and data quality methods is required.
+Ability to translate ambiguous business questions into documented analytical steps is required.
+Two years of experience delivering reproducible analysis or equivalent project work is preferred.
+
+About the team
+The analytics team maintains shared data products and quality dashboards across business units.
+Members review queries, document definitions, diagnose recurring failures, and collaborate with
+engineering partners on privacy-aware data handling and reliable delivery. The role combines
+independent investigation, peer review, stakeholder communication, and recurring operational work.
+"""
+        result = classify_jd_quality(job)
+        self.assertTrue(result["explicit_full_source"])
+        self.assertFalse(result["explicit_snippet_source"])
+        self.assertTrue(result["reliable_scoring_ready"])
+
     def test_markdown_subheadings_remain_part_of_saved_job_description(self) -> None:
         job = """# Data Engineer
 Source: Manual

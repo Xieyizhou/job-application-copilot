@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import normalize_comparison_text
+
 import hashlib
 import random
 import re
@@ -43,11 +45,6 @@ ROLE_TERMS = {
 }
 
 
-def normalize_text(text: str) -> str:
-    """Return a stable comparison key without retaining formatting noise."""
-    return " ".join(re.sub(r"[^a-z0-9+#]+", " ", text.lower()).split())
-
-
 def sanitize_snippet(text: str) -> str:
     """Remove contact strings and normalize one local annotation snippet."""
     cleaned = CONTACT_PATTERN.sub("[redacted]", " ".join(text.split()))
@@ -71,8 +68,8 @@ def extract_requirement_sentences(job_text: str) -> list[str]:
         has_domain_detail = sum(term in lowered for term in TECHNICAL_TERMS) >= 2
         if not (has_requirement or has_domain_detail):
             continue
-        key = normalize_text(sentence)
-        if key and key not in {normalize_text(item) for item in selected}:
+        key = normalize_comparison_text(sentence)
+        if key and key not in {normalize_comparison_text(item) for item in selected}:
             selected.append(sentence)
     return selected[:8]
 
@@ -90,8 +87,8 @@ def extract_evidence_sentences(resume_text: str) -> list[str]:
         factual = any(term in lowered for term in EVIDENCE_TERMS)
         if not (action_led or technical or factual):
             continue
-        key = normalize_text(sentence)
-        if key and key not in {normalize_text(item) for item in selected}:
+        key = normalize_comparison_text(sentence)
+        if key and key not in {normalize_comparison_text(item) for item in selected}:
             selected.append(sentence)
     return selected[:30]
 
@@ -146,7 +143,7 @@ def candidate_records(
             chosen.append(hard_negative)
     records: list[dict[str, Any]] = []
     for _score, sentence in chosen:
-        candidate_id = hashlib.sha256(normalize_text(sentence).encode()).hexdigest()[:16]
+        candidate_id = hashlib.sha256(normalize_comparison_text(sentence).encode()).hexdigest()[:16]
         records.append(
             {
                 "candidate_id": candidate_id,
@@ -191,7 +188,7 @@ def build_tasks_from_records(
         if not requirements:
             requirements = extract_requirement_sentences(job_text)
         for requirement in requirements[:4]:
-            requirement_key = normalize_text(requirement)
+            requirement_key = normalize_comparison_text(requirement)
             if not requirement_key or requirement_key in seen_requirements:
                 continue
             task_material = "\0".join(

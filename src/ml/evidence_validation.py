@@ -8,7 +8,7 @@ from typing import Any
 
 import joblib
 
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.annotation_metrics import decision_metrics
 from ml.evidence_artifact import EvidenceArtifactError, validate_evidence_artifact
 from ml.validation import (

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _mean
+
 from collections.abc import Sequence
 from typing import Any, NotRequired, TypedDict
 
@@ -277,5 +279,3 @@ def paired_stratified_bootstrap_delta(
     }
 
 
-def _mean(values: Sequence[bool] | Sequence[float]) -> float:
-    return float(np.mean(values)) if values else 0.0

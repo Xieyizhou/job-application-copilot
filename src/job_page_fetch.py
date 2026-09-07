@@ -9,7 +9,8 @@ import socket
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
+import re
 
 import requests
 
@@ -81,6 +82,7 @@ class _VisibleTextParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.capture_all = capture_all
         self.json_ld: list[str] = []
+        self.markdown_links: list[str] = []
         self.containers: list[list[str]] = []
         self._script_type = ""
         self._script_parts: list[str] = []
@@ -92,6 +94,13 @@ class _VisibleTextParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._depth += 1
         attributes = {key.lower(): str(value or "") for key, value in attrs}
+        if (
+            tag.lower() == "link"
+            and "alternate" in attributes.get("rel", "").lower().split()
+            and attributes.get("type", "").lower() == "text/markdown"
+            and attributes.get("href")
+        ):
+            self.markdown_links.append(attributes["href"])
         if tag.lower() == "script":
             self._script_type = attributes.get("type", "").lower()
             self._script_parts = []
@@ -227,9 +236,250 @@ def extract_job_page(html_text: str, source_url: str) -> FetchedJobPage:
     )
 
 
+def _fetch_linked_job_markdown(html_text: str, source_url: str) -> FetchedJobPage | None:
+    """Read a page-advertised Markdown representation of the same public job."""
+    parser = _VisibleTextParser()
+    parser.feed(html_text)
+    for href in parser.markdown_links:
+        markdown_url = urljoin(source_url, href)
+        if not _public_http_url(markdown_url):
+            continue
+        try:
+            response = requests.get(
+                markdown_url,
+                headers={**REQUEST_HEADERS, "Accept": "text/markdown,text/plain"},
+                timeout=(5, 20),
+                allow_redirects=False,
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+        content_type = response.headers.get("Content-Type", "").lower()
+        if content_type and not any(kind in content_type for kind in ("markdown", "text/plain")):
+            continue
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            continue
+        response.encoding = response.encoding or "utf-8"
+        description = _normalize_text(response.text)
+        if len(description.split()) < 50:
+            continue
+        title = next(
+            (line.removeprefix("# ").strip() for line in description.splitlines() if line.startswith("# ")),
+            "",
+        )
+        return FetchedJobPage(
+            description=description,
+            source_url=source_url,
+            extractor="linked_job_markdown",
+            title=title,
+        )
+    return None
+
+
+def _fetch_public_json(url: str) -> dict[str, Any]:
+    """Read one bounded public ATS JSON response."""
+    if not _public_http_url(url):
+        raise JobPageFetchError("The ATS endpoint is not publicly reachable.")
+    try:
+        response = requests.get(url, headers=REQUEST_HEADERS, timeout=(5, 20))
+        response.raise_for_status()
+    except requests.RequestException as error:
+        raise JobPageFetchError(f"The public ATS endpoint could not be reached: {error}") from error
+    if len(response.content) > MAX_RESPONSE_BYTES:
+        raise JobPageFetchError("The ATS response was too large to process safely.")
+    try:
+        payload = response.json()
+    except (ValueError, requests.JSONDecodeError) as error:
+        raise JobPageFetchError("The ATS endpoint did not return valid JSON.") from error
+    if not isinstance(payload, dict):
+        raise JobPageFetchError("The ATS endpoint returned an unexpected payload.")
+    return payload
+
+
+def _fetch_greenhouse(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"boards.greenhouse.io", "job-boards.greenhouse.io"}:
+        return None
+    match = re.search(r"/(?:embed/job_app\?for=)?([^/?#]+)(?:/jobs/|.*[?&]token=)(\d+)", parsed.path + ("?" + parsed.query if parsed.query else ""))
+    if not match:
+        parts = [part for part in parsed.path.split("/") if part]
+        job_index = parts.index("jobs") if "jobs" in parts else -1
+        if job_index < 1 or job_index + 1 >= len(parts):
+            return None
+        board, job_id = parts[job_index - 1], parts[job_index + 1]
+    else:
+        board, job_id = match.group(1), match.group(2)
+    payload = _fetch_public_json(f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs/{job_id}")
+    description = _clean_html_text(str(payload.get("content", "")))
+    if not description:
+        raise JobPageFetchError("Greenhouse returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="greenhouse_public_api",
+        title=str(payload.get("title", "")),
+        company=str(payload.get("company_name", "")),
+    )
+
+
+def _fetch_lever(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"jobs.lever.co", "jobs.eu.lever.co"}:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    company, job_id = parts[0], parts[1]
+    api_host = "api.eu.lever.co" if parsed.hostname == "jobs.eu.lever.co" else "api.lever.co"
+    payload = _fetch_public_json(f"https://{api_host}/v0/postings/{company}/{job_id}")
+    sections = [str(payload.get("descriptionPlain", "") or "")]
+    for item in payload.get("lists", []) if isinstance(payload.get("lists"), list) else []:
+        if isinstance(item, dict):
+            sections.extend([str(item.get("text", "")), _clean_html_text(str(item.get("content", "")))])
+    description = "\n\n".join(section.strip() for section in sections if section.strip())
+    if not description:
+        raise JobPageFetchError("Lever returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="lever_public_api",
+        title=str(payload.get("text", "")),
+        company="",
+    )
+
+
+def _fetch_ashby(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname != "jobs.ashbyhq.com":
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    board, job_id = parts[0], parts[1]
+    payload = _fetch_public_json(
+        f"https://api.ashbyhq.com/posting-api/job-board/{quote(board, safe='')}"
+    )
+    jobs = payload.get("jobs", [])
+    if not isinstance(jobs, list):
+        raise JobPageFetchError("Ashby returned an unexpected job-board payload.")
+    matches: list[dict[str, Any]] = []
+    for item in jobs:
+        if not isinstance(item, dict):
+            continue
+        candidate_ids = {
+            path_parts[-1]
+            for key in ("jobUrl", "applyUrl")
+            if (path_parts := [
+                part for part in urlsplit(str(item.get(key, ""))).path.split("/") if part
+            ])
+        }
+        if job_id in candidate_ids or str(item.get("id", "")) == job_id:
+            matches.append(item)
+    if len(matches) != 1:
+        raise JobPageFetchError(
+            "Ashby did not return exactly one posting matching the saved job URL."
+        )
+    posting = matches[0]
+    description = str(posting.get("descriptionPlain", "") or "").strip()
+    if not description:
+        description = _clean_html_text(str(posting.get("descriptionHtml", "")))
+    if not description:
+        raise JobPageFetchError("Ashby returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="ashby_public_api",
+        title=str(posting.get("title", "")),
+        company="",
+    )
+
+
+def _smartrecruiters_section_text(value: Any) -> str:
+    if isinstance(value, dict):
+        title = str(value.get("title", "") or "").strip()
+        text = _clean_html_text(str(value.get("text", "") or value.get("content", "")))
+        return "\n".join(part for part in (title, text) if part)
+    return _clean_html_text(str(value or ""))
+
+
+def _fetch_smartrecruiters(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"jobs.smartrecruiters.com", "careers.smartrecruiters.com"}:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    company, posting_slug = parts[0], parts[1]
+    posting_id = posting_slug.split("-", 1)[0]
+    if not posting_id:
+        return None
+    payload = _fetch_public_json(
+        "https://api.smartrecruiters.com/v1/companies/"
+        f"{quote(company, safe='')}/postings/{quote(posting_id, safe='')}"
+    )
+    job_ad = payload.get("jobAd", {})
+    sections = job_ad.get("sections", {}) if isinstance(job_ad, dict) else {}
+    ordered_sections = []
+    if isinstance(sections, dict):
+        for key in (
+            "companyDescription",
+            "jobDescription",
+            "qualifications",
+            "additionalInformation",
+        ):
+            section = _smartrecruiters_section_text(sections.get(key))
+            if section:
+                ordered_sections.append(section)
+    description = "\n\n".join(ordered_sections)
+    if not description:
+        description = _smartrecruiters_section_text(payload.get("description"))
+    if not description:
+        raise JobPageFetchError(
+            "SmartRecruiters returned the job, but its description was empty."
+        )
+    company_payload = payload.get("company", {})
+    company_name = (
+        str(company_payload.get("name", "")) if isinstance(company_payload, dict) else ""
+    )
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="smartrecruiters_public_api",
+        title=str(payload.get("name", "")),
+        company=company_name,
+    )
+
+
+def public_ats_provider(url: str) -> str | None:
+    """Return the supported public ATS behind one canonical job URL."""
+    hostname = (urlsplit(str(url or "")).hostname or "").lower()
+    if hostname in {"boards.greenhouse.io", "job-boards.greenhouse.io"}:
+        return "Greenhouse"
+    if hostname in {"jobs.lever.co", "jobs.eu.lever.co"}:
+        return "Lever"
+    if hostname == "jobs.ashbyhq.com":
+        return "Ashby"
+    if hostname in {"jobs.smartrecruiters.com", "careers.smartrecruiters.com"}:
+        return "SmartRecruiters"
+    return None
+
+
+def fetch_public_ats_job(url: str) -> FetchedJobPage | None:
+    """Use stable public ATS APIs before attempting generic page extraction."""
+    return (
+        _fetch_greenhouse(url)
+        or _fetch_lever(url)
+        or _fetch_ashby(url)
+        or _fetch_smartrecruiters(url)
+    )
+
+
 def fetch_job_page(url: str) -> FetchedJobPage:
     """Fetch a public HTTP(S) job page with bounded, validated redirects."""
     current_url = str(url or "").strip()
+    ats_result = fetch_public_ats_job(current_url)
+    if ats_result is not None:
+        return ats_result
     for _redirect in range(MAX_REDIRECTS + 1):
         if not _public_http_url(current_url):
             raise JobPageFetchError("The original job URL is invalid or is not publicly reachable.")
@@ -251,7 +501,7 @@ def fetch_job_page(url: str) -> FetchedJobPage:
         if response.status_code in {401, 403, 429}:
             raise JobPageFetchError(
                 "This employer page blocked the server fetch. Open it in your browser "
-                "and use Paste full JD, or try Search provider."
+                "and paste the full job description, or try automatic completion."
             )
         try:
             response.raise_for_status()
@@ -263,5 +513,11 @@ def fetch_job_page(url: str) -> FetchedJobPage:
         if len(response.content) > MAX_RESPONSE_BYTES:
             raise JobPageFetchError("The original job page was too large to process safely.")
         response.encoding = response.encoding or "utf-8"
-        return extract_job_page(response.text, current_url)
+        try:
+            return extract_job_page(response.text, current_url)
+        except JobPageFetchError as extraction_error:
+            markdown_result = _fetch_linked_job_markdown(response.text, current_url)
+            if markdown_result is not None:
+                return markdown_result
+            raise extraction_error
     raise JobPageFetchError("The original job page redirected too many times.")

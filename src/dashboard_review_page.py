@@ -1,7 +1,10 @@
 """Review Jobs page for evidence-first comparison and cover-letter preparation."""
-
 from __future__ import annotations
 
+from dashboard_company_verification import company_generation_allowed
+from dashboard_ui import render_page_header
+from dashboard_ui import sanitize_fit_text
+from document_text import read_text_file
 from dataclasses import dataclass
 import html
 from pathlib import Path
@@ -9,12 +12,18 @@ import re
 from typing import Any, Callable, cast
 
 import streamlit as st
-
 from apply_package import create_application_package, parse_job_metadata
 from company_verification import normalize_company_name, verification_from_markdown
 from dashboard_desktop_styles import render_review_workspace_styles
 from dashboard_jd_recovery import render_full_jd_recovery, render_jd_workspace_styles
+from dashboard_ats_completion import render_ats_completion_action
+from dashboard_saved_job_management import (
+    render_saved_job_delete_notice,
+    render_saved_job_management,
+)
 from dashboard_jd_document import format_job_description_body
+from structured_jd import structure_job_description
+from dashboard_structured_jd import render_structured_job
 from dashboard_review_chrome import render_saved_jobs_header, render_selected_job_context
 from dashboard_regions import (
     job_matches_region_option,
@@ -33,23 +42,17 @@ from dashboard_review_components import (
 from dashboard_review_selector import render_review_job_table
 from dashboard_titles import get_job_display_title
 from fetch_history import load_fetch_runs
+from generate_cover_letter import CoverLetterGenerationError
 from output_paths import safe_slug
 from scoring_types import DashboardJob, TrackerRow
-
-
-REVIEW_SECTION_LABELS = {
-    "Overview": "Decision",
-    "Fit": "Evidence",
-    "JD": "Job description",
-    "Cover Letter": "Cover letter",
-}
-
-
+REVIEW_SECTION_LABELS = {"Overview": "Decision", "Fit": "Evidence", "JD": "Job description", "Cover Letter": "Cover letter"}
 @dataclass(frozen=True)
 class ReviewPageServices:
     """Shared dashboard operations required by the Review Jobs page."""
 
-    company_generation_allowed: Callable[[dict[str, Any]], bool]
+    complete_public_ats_jobs: Callable[..., dict[str, Any]]
+    archive_all_saved_jobs: Callable[..., list[Path]]
+    archive_saved_job: Callable[..., Path]
     current_workspace: Callable[[], Any]
     default_review_inbox_view: Callable[..., str]
     demo_mode_enabled: Callable[[], bool]
@@ -57,28 +60,22 @@ class ReviewPageServices:
     enrich_saved_job_description: Callable[..., dict[str, Any]]
     enrich_saved_job_description_from_url: Callable[..., dict[str, Any]]
     jsearch_configured: Callable[[], bool]
-    key_requirements_from_text: Callable[[str], list[str]]
     load_package_notes: Callable[..., str]
     load_screened_jobs: Callable[..., list[DashboardJob]]
     load_tracker_rows: Callable[..., list[TrackerRow]]
     package_dir_for_job: Callable[..., Any]
     package_status_for_job: Callable[..., str]
-    read_text_file: Callable[..., str]
+    public_ats_completion_candidates: Callable[..., list[Path]]
     relative_path: Callable[..., str]
     render_fit_analysis_sections: Callable[..., None]
     render_generation_success: Callable[..., None]
     render_markdown_company_confirmation: Callable[..., dict[str, Any]]
-    render_page_header: Callable[[str, str | None], None]
     replace_saved_job_description: Callable[..., dict[str, Any]]
     run_with_captured_output: Callable[..., tuple[Any, str]]
-    sanitize_fit_text: Callable[[Any], str]
     save_recent_region_key: Callable[[str], None]
     tracker_row_for_job: Callable[..., Any]
     tracker_status_for_job: Callable[..., str]
-    max_recommendation_limit: int
     show_debug_ui: bool = False
-
-
 def set_review_job_selection(job: DashboardJob, focus: str = "Overview") -> None:
     """Select a review job and focus the detail panel."""
     if focus not in REVIEW_SECTION_LABELS:
@@ -260,7 +257,7 @@ def render_review_fit_section(
         suggestions = services.load_package_notes(package_dir)
         if suggestions:
             with st.expander("Resume / Cover Letter suggestions", expanded=False):
-                st.markdown(services.sanitize_fit_text(suggestions))
+                st.markdown(sanitize_fit_text(suggestions))
 
 
 def extract_job_description_body(job_text: str, fallback: str = "") -> str:
@@ -295,10 +292,10 @@ def render_review_jd_section(
         services=services,
         job_url=str(job.get("job_url", "")),
     )
+    structured = structure_job_description(job_text)
     body = extract_job_description_body(job_text, str(job.get("preview", "")))
     body = format_job_description_body(body, get_job_display_title(job))
-    with st.container(border=False, key="jd_document_body"):
-        st.markdown(body)
+    render_structured_job(structured, body)
     if services.show_debug_ui:
         with st.expander("Advanced: job metadata", expanded=False):
             st.write(f"Markdown path: {services.relative_path(selected_path)}")
@@ -367,7 +364,7 @@ def render_review_cover_letter_section(
     file_key = safe_slug(str(selected_path))
     latest_fields = verification_from_markdown(selected_path)
     default_company = str(latest_fields.get("company_normalized") or metadata.get("company", ""))
-    needs_confirmation = not services.company_generation_allowed(latest_fields)
+    needs_confirmation = not company_generation_allowed(latest_fields)
     st.caption(
         f"{default_company or 'Employer not confirmed'} · "
         f"{metadata.get('role', 'Role not confirmed')} · "
@@ -406,7 +403,7 @@ def render_review_cover_letter_section(
     if normalize_company_name(company) != str(latest_fields.get("company_normalized", "")):
         st.error("Confirm the edited company name before generating a cover letter.")
         return
-    if not services.company_generation_allowed(latest_fields):
+    if not company_generation_allowed(latest_fields):
         st.error("Company name needs confirmation before generating a cover letter.")
         return
     try:
@@ -420,6 +417,14 @@ def render_review_cover_letter_section(
             job_url=job_url.strip(),
         )
         render_cover_letter_result(summary, output, services)
+    except CoverLetterGenerationError as error:
+        st.warning(str(error))
+        for reason in error.reasons:
+            st.write(f"- {reason}")
+        if error.gaps:
+            with st.expander("Requirements still missing reliable evidence", expanded=False):
+                for gap in error.gaps:
+                    st.write(f"- {gap}")
     except Exception as error:  # noqa: BLE001
         st.error(f"Could not generate the cover letter: {error}")
 
@@ -431,7 +436,7 @@ def render_selected_review_detail(
 ) -> None:
     """Render the selected job header and one independently testable section."""
     selected_path = Path(job["path"])
-    selected_text = services.read_text_file(selected_path)
+    selected_text = read_text_file(selected_path)
     selected_tracker_row = services.tracker_row_for_job(job, tracker_rows)
     section_labels = REVIEW_SECTION_LABELS
     if st.session_state.get("selected_review_tab") not in section_labels:
@@ -478,9 +483,10 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
     """Render the job-description review and package generation workflow."""
     st.markdown('<div class="desktop-workspace-marker"></div>', unsafe_allow_html=True)
     render_review_workspace_styles()
+    render_saved_job_delete_notice()
     all_jobs = services.load_screened_jobs()
     if not all_jobs:
-        services.render_page_header(
+        render_page_header(
             "Review Jobs",
             "Compare evidence, risks, and next actions—not just a single score.",
         )
@@ -495,24 +501,22 @@ def job_descriptions_tab(services: ReviewPageServices) -> None:
     )
     fetch_runs_by_id = {str(run.get("fetch_run_id", "")): run for run in load_fetch_runs()}
     left_panel, detail_panel = st.columns(
-        [0.28, 0.72],
-        gap="medium",
-        vertical_alignment="top",
+        [0.28, 0.72], gap="medium", vertical_alignment="top"
     )
     with left_panel, st.container(key="review_job_list_panel"):
         render_saved_jobs_header(services.go_to_page)
+        render_ats_completion_action(all_jobs, services)
         state = initialize_review_state(all_jobs, tracker_rows, services)
         filters = render_review_filter_controls(all_jobs, state, services)
         filtered_jobs = filtered_review_jobs(
             all_jobs, tracker_rows, fetch_runs_by_id, filters, services
         )
-        # The fetch recommendation limit controls provider requests, not how many
-        # already-saved jobs the local review workspace may display.
         shortlist = filtered_jobs
         if not shortlist:
             render_empty_review_state(filters)
             return
         selected_job = resolve_selected_review_job(shortlist, services)
+        render_saved_job_management(all_jobs, selected_job, services)
         selected_job = render_review_job_table(
             shortlist, selected_job, demo=state["is_demo"], on_select=set_review_job_selection
         )

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.annotation_metrics import decision_metrics, record_task_scores, retrieval_metrics
 
 

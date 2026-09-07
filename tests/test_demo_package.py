@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import dashboard_packages
+import dashboard_regions
+import dashboard_review
+import dashboard_review_page
+
 import io
 import sys
 import unittest
@@ -26,6 +31,7 @@ EXPECTED_ZIP_NAMES = {
     "cover_letter.docx",
     "analysis.md",
     "cover_letter_notes.md",
+    "cover_letter_plan.json",
 }
 
 
@@ -38,7 +44,7 @@ class DemoPackageTests(unittest.TestCase):
             timeout=30
         )
         self.assertTrue(
-            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+            any("Resume" in str(title.value) for title in app.markdown)
         )
 
         next(
@@ -49,7 +55,7 @@ class DemoPackageTests(unittest.TestCase):
         self.assertEqual(app.session_state["workspace_mode"], "Demo")
         self.assertEqual(app.session_state["active_page"], "Dashboard")
         self.assertFalse(
-            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+            any("Resume" in str(title.value) for title in app.markdown)
         )
         self.assertTrue(any("Demo · Read-only" in str(item.value) for item in app.caption))
 
@@ -77,8 +83,8 @@ class DemoPackageTests(unittest.TestCase):
             "cover_letter.docx": [
                 "Demo Candidate",
                 "Northstar Metrics Studio",
-                "fictional Data Analyst role",
-                "fictional community research internship",
+                "classification pipeline with Python and scikit-learn",
+                "fictional public dataset using SQL, Python, and statistics",
                 "This is fictional Demo output and must not be submitted to an employer.",
             ],
         }
@@ -106,7 +112,7 @@ class DemoPackageTests(unittest.TestCase):
             )
 
     def test_demo_zip_includes_all_sanitized_sample_materials(self) -> None:
-        zip_bytes, package_files = dashboard.build_application_package_zip(DEMO_PACKAGE_DIR)
+        zip_bytes, package_files = dashboard_packages.build_application_package_zip(DEMO_PACKAGE_DIR)
         self.assertEqual({path.name for path in package_files}, EXPECTED_ZIP_NAMES)
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as archive:
             self.assertEqual(set(archive.namelist()), EXPECTED_ZIP_NAMES)
@@ -155,6 +161,9 @@ class DemoPackageTests(unittest.TestCase):
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)
+        self.assertTrue(
+            any("Evidence used" in str(markdown.value) for markdown in app.markdown)
+        )
 
         next(button for button in app.button if button.label == "View Stored Match Report").click().run(
             timeout=30
@@ -201,14 +210,14 @@ class DemoPackageTests(unittest.TestCase):
             "Cover letter status",
             "Tracker status",
         ]:
-            self.assertEqual(len(dashboard.sorted_review_jobs(jobs, sort_by)), len(jobs))
+            self.assertEqual(len(dashboard_review.sorted_review_jobs(jobs, sort_by)), len(jobs))
 
-        region_options = dashboard.build_region_options(jobs)
+        region_options = dashboard_regions.build_region_options(jobs)
         for option in region_options.values():
-            matches = [job for job in jobs if dashboard.job_matches_region_option(job, option)]
+            matches = [job for job in jobs if dashboard_regions.job_matches_region_option(job, option)]
             self.assertIsInstance(matches, list)
 
-        sources = dashboard.dynamic_source_options(jobs)
+        sources = dashboard_regions.dynamic_source_options(jobs)
         recommendations = ["all", "Apply", "Maybe Apply", "Skip or Low Priority"]
         confidences = ["all", *dashboard.CONFIDENCE_RANK]
         for source in sources:
@@ -219,7 +228,7 @@ class DemoPackageTests(unittest.TestCase):
                         for job in jobs
                         if (
                             source == "all"
-                            or dashboard.source_display_name(str(job["source"])) == source
+                            or dashboard_regions.source_display_name(str(job["source"])) == source
                         )
                         and (recommendation == "all" or job["recommendation"] == recommendation)
                         and (confidence == "all" or job["confidence"] == confidence)
@@ -228,13 +237,13 @@ class DemoPackageTests(unittest.TestCase):
 
         first_job, second_job = jobs[:2]
         self.assertIs(
-            dashboard.resolve_review_job_selection(
+            dashboard_review_page.resolve_review_job_selection(
                 jobs, "stale label", "data/demo/jobs/missing.md"
             ),
             first_job,
         )
         self.assertIs(
-            dashboard.resolve_review_job_selection(
+            dashboard_review_page.resolve_review_job_selection(
                 jobs, second_job["label"], str(first_job["path"])
             ),
             first_job,
@@ -242,14 +251,14 @@ class DemoPackageTests(unittest.TestCase):
 
     def test_missing_demo_docx_is_unavailable_without_generation(self) -> None:
         self.assertEqual(
-            dashboard.readiness_status(
+            dashboard_packages.readiness_status(
                 source_exists=True,
                 docx_exists=False,
                 read_only_sample=True,
             ),
             "Unavailable",
         )
-        zip_bytes, package_files = dashboard.build_application_package_zip(
+        zip_bytes, package_files = dashboard_packages.build_application_package_zip(
             PROJECT_ROOT / "tests" / "fixtures" / "missing_demo_package"
         )
         self.assertEqual(package_files, [])

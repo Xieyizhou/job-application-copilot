@@ -2,10 +2,33 @@
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Any
 
+from dashboard_ats_settings import render_ats_boards
 from fetch_jobs import jsearch_configured
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+COMPANION_CONNECTION_PATH = PROJECT_ROOT / "data/local_workspace/browser_companion/connection.json"
+COMPANION_EXTENSION_PATH = PROJECT_ROOT / "browser_companion"
+
+
+def browser_companion_connection() -> dict[str, str]:
+    """Return public loopback connection details without reading browser state."""
+    try:
+        payload = json.loads(COMPANION_CONNECTION_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    endpoint = str(payload.get("endpoint", "") or "")
+    token = str(payload.get("token", "") or "")
+    if endpoint != "http://127.0.0.1:8765" or len(token) < 24:
+        return {}
+    return {"endpoint": endpoint, "token": token}
 
 
 def job_source_health() -> dict[str, bool]:
@@ -42,7 +65,7 @@ def render_settings_sections(
     with workspace_tab:
         _render_workspace(ui, workspace, jobs_count, tracker_count, demo_mode)
     with sources_tab:
-        _render_sources(ui, sources)
+        _render_sources(ui, sources, workspace=workspace, demo_mode=demo_mode)
     with scoring_tab:
         _render_scoring(ui)
     with privacy_tab:
@@ -54,15 +77,40 @@ def _render_workspace(ui: Any, workspace: Any, jobs_count: int, tracker_count: i
     ui.write("Candidate source: " + ("Ready" if workspace.resume_source_path else "Missing"))
     ui.write(f"Saved jobs: {jobs_count}")
     ui.write(f"Tracker records: {tracker_count if not demo_mode else 'Disabled in Demo'}")
-    ui.caption("Use Manage workspace files in the sidebar to update your resume or optional template.")
+    ui.caption("Use Resume in the sidebar to replace your resume or optional template.")
 
 
-def _render_sources(ui: Any, sources: dict[str, bool]) -> None:
+def _render_sources(ui: Any, sources: dict[str, bool], *, workspace: Any, demo_mode: bool) -> None:
     for label, configured in sources.items():
         ui.write(f"{'Ready' if configured else 'Not configured'} · {label}")
     ui.caption("JSearch supports complete postings. Adzuna and Jooble may return discovery snippets.")
+    ui.caption(
+        "Experimental services: JSearch, Adzuna, and Jooble have limited live validation. "
+        "Provider quotas, availability, and response formats may vary."
+    )
     if not sources["JSearch · full JD"]:
         ui.info("Configure JSEARCH_API_KEY before relying on automatic full-JD retrieval.")
+    render_ats_boards(ui, workspace=workspace, demo_mode=demo_mode)
+    ui.divider()
+    ui.markdown("**Browser companion · current-page import**")
+    connection = browser_companion_connection()
+    if not connection:
+        ui.warning("Start JobCopilot with `python run_dashboard.py` to enable local browser import.")
+        return
+    ui.write("Ready · listens only on 127.0.0.1 and writes only to the local workspace.")
+    ui.caption(
+        "Install once in Chrome (Edge compatibility is experimental and unverified). "
+        "On a saved job's original page, choose "
+        "Import and verify this posting, then Open JobCopilot."
+    )
+    ui.code(str(COMPANION_EXTENSION_PATH), language=None)
+    ui.markdown(
+        "1. Open `chrome://extensions` (or `edge://extensions`).\n"
+        "2. Enable **Developer mode** and choose **Load unpacked**.\n"
+        "3. Select the folder above, open the extension once, and paste this local token:"
+    )
+    ui.code(connection["token"], language=None)
+    ui.caption("The token remains local, is stored in a Git-ignored directory with file mode 600, and may be replaced by deleting the local browser_companion folder.")
 
 
 def _render_scoring(ui: Any) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import read_text_file
+
 from typing import Any
 
 import streamlit as st
@@ -40,10 +42,10 @@ def render_evidence_and_gaps(
 ) -> None:
     """Show resume evidence and unresolved gaps before the editable draft."""
     notes_text = "\n\n".join(
-        services.read_text_file(path) for path in artifacts.internal_notes
+        read_text_file(path) for path in artifacts.internal_notes
     )
     analysis_text = (
-        services.read_text_file(artifacts.analysis)
+        read_text_file(artifacts.analysis)
         if artifacts.analysis.exists()
         else ""
     )

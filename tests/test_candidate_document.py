@@ -9,14 +9,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pymupdf
 from docx import Document
+from pypdf import PdfReader, PdfWriter
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from analyze_job import analyze_job
+from scoring_report import analyze_job
 from candidate_document import CandidateDocumentError, SCANNED_PDF_MESSAGE, parse_candidate_document
 from workspace import WorkspaceError, initialize_personal_workspace, personal_workspace
 
@@ -35,14 +35,33 @@ def make_docx() -> bytes:
 
 
 def make_pdf(page_text: list[str]) -> bytes:
-    document = pymupdf.open()
-    for text in page_text:
-        page = document.new_page()
-        if text:
-            page.insert_text((72, 72), text)
-    result = document.tobytes()
-    document.close()
-    return result
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [{' '.join(f'{4 + index * 2} 0 R' for index in range(len(page_text)))}] /Count {len(page_text)} >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    for index, text in enumerate(page_text):
+        page_object = 4 + index * 2
+        stream_object = page_object + 1
+        escaped = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        stream = f"BT /F1 12 Tf 72 720 Td ({escaped}) Tj ET" if text else ""
+        objects.extend(
+            [
+                f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {stream_object} 0 R >>",
+                f"<< /Length {len(stream.encode())} >>\nstream\n{stream}\nendstream",
+            ]
+        )
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n{body}\nendobj\n".encode())
+    xref = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode())
+    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(output)
 
 
 class CandidateDocumentTests(unittest.TestCase):
@@ -90,14 +109,13 @@ class CandidateDocumentTests(unittest.TestCase):
         with self.assertRaises(CandidateDocumentError):
             parse_candidate_document("corrupt.pdf", b"not a pdf")
 
-        encrypted = pymupdf.open()
-        encrypted.new_page().insert_text((72, 72), "Private text")
-        encrypted_bytes = encrypted.tobytes(
-            encryption=pymupdf.PDF_ENCRYPT_AES_256,
-            owner_pw="owner",
-            user_pw="user",
-        )
-        encrypted.close()
+        reader = PdfReader(io.BytesIO(make_pdf(["Private text"])))
+        writer = PdfWriter()
+        writer.append_pages_from_reader(reader)
+        writer.encrypt(user_password="user", owner_password="owner", algorithm="AES-256")
+        encrypted_buffer = io.BytesIO()
+        writer.write(encrypted_buffer)
+        encrypted_bytes = encrypted_buffer.getvalue()
         with self.assertRaisesRegex(CandidateDocumentError, "Password-protected"):
             parse_candidate_document("protected.pdf", encrypted_bytes)
 

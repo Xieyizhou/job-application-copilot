@@ -284,12 +284,6 @@ def calibrate_score_for_evidence(
     }
 
 
-def apply_uk_work_authorization_score_cap(score: int, job_text: str) -> int:
-    """Compatibility helper; eligibility no longer changes the role-fit score."""
-    _ = job_text
-    return score
-
-
 def recommendation_for_score(score: int) -> str:
     """Convert a score into a human-readable application recommendation."""
     if score >= 80:

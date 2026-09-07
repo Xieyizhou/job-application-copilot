@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from ml.evidence_multitask_evaluation import _encoded
+
+from ml.evidence_multitask_evaluation import _seed_training
+
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import gc
 import math
-import random
 from typing import Any
 
 import numpy as np
@@ -39,15 +42,6 @@ class V3TrainingManifest:
     product_integration_allowed: bool = False
 
 
-def _seed_training(random_state: int) -> None:
-    import torch
-
-    random.seed(random_state)
-    np.random.seed(random_state)
-    torch.manual_seed(random_state)
-    torch.use_deterministic_algorithms(True)
-
-
 def _pair_indices(
     task_ids: Sequence[str],
     validated: CandidateCompleteDataset,
@@ -55,27 +49,6 @@ def _pair_indices(
     return [
         pair_index for task_id in task_ids for pair_index in validated.task_pair_indices[task_id]
     ]
-
-
-def _encoded(
-    tokenizer: Any,
-    pairs: Sequence[Mapping[str, Any]],
-    indices: Sequence[int],
-    *,
-    max_length: int,
-    device: str,
-) -> dict[str, Any]:
-    return {
-        key: value.to(device)
-        for key, value in tokenizer(
-            [str(pairs[index]["requirement"]) for index in indices],
-            [str(pairs[index]["evidence"]) for index in indices],
-            max_length=max_length,
-            padding=True,
-            truncation=True,
-            return_tensors="pt",
-        ).items()
-    }
 
 
 def _validate_task_boundary(

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
+
 import sqlite3
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from analyze_job import extract_job_description_body
+from scoring_engine import extract_job_description_body
 from company_verification import verification_from_markdown, verification_status_label
 from dashboard_fit import apply_canonical_analysis, build_fit_presentation
 from dashboard_regions import (
@@ -14,11 +17,8 @@ from dashboard_regions import (
     infer_location_from_path,
     normalize_location,
 )
-from dashboard_titles import (
-    get_job_display_title,
-    read_markdown_field,
-    resolve_canonical_job_title,
-)
+from dashboard_titles import get_job_display_title, resolve_canonical_job_title
+from document_text import read_markdown_field
 from ml.jd_quality import classify_jd_quality
 from scoring_types import DashboardJob, TrackerRow
 
@@ -153,6 +153,7 @@ def build_dashboard_job_record(
         "description_source": read_markdown_field(job_text, "Description Source", ""),
         "jd_fetch_status": read_markdown_field(job_text, "JD Fetch Status", ""),
         "description_word_count": len(extract_job_description_body(job_text).split()),
+        "description_fingerprint": description_fingerprint(job_text),
         "jd_quality": jd_quality,
         "first_seen_at": first_seen_at,
         "last_seen_at": read_markdown_field(job_text, "Last Seen At", first_seen_at),
@@ -197,16 +198,28 @@ def job_description_preference(job: DashboardJob) -> tuple[int, int, int]:
 
 
 def deduplicate_dashboard_jobs(jobs: list[DashboardJob]) -> list[DashboardJob]:
-    """Deduplicate records while retaining the strongest JD evidence."""
+    """Deduplicate exact records and syndicated copies of the same preview."""
     unique_jobs: list[DashboardJob] = []
     url_indexes: dict[str, int] = {}
     fallback_indexes: dict[tuple[str, str, str], int] = {}
+    syndicated_preview_indexes: dict[tuple[str, str, str], int] = {}
     for job in jobs:
         job_url, company, role, location = job_duplicate_key(job)
         fallback = (company, role, location)
         existing_index = url_indexes.get(job_url) if job_url else None
         if existing_index is None and all(fallback):
             existing_index = fallback_indexes.get(fallback)
+        fingerprint = str(job.get("description_fingerprint", "") or "")
+        syndicated_preview = (
+            (company, role, fingerprint)
+            if company
+            and role
+            and fingerprint
+            and str(job.get("jd_fetch_status", "")).lower() == "snippet_only"
+            else None
+        )
+        if existing_index is None and syndicated_preview is not None:
+            existing_index = syndicated_preview_indexes.get(syndicated_preview)
         if existing_index is None:
             existing_index = len(unique_jobs)
             unique_jobs.append(job)
@@ -218,6 +231,8 @@ def deduplicate_dashboard_jobs(jobs: list[DashboardJob]) -> list[DashboardJob]:
             url_indexes[job_url] = existing_index
         if all(fallback):
             fallback_indexes[fallback] = existing_index
+        if syndicated_preview is not None:
+            syndicated_preview_indexes[syndicated_preview] = existing_index
     return unique_jobs
 
 
@@ -320,3 +335,12 @@ def load_tracker_rows(
         connection.row_factory = sqlite3.Row
         rows = connection.execute(query, params).fetchall()
     return cast(list[TrackerRow], [dict(row) for row in rows])
+
+
+def description_fingerprint(job_text: str) -> str:
+    """Return a stable fingerprint for exact-equivalent JD body text."""
+    body = extract_job_description_body(job_text)
+    normalized = re.sub(r"[^a-z0-9]+", " ", body.lower()).strip()
+    if len(normalized.split()) < 12:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()

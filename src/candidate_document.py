@@ -113,20 +113,28 @@ def _extract_docx(content: bytes) -> str:
 
 def _extract_pdf(content: bytes) -> CandidateDocumentResult:
     try:
-        import pymupdf
+        import pypdfium2 as pdfium
     except ImportError as error:
         raise CandidateDocumentError("PDF extraction is unavailable in this installation.") from error
 
     try:
-        document = pymupdf.open(stream=content, filetype="pdf")
+        document = pdfium.PdfDocument(content)
     except Exception as error:
+        if "password" in str(error).casefold():
+            raise CandidateDocumentError("Password-protected PDFs are not supported.") from error
         raise CandidateDocumentError("This PDF file could not be read. Please upload a valid text-based PDF.") from error
 
     try:
-        if document.needs_pass:
-            raise CandidateDocumentError("Password-protected PDFs are not supported.")
-        page_count = document.page_count
-        page_text = [document.load_page(index).get_text("text") for index in range(page_count)]
+        page_count = len(document)
+        page_text = []
+        for index in range(page_count):
+            page = document[index]
+            text_page = page.get_textpage()
+            try:
+                page_text.append(text_page.get_text_range())
+            finally:
+                text_page.close()
+                page.close()
     except CandidateDocumentError:
         raise
     except Exception as error:

@@ -105,8 +105,15 @@ def analyze_dashboard_job(
     confidence_value = analysis.get("confidence", {})
     confidence = dict(confidence_value) if isinstance(confidence_value, dict) else {}
     if int(confidence.get("active_requirement_count", 0) or 0) == 0:
+        pipeline = analysis.get("jd_pipeline", {})
+        if isinstance(pipeline, dict):
+            from structured_jd import pipeline_diagnostic_message
+
+            reason = pipeline_diagnostic_message(pipeline)
+        else:
+            reason = "Structured requirements could not be extracted reliably."
         return unavailable_dashboard_analysis(
-            "Structured requirements could not be extracted reliably."
+            reason
         )
 
     analysis["analysis_available"] = True

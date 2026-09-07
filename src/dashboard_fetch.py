@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from dashboard_fetch_history import render_fetch_history_section
+from dashboard_fetch_history import render_fetch_run_job_cards
+from dashboard_fetch_history import render_fetch_run_job_table
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 import streamlit as st
 
 from fetch_jobs import jsearch_configured
+from company_ats import load_ats_boards
 from dashboard_fetch_preferences import (
     FETCH_SOURCES,
     load_fetch_sources,
@@ -38,6 +45,16 @@ UNSUPPORTED_ADZUNA_MESSAGE = (
     "Adzuna is not available for this region. Jooble can still search this location."
 )
 
+
+def _workspace_root(services: FetchPageServices) -> Path:
+    workspace = services.current_workspace()
+    return Path(getattr(workspace, "root", Path("data/local_workspace")))
+
+
+def _remember_fetch_sources(submitted: bool, sources: list[str], remembered: list[str]) -> None:
+    if submitted and sources != remembered:
+        save_fetch_sources(sources)
+
 @dataclass(frozen=True)
 class FetchPageServices:
     """Shared dashboard operations required by the job-discovery page."""
@@ -46,10 +63,6 @@ class FetchPageServices:
     current_workspace: Callable[[], Any]
     go_to_page: Callable[[str], None]
     relocate_fetched_jobs_to_workspace: Callable[..., list[Any]]
-    render_fetch_history_section: Callable[[], None]
-    render_fetch_run_job_cards: Callable[[list[dict[str, Any]], str], None]
-    render_fetch_run_job_table: Callable[[list[dict[str, Any]], str], None]
-    render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
     default_recommendation_limit: int
     min_recommendation_limit: int
@@ -84,6 +97,7 @@ class FetchResultSummary:
     issues: int
     new_jobs: list[dict[str, Any]]
     seen_jobs: list[dict[str, Any]]
+    skipped_jobs: list[dict[str, Any]]
 
 
 def initialize_fetch_query(services: FetchPageServices) -> str:
@@ -118,7 +132,10 @@ def render_fetch_options_form(
     """Render provider and result-limit controls."""
     with st.form("fetch_jobs_form"):
         full_jd_source_ready = jsearch_configured()
-        default_sources = ["jsearch"] if full_jd_source_ready else ["adzuna", "jooble"]
+        ats_source_ready = any(board.enabled for board in load_ats_boards(_workspace_root(services)))
+        default_sources = (
+            ["company_ats"] if ats_source_ready else ["jsearch"] if full_jd_source_ready else ["adzuna", "jooble"]
+        )
         remembered_sources = load_fetch_sources(default_sources)
         sources = st.multiselect(
             "Sources",
@@ -130,6 +147,10 @@ def render_fetch_options_form(
         )
         if not full_jd_source_ready:
             st.info(MISSING_JSEARCH_MESSAGE)
+        if not ats_source_ready:
+            st.caption("Company ATS · Full JD becomes available after adding an employer board in Settings.")
+        if "company_ats" in sources and not ats_source_ready:
+            st.warning("Add and enable at least one employer ATS board in Settings first.")
         if "adzuna" in sources and not adzuna_supported:
             st.warning(UNSUPPORTED_ADZUNA_MESSAGE)
         recommendation_limit, fetch_limit_per_source = render_advanced_fetch_options(
@@ -146,8 +167,7 @@ def render_fetch_options_form(
             icon=":material/search:",
             width="content",
         )
-        if submitted and sources != remembered_sources:
-            save_fetch_sources(sources)
+        _remember_fetch_sources(submitted, sources, remembered_sources)
     return submitted, sources, recommendation_limit, fetch_limit_per_source
 
 
@@ -197,6 +217,11 @@ def fetch_request_is_valid(
     if not request.query.strip():
         st.error("Enter a target role or search query.")
         return False
+    if "company_ats" in request.sources and not any(
+        board.enabled for board in load_ats_boards(_workspace_root(services))
+    ):
+        st.error("Company ATS is selected, but no employer boards are enabled in Settings.")
+        return False
     return True
 
 
@@ -235,6 +260,9 @@ def summarize_fetch_outcome(outcome: FetchSearchOutcome) -> FetchResultSummary:
         seen_jobs=[
             job for run in runs for job in (run.get("previously_seen_jobs", []) or [])
         ],
+        skipped_jobs=[
+            job for run in runs for job in (run.get("skipped_jobs", []) or [])
+        ],
     )
 
 
@@ -269,9 +297,9 @@ def render_fetch_metrics(
     result_metrics[0].metric("Returned", summary.returned)
     result_metrics[1].metric("New", summary.new)
     result_metrics[2].metric("Already seen", summary.already_seen)
-    result_metrics[3].metric("Saved locally", len(outcome.saved_paths))
-    result_metrics[4].metric("Issues", summary.issues)
-    result_metrics[5].metric("Full JDs", summary.full_descriptions)
+    result_metrics[3].metric("Skipped previews", summary.skipped)
+    result_metrics[4].metric("Full JDs", summary.full_descriptions)
+    result_metrics[5].metric("Source issues", len(outcome.errors))
 
 
 def render_fetch_job_results(
@@ -281,12 +309,24 @@ def render_fetch_job_results(
 ) -> None:
     """Render new jobs or the no-new-results recovery actions."""
     if summary.new == 0 and outcome.runs:
-        st.info(
-            "No new jobs found.\n\n"
-            "All returned jobs were already seen in previous searches.\n\n"
-            "Try broadening the query, increasing jobs per source, changing region, "
-            "or reviewing saved jobs."
-        )
+        if summary.skipped and not summary.already_seen:
+            st.info(
+                "No scoring-ready jobs were saved.\n\n"
+                f"{summary.skipped} preview-only result(s) were skipped because they "
+                "did not include a full JD or a recoverable original posting.\n\n"
+                "Try JSearch · Full JD, change the query, or add a target job manually."
+            )
+            st.markdown("**Preview-only results · not added to Saved Jobs**")
+            render_fetch_run_job_cards(
+                summary.skipped_jobs,
+                "No preview-only results in this search.",
+            )
+        else:
+            st.info(
+                "No new jobs found.\n\n"
+                "Returned jobs were already seen or were preview-only results.\n\n"
+                "Try broadening the query, changing region, or reviewing saved jobs."
+            )
         next_left, next_right = st.columns(2)
         with next_left:
             if st.button("Review Saved Jobs", width="stretch"):
@@ -300,12 +340,18 @@ def render_fetch_job_results(
         if not new_jobs:
             continue
         st.markdown(f"**New jobs from {source_display_name(str(run.get('source', '')))}**")
-        services.render_fetch_run_job_cards(new_jobs, "No new jobs in this search.")
+        render_fetch_run_job_cards(new_jobs, "No new jobs in this search.")
     if summary.new_jobs:
         with st.expander("Compact table view", expanded=False):
-            services.render_fetch_run_job_table(
+            render_fetch_run_job_table(
                 summary.new_jobs,
                 "No new jobs in this search.",
+            )
+    if summary.skipped_jobs:
+        with st.expander("Preview-only results · not saved", expanded=False):
+            render_fetch_run_job_cards(
+                summary.skipped_jobs,
+                "No preview-only results in this search.",
             )
 
 
@@ -327,7 +373,7 @@ def render_fetch_details(
                     "Already seen": int(run.get("duplicate_jobs_count", 0) or 0),
                     "Saved": len(run.get("new_jobs", []) or []),
                     "Full JDs": int(run.get("full_descriptions_count", 0) or 0),
-                    "Errors": int(run.get("skipped_jobs_count", 0) or 0),
+                    "Skipped previews": int(run.get("skipped_jobs_count", 0) or 0),
                 }
                 for run in outcome.runs
             ],
@@ -336,7 +382,7 @@ def render_fetch_details(
         )
         if summary.seen_jobs:
             st.markdown("**Already seen jobs**")
-            services.render_fetch_run_job_table(
+            render_fetch_run_job_table(
                 summary.seen_jobs,
                 "No already seen jobs in this search.",
             )
@@ -381,20 +427,20 @@ def render_fetch_debug(
             st.markdown("**Internal fetch metadata**")
             st.text("\n\n".join(backend_outputs))
         st.markdown("**Raw fetch history**")
-        services.render_fetch_history_section()
+        render_fetch_history_section()
 
 
 def fetch_jobs_tab(services: FetchPageServices) -> None:
     """Render the fetch-jobs workflow."""
     render_fetch_search_styles(st)
-    services.render_page_header(
+    render_page_header(
         "Find Jobs",
         "Search supported job sources and save roles for review.",
     )
     if services.demo_mode_enabled():
         st.caption("Live search is unavailable in the read-only Demo workspace.")
     st.caption(
-        "JSearch provides complete descriptions while Adzuna and Jooble may return summaries."
+        "Sources with complete descriptions are searched first; discovery sources may return previews."
     )
     request = render_fetch_search_form(services)
     backend_outputs: list[str] = []

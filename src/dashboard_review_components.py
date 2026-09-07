@@ -7,7 +7,7 @@ from typing import Any, Callable, Protocol
 
 import streamlit as st
 
-from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status
+from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status, effective_role_fit
 from dashboard_review import ReviewAction, job_needs_full_jd, primary_review_action
 from dashboard_review_styles import (
     action_note_html,
@@ -31,7 +31,23 @@ class ReviewComponentServices(Protocol):
 
 def jd_quality_label(job: DashboardJob | dict[str, Any]) -> str:
     """Return the concise JD-quality label used in default UI."""
-    quality = dict(job.get("jd_quality", {}) or {})
+    analysis = dict(job.get("analysis_result", {}) or {})
+    quality = dict(analysis.get("jd_quality", {}) or {})
+    direct_quality_label = str(dict(job.get("jd_quality", {}) or {}).get("display_label", ""))
+    confidence = dict(job.get("confidence", {}) or {})
+    recovered_quality = dict(confidence.get("job_description_quality", {}) or {})
+    recovered_count = max(
+        int(confidence.get("active_requirement_count", 0) or 0),
+        int(recovered_quality.get("requirement_statement_count", 0) or 0),
+    )
+    if (
+        confidence_level(confidence) in {"medium", "high"}
+        and recovered_count >= 4
+        and direct_quality_label in {"Requirements missing", "Needs full JD"}
+    ):
+        return "Scoring-ready"
+    if not quality:
+        quality = dict(job.get("jd_quality", {}) or {})
     if not quality:
         confidence = dict(job.get("confidence", {}) or {})
         quality = dict(confidence.get("job_description_quality", {}) or {})
@@ -42,9 +58,8 @@ def jd_quality_label(job: DashboardJob | dict[str, Any]) -> str:
 
 def visible_role_fit(job: DashboardJob | dict[str, Any]) -> str:
     """Hide numeric fit when the scoring confidence is low."""
-    if confidence_level(job.get("confidence")) not in {"medium", "high"}:
-        return "Not reliable"
-    return str(build_fit_presentation(job)["role_fit"])
+    score = effective_role_fit(job)
+    return f"{score}/100" if score is not None else "—"
 
 
 def strongest_evidence(job: DashboardJob | dict[str, Any]) -> str:
@@ -122,7 +137,7 @@ def render_selected_review_header(
             "Eligibility",
             eligibility_status(job).replace("_", " ").title(),
         ),
-        ("Confidence", confidence_level(job.get("confidence")).title()),
+        ("Assessment confidence", confidence_level(job.get("confidence")).title()),
         ("JD Quality", jd_quality_label(job)),
     ]
     st.markdown(

@@ -9,8 +9,16 @@ The generator is deterministic and local:
 
 from __future__ import annotations
 
+from ml.evidence_text import clean_source_line as clean_resume_evidence_line
+
+from document_text import format_bullets
+
+from document_text import clean_duplicated_punctuation
+
 import argparse
+import json
 import re
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,10 +37,8 @@ from workspace import Workspace, WorkspaceError, personal_workspace
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-COVER_LETTER_EXAMPLES_DIR = PROJECT_ROOT / "data" / "cover_letter_examples_md"
-
-TARGET_WORD_COUNT_MIN = 120
-TARGET_WORD_COUNT_MAX = 250
+TARGET_WORD_COUNT_MIN = 150
+TARGET_WORD_COUNT_MAX = 230
 MAX_COVER_LETTER_EVIDENCE_LINES = 3
 DEFAULT_THEME_KEYWORDS = {
     "machine_learning": ["machine learning", "ml", "classification", "model", "prediction"],
@@ -48,6 +54,21 @@ GENERIC_PHRASES = [
     "I am writing to apply",
     "I believe I am a good fit",
     "my recent graduate background",
+]
+INTERNAL_WORKFLOW_PHRASES = [
+    "uploaded resume",
+    "evidence threshold",
+    "automatically generated",
+    "insufficient proof point",
+    "claim plan",
+]
+SENSITIVE_IDENTITY_PHRASES = [
+    "citizenship",
+    "permanent resident",
+    "permanent residency",
+    "security clearance",
+    "visa sponsorship",
+    "work authorization",
 ]
 DEFAULT_BANNED_PHRASES = [
     "automatically generated",
@@ -71,6 +92,56 @@ THEME_LABELS = {
 }
 
 
+class CoverLetterGenerationError(ValueError):
+    """Raised when a truthful employer-facing draft cannot be produced."""
+
+    def __init__(self, message: str, *, reasons: list[str] | None = None, gaps: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.reasons = reasons or []
+        self.gaps = gaps or []
+
+
+@dataclass(frozen=True)
+class CoverLetterClaim:
+    """One selected requirement-to-resume proof used by the draft."""
+
+    claim_id: str
+    requirement: str
+    demand: str
+    support_label: str
+    evidence: str
+    source_section: str
+    rank_score: float
+
+
+@dataclass(frozen=True)
+class CoverLetterParagraph:
+    """Rendered paragraph with explicit claim provenance."""
+
+    kind: str
+    text: str
+    claim_ids: tuple[str, ...] = ()
+
+
+@dataclass
+class CoverLetterPlan:
+    """Versioned local generation plan persisted beside the employer draft."""
+
+    schema_version: int
+    company: str
+    role: str
+    candidate_name: str
+    claims: list[CoverLetterClaim]
+    paragraphs: list[CoverLetterParagraph]
+    word_count: int = 0
+    validation_status: str = "pending"
+    validation_errors: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a stable JSON representation for local traceability."""
+        return asdict(self)
+
+
 def load_experience_bank(path: Path) -> dict[str, Any]:
     """Load the local evidence bank."""
     if not path.exists():
@@ -84,18 +155,6 @@ def load_experience_bank(path: Path) -> dict[str, Any]:
     return data
 
 
-def load_cover_letter_examples() -> list[str]:
-    """Read local examples for tone reference when the folder exists."""
-    if not COVER_LETTER_EXAMPLES_DIR.exists():
-        return []
-
-    examples = []
-    for path in sorted(COVER_LETTER_EXAMPLES_DIR.glob("*")):
-        if path.is_file() and path.suffix.lower() in {".md", ".txt"}:
-            examples.append(path.read_text(encoding="utf-8"))
-    return examples
-
-
 def normalize_text(text: str) -> str:
     """Normalize text for simple keyword matching."""
     text = text.lower()
@@ -106,19 +165,6 @@ def normalize_text(text: str) -> str:
 def contains_phrase(text: str, phrase: str) -> bool:
     """Return True when a phrase appears in normalized text."""
     return f" {normalize_text(phrase).strip()} " in normalize_text(text)
-
-
-def clean_duplicated_punctuation(text: str) -> str:
-    """Fix duplicated periods caused by company names ending in periods."""
-    replacements = {
-        "Pte..": "Pte.",
-        "Ltd..": "Ltd.",
-        "Inc..": "Inc.",
-        "Company..": "Company.",
-    }
-    for bad_text, clean_text in replacements.items():
-        text = text.replace(bad_text, clean_text)
-    return text
 
 
 def extract_markdown_field(job_text: str, field_name: str, default: str) -> str:
@@ -221,17 +267,6 @@ EVIDENCE_STOPWORDS = {
 }
 
 
-def clean_resume_evidence_line(raw_line: str) -> str:
-    """Normalize one resume line while preserving the candidate's factual wording."""
-    line = raw_line.strip()
-    line = re.sub(r"^[-*•]+\s*", "", line)
-    line = re.sub(r"^\d+[.)]\s*", "", line)
-    line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
-    line = re.sub(r"`([^`]+)`", r"\1", line)
-    line = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", line)
-    return re.sub(r"\s+", " ", line).strip()
-
-
 def evidence_terms(text: str) -> set[str]:
     """Return useful lexical terms for transparent JD-to-resume evidence ranking."""
     return {
@@ -250,7 +285,7 @@ def extract_candidate_name(resume_text: str) -> str:
         words = line.split()
         if 2 <= len(words) <= 5 and not any(char.isdigit() for char in line):
             return line
-    return "Candidate Name"
+    return ""
 
 
 def score_resume_evidence_line(
@@ -386,33 +421,246 @@ def build_focus_summary(detected_themes: list[str]) -> str:
     return ", ".join(labels[:2]) + (" and " + labels[2] if len(labels) == 3 else "")
 
 
-def build_primary_evidence_paragraph(selection: dict[str, Any]) -> str:
-    """Build a source-grounded proof paragraph from the strongest resume block."""
-    experience = selection["experience"]
-    bullets = selection.get("selected_evidence", [])
-    name = str(experience.get("name", "this experience"))
-
-    if not bullets:
-        return ""
-
-    sentences = [first_person_evidence_sentence(bullet) for bullet in bullets[:2]]
-    if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
-        return " ".join(sentences)
-    return f"In {name}, " + " ".join(sentences)
+def concise_requirement(text: str, *, limit: int = 18) -> str:
+    """Return a compact source-grounded requirement phrase for prose."""
+    cleaned = re.sub(
+        r"^(?:required|requirements?|must|responsible for|experience with|proficiency in)[:\s-]*",
+        "",
+        clean_resume_evidence_line(text),
+        flags=re.IGNORECASE,
+    ).rstrip(".:")
+    words = cleaned.split()
+    return " ".join(words[:limit])
 
 
-def build_secondary_evidence_paragraph(selected: list[dict[str, Any]]) -> str:
-    """Add one concise, independently sourced proof when another block is relevant."""
-    if len(selected) > 1:
-        secondary = selected[1]
-        evidence = list(secondary.get("selected_evidence", []))
-        if evidence:
-            sentence = first_person_evidence_sentence(evidence[0])
-            name = str(secondary["experience"].get("name", "another resume experience"))
-            if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
-                return sentence
-            return f"In {name}, {sentence}"
-    return ""
+def requirement_sentence_fragment(text: str) -> str:
+    """Lowercase only generic leading verbs while preserving names and acronyms."""
+    phrase = concise_requirement(text)
+    first_word = phrase.split(maxsplit=1)[0].casefold() if phrase else ""
+    if first_word in {
+        "build",
+        "communicate",
+        "create",
+        "develop",
+        "design",
+        "implement",
+        "lead",
+        "manage",
+        "monitor",
+        "optimize",
+        "support",
+        "use",
+        "write",
+    }:
+        return phrase[:1].lower() + phrase[1:]
+    return phrase
+
+
+def select_cover_letter_claims(evidence_index: dict[str, Any], *, limit: int = 3) -> list[CoverLetterClaim]:
+    """Select diverse, cover-letter-safe proof using one shared evidence index."""
+    eligible = [
+        match
+        for match in evidence_index["accepted_matches"]
+        if match.get("cover_letter_eligible", True)
+        and str(match.get("evidence", "")).strip()
+        and str(match.get("requirement", "")).strip()
+    ]
+    ranked = sorted(
+        eligible,
+        key=lambda match: (
+            str(match.get("demand", "required")) == "preferred",
+            str(match.get("match_type", "")) != "Direct support",
+            -float(match.get("similarity", 0.0)),
+            int(match.get("line_index", 0)),
+        ),
+    )
+    chosen: list[dict[str, Any]] = []
+    seen_requirements: set[str] = set()
+    seen_evidence: set[str] = set()
+    seen_sections: set[str] = set()
+
+    for prefer_new_section in (True, False):
+        for match in ranked:
+            requirement = str(match["requirement"]).strip()
+            evidence = str(match["evidence"]).strip()
+            section = str(match.get("section_evidence", "Resume evidence")).strip()
+            if requirement in seen_requirements or evidence in seen_evidence:
+                continue
+            if prefer_new_section and section in seen_sections:
+                continue
+            chosen.append(match)
+            seen_requirements.add(requirement)
+            seen_evidence.add(evidence)
+            seen_sections.add(section)
+            if len(chosen) == limit:
+                break
+        if len(chosen) == limit:
+            break
+
+    return [
+        CoverLetterClaim(
+            claim_id=f"claim_{index}",
+            requirement=str(match["requirement"]),
+            demand=str(match.get("demand", "required")),
+            support_label=(
+                "Direct" if str(match.get("match_type")) == "Direct support" else "Partial"
+            ),
+            evidence=str(match["evidence"]),
+            source_section=str(match.get("section_evidence", "Resume evidence")),
+            rank_score=round(float(match.get("similarity", 0.0)), 4),
+        )
+        for index, match in enumerate(chosen, start=1)
+    ]
+
+
+def assert_cover_letter_claim_gate(
+    claims: list[CoverLetterClaim],
+    evidence_index: dict[str, Any],
+    *,
+    candidate_name: str,
+) -> None:
+    """Block employer-facing generation until truthful proof is sufficient."""
+    reasons: list[str] = []
+    if not candidate_name.strip():
+        reasons.append("Confirm your name on the Resume page.")
+    if len({claim.evidence for claim in claims}) < 2:
+        reasons.append("At least two distinct resume evidence statements are required.")
+    if len({claim.requirement for claim in claims}) < 2:
+        reasons.append("The evidence must cover at least two job requirements.")
+    if not any(claim.support_label == "Direct" for claim in claims):
+        reasons.append("At least one job requirement needs Direct resume support.")
+    if reasons:
+        raise CoverLetterGenerationError(
+            "Not enough grounded evidence to generate a credible cover letter.",
+            reasons=reasons,
+            gaps=list(evidence_index.get("unmatched_requirements", []))[:3],
+        )
+
+
+def render_claim_paragraph(claim: CoverLetterClaim) -> str:
+    """Render one proof paragraph without expanding beyond the selected evidence."""
+    evidence_sentence = first_person_evidence_sentence(claim.evidence)
+    requirement = requirement_sentence_fragment(claim.requirement)
+    section = claim.source_section.strip()
+    prefix = "" if section.casefold() in {"skills", "technical skills", "summary", "profile"} else f"In {section}, "
+    secondary_variant = claim.claim_id.endswith("2")
+    if claim.support_label == "Direct" and secondary_variant:
+        bridge = (
+            f"This evidence aligns directly with the position's need for {requirement}. "
+            "It is a second, distinct example of how I have applied relevant skills to concrete work and communicated the result."
+        )
+    elif claim.support_label == "Direct":
+        bridge = (
+            f"This directly supports the position's emphasis on {requirement}. "
+            "It gives me a concrete basis for contributing to similar work while adapting to the team's tools and operating context."
+        )
+    elif secondary_variant:
+        bridge = (
+            f"This experience is related to the position's need for {requirement}. "
+            "Although it is not the same setting, it offers a documented foundation I could transfer while learning the team's specific approach."
+        )
+    else:
+        bridge = (
+            f"This experience is adjacent to the position's need for {requirement}. "
+            "It provides a practical foundation I could transfer to the work while learning the role's specific methods and standards."
+        )
+    return f"{prefix}{evidence_sentence} {bridge}"
+
+
+def render_cover_letter_plan(plan: CoverLetterPlan) -> str:
+    """Render the employer-facing Markdown from a validated provenance plan."""
+    body = "\n\n".join(paragraph.text for paragraph in plan.paragraphs)
+    return clean_duplicated_punctuation(
+        f"Dear Hiring Team,\n\n{body}\n\nSincerely,\n\n{plan.candidate_name}\n"
+    )
+
+
+def validate_cover_letter_plan(plan: CoverLetterPlan, cover_letter: str, experience_bank: dict[str, Any]) -> list[str]:
+    """Return hard generation failures for content, length, and provenance."""
+    errors = validate_cover_letter(cover_letter, experience_bank)
+    claim_ids = {claim.claim_id for claim in plan.claims}
+    used_claim_ids = {
+        claim_id
+        for paragraph in plan.paragraphs
+        for claim_id in paragraph.claim_ids
+    }
+    if used_claim_ids != claim_ids:
+        errors.append("not every selected claim has paragraph provenance")
+    if any(paragraph.kind.startswith("evidence") and not paragraph.claim_ids for paragraph in plan.paragraphs):
+        errors.append("an evidence paragraph is missing provenance")
+    normalized_paragraphs = [re.sub(r"\s+", " ", paragraph.text).strip().casefold() for paragraph in plan.paragraphs]
+    if len(normalized_paragraphs) != len(set(normalized_paragraphs)):
+        errors.append("duplicate paragraph detected")
+    return errors
+
+
+def build_cover_letter_plan(
+    resume_text: str,
+    job_text: str,
+    experience_bank: dict[str, Any] | None = None,
+    *,
+    candidate_name: str | None = None,
+) -> CoverLetterPlan:
+    """Build and validate a versioned evidence-first local writing plan."""
+    bank = experience_bank or {"theme_keywords": DEFAULT_THEME_KEYWORDS}
+    resolved_name = (candidate_name if candidate_name is not None else extract_candidate_name(resume_text)).strip()
+    evidence_index = build_semantic_evidence_index(job_text, resume_text)
+    # Two distinct proof points are enough for a concise one-page letter.  The
+    # selector still supports a third claim for future layouts, but the default
+    # draft deliberately favors depth and provenance over evidence stuffing.
+    claims = select_cover_letter_claims(evidence_index, limit=2)
+    assert_cover_letter_claim_gate(claims, evidence_index, candidate_name=resolved_name)
+    primary, secondary = claims[:2]
+    company = extract_company(job_text)
+    role = extract_job_title(job_text)
+    opening = (
+        f"The {role} position at {company} centers on {requirement_sentence_fragment(primary.requirement)}, "
+        f"with {requirement_sentence_fragment(secondary.requirement)} also important to the work. "
+        "I am interested in the role because these priorities connect to specific projects and experience in my background, including the examples below."
+    )
+    claim_ids = tuple(claim.claim_id for claim in claims)
+    paragraphs = [
+        CoverLetterParagraph(kind="opening", text=opening, claim_ids=claim_ids),
+        CoverLetterParagraph(
+            kind="evidence_primary",
+            text=render_claim_paragraph(primary),
+            claim_ids=(primary.claim_id,),
+        ),
+        CoverLetterParagraph(
+            kind="evidence_secondary",
+            text=render_claim_paragraph(secondary),
+            claim_ids=(secondary.claim_id,),
+        ),
+    ]
+    paragraphs.append(
+        CoverLetterParagraph(
+            kind="closing",
+            text=(
+                "Together, these examples represent the work in my background that is most relevant to this position. "
+                f"I would welcome the opportunity to discuss how this experience could support the {role} team at {company}. "
+                "Thank you for your time and consideration."
+            ),
+            claim_ids=claim_ids,
+        )
+    )
+    plan = CoverLetterPlan(
+        schema_version=1,
+        company=company,
+        role=role,
+        candidate_name=resolved_name,
+        claims=claims,
+        paragraphs=paragraphs,
+    )
+    cover_letter = render_cover_letter_plan(plan)
+    plan.word_count = len(cover_letter.split())
+    plan.validation_errors = validate_cover_letter_plan(plan, cover_letter, bank)
+    plan.validation_status = "passed" if not plan.validation_errors else "failed"
+    if plan.validation_errors:
+        raise CoverLetterGenerationError(
+            "The grounded cover letter failed the employer-facing quality gate.",
+            reasons=plan.validation_errors,
+        )
+    return plan
 
 
 def build_cover_letter(
@@ -420,61 +668,9 @@ def build_cover_letter(
     job_text: str,
     experience_bank: dict[str, Any] | None = None,
 ) -> str:
-    """Build a concise employer-facing CL from JD priorities and resume proof."""
-    bank = experience_bank or {"theme_keywords": DEFAULT_THEME_KEYWORDS}
-    detected_themes = detect_themes(job_text, bank)
-    evidence_index = build_semantic_evidence_index(job_text, resume_text)
-    selected = select_resume_evidence_blocks(
-        resume_text,
-        job_text,
-        detected_themes,
-        bank,
-        evidence_index=evidence_index,
-    )
-    candidate_name = extract_candidate_name(resume_text)
-    job_title = extract_job_title(job_text)
-    company = extract_company(job_text)
-    focus_summary = build_focus_summary(detected_themes[:2])
-    priority = top_job_priority(job_text, detected_themes)
-
-    paragraphs = [
-        "Dear Hiring Team,",
-        (
-            f"The {job_title} role at {company} emphasizes {priority}. "
-            f"My resume shows hands-on work in {focus_summary}, and the evidence most relevant to this role "
-            "comes from projects and experience where I applied those skills to concrete work."
-        ),
-    ]
-
-    if selected:
-        proof_sentences = [build_primary_evidence_paragraph(selected[0])]
-        secondary = build_secondary_evidence_paragraph(selected)
-        if secondary:
-            proof_sentences.append(secondary)
-        paragraphs.append(" ".join(sentence for sentence in proof_sentences if sentence))
-    else:
-        paragraphs.append(
-            "My uploaded resume does not contain a sufficiently specific proof point for the main JD priority, "
-            "so I would review this draft and add only a truthful example already supported by the resume."
-        )
-
-    paragraphs.extend(
-        [
-            (
-                f"I would welcome a conversation about how I could bring this experience to {company}'s "
-                f"{focus_summary} work."
-            ),
-            f"Sincerely,\n\n{candidate_name}",
-        ]
-    )
-
-    cover_letter = "\n\n".join(paragraphs) + "\n"
-    if len(cover_letter.split()) > TARGET_WORD_COUNT_MAX and selected:
-        compact_selection = dict(selected[0])
-        compact_selection["selected_evidence"] = list(selected[0].get("selected_evidence", []))[:1]
-        paragraphs[2] = build_primary_evidence_paragraph(compact_selection)
-        cover_letter = "\n\n".join(paragraphs) + "\n"
-    return clean_duplicated_punctuation(cover_letter)
+    """Compatibility wrapper around the evidence-first v2 plan builder."""
+    plan = build_cover_letter_plan(resume_text, job_text, experience_bank)
+    return render_cover_letter_plan(plan)
 
 
 def find_missing_or_weak_areas(job_text: str, detected_themes: list[str], selected: list[dict[str, Any]]) -> list[str]:
@@ -573,7 +769,6 @@ def render_internal_notes(
     context: dict[str, Any],
     *,
     job_text: str,
-    examples: list[str],
     cover_letter: str,
 ) -> str:
     """Render the internal review document from a prepared evidence trace."""
@@ -624,10 +819,6 @@ def render_internal_notes(
             "",
             format_bullets(find_missing_or_weak_areas(job_text, detected_themes, context["selected"])),
             "",
-            "## Example Files Used For Structure",
-            "",
-            f"- {len(examples)} local example file(s) available; examples are used only as tone references and are not copied.",
-            "",
             "## Human Review Warnings",
             "",
             "- Review the employer-facing cover letter before submitting.",
@@ -643,32 +834,50 @@ def build_internal_notes(
     resume_text: str,
     job_text: str,
     experience_bank: dict[str, Any],
-    examples: list[str],
+    _examples: list[str],
     cover_letter: str,
 ) -> str:
     """Build a source trace, gap audit, and quality check for human review."""
     context = build_internal_note_context(resume_text, job_text, experience_bank)
-    return render_internal_notes(context, job_text=job_text, examples=examples, cover_letter=cover_letter)
+    return render_internal_notes(context, job_text=job_text, cover_letter=cover_letter)
 
 
 def validate_cover_letter(cover_letter: str, experience_bank: dict[str, Any]) -> list[str]:
-    """Return forbidden phrases found in employer-facing content."""
+    """Return hard employer-facing content and length failures."""
     found = []
     banned_phrases = list(experience_bank.get("banned_phrases") or DEFAULT_BANNED_PHRASES)
-    for phrase in banned_phrases + GENERIC_PHRASES:
-        if phrase in cover_letter:
+    for phrase in banned_phrases + GENERIC_PHRASES + INTERNAL_WORKFLOW_PHRASES:
+        if phrase.casefold() in cover_letter.casefold():
             found.append(phrase)
     word_count = len(cover_letter.split())
+    if word_count < TARGET_WORD_COUNT_MIN:
+        found.append(f"word count {word_count} is below {TARGET_WORD_COUNT_MIN}")
     if word_count > TARGET_WORD_COUNT_MAX:
         found.append(f"word count {word_count} exceeds {TARGET_WORD_COUNT_MAX}")
     return found
 
 
-def format_bullets(items: list[str]) -> str:
-    """Format a list as Markdown bullets."""
-    if not items:
-        return "- None found"
-    return "\n".join(f"- {item}" for item in items)
+def validate_manual_cover_letter_draft(cover_letter: str) -> tuple[list[str], list[str]]:
+    """Validate a user-edited draft and separate hard failures from review warnings."""
+    errors: list[str] = []
+    warnings: list[str] = []
+    folded = cover_letter.casefold()
+    for phrase in INTERNAL_WORKFLOW_PHRASES:
+        if phrase.casefold() in folded:
+            errors.append(f"Remove internal workflow phrase: {phrase}")
+    for placeholder in ("candidate name", "your name", "example@email", "example.com/in/"):
+        if placeholder in folded:
+            errors.append(f"Replace placeholder content: {placeholder}")
+    word_count = len(cover_letter.split())
+    if not TARGET_WORD_COUNT_MIN <= word_count <= TARGET_WORD_COUNT_MAX:
+        errors.append(
+            f"Keep the draft between {TARGET_WORD_COUNT_MIN} and {TARGET_WORD_COUNT_MAX} words "
+            f"(currently {word_count})."
+        )
+    for phrase in SENSITIVE_IDENTITY_PHRASES:
+        if phrase in folded:
+            warnings.append(f"Verify this sensitive identity statement before export: {phrase}")
+    return errors, warnings
 
 
 def save_generated_file(
@@ -699,7 +908,7 @@ def load_cover_letter_inputs(job_description_path: Path, workspace: Workspace) -
             if workspace.experience_bank_path
             else {"theme_keywords": DEFAULT_THEME_KEYWORDS, "banned_phrases": DEFAULT_BANNED_PHRASES}
         ),
-        "examples": load_cover_letter_examples(),
+        "candidate_name": workspace.candidate_profile.name,
     }
 
 
@@ -736,6 +945,22 @@ def save_cover_letter_outputs(
     return cover_letter_path, notes_path
 
 
+def save_cover_letter_plan(
+    job_description_path: Path,
+    workspace: Workspace,
+    package_dir: Path | None,
+    plan: CoverLetterPlan,
+) -> Path:
+    """Persist the versioned local provenance plan beside the draft."""
+    return save_generated_file(
+        job_description_path,
+        json.dumps(plan.as_dict(), indent=2, ensure_ascii=False) + "\n",
+        "cover_letter_plan.json",
+        workspace,
+        package_dir,
+    )
+
+
 def generate_cover_letter(
     job_description_path: Path,
     workspace: Workspace,
@@ -745,21 +970,21 @@ def generate_cover_letter(
     workspace.require_writable()
     inputs = load_cover_letter_inputs(job_description_path, workspace)
     validate_cover_letter_inputs(inputs["job_text"])
-    cover_letter = build_cover_letter(inputs["resume_text"], inputs["job_text"], inputs["experience_bank"])
-    internal_notes = build_internal_notes(
-        inputs["resume_text"], inputs["job_text"], inputs["experience_bank"], inputs["examples"], cover_letter
+    plan = build_cover_letter_plan(
+        inputs["resume_text"],
+        inputs["job_text"],
+        inputs["experience_bank"],
+        candidate_name=inputs["candidate_name"],
     )
-
-    forbidden_phrases = validate_cover_letter(cover_letter, inputs["experience_bank"])
-    if forbidden_phrases:
-        print(
-            "WARNING: employer-facing cover letter contains forbidden phrase(s): "
-            + ", ".join(forbidden_phrases)
-        )
+    cover_letter = render_cover_letter_plan(plan)
+    internal_notes = build_internal_notes(
+        inputs["resume_text"], inputs["job_text"], inputs["experience_bank"], [], cover_letter
+    )
 
     cover_letter_path, notes_path = save_cover_letter_outputs(
         job_description_path, workspace, package_dir, cover_letter, internal_notes
     )
+    save_cover_letter_plan(job_description_path, workspace, package_dir, plan)
     return cover_letter, cover_letter_path, internal_notes, notes_path
 
 

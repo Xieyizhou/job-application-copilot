@@ -156,10 +156,29 @@ def explicit_job_experience_levels(job_text: str) -> tuple[list[str], list[str]]
 
 
 def is_uk_job(job_text: str) -> bool:
-    """Return True when a job description appears to be UK or London based."""
-    normalized_job = normalize_text(job_text)
-    uk_terms = ["london", "united kingdom", "great britain", "uk", "adzuna.co.uk", "adzuna.gb"]
-    return any(contains_alias(normalized_job, term) for term in uk_terms)
+    """Return True only when the saved role itself appears UK based.
+
+    Employer boilerplate often lists offices around the world.  An explicit
+    ``Location:`` field therefore takes precedence over incidental place names
+    in the body of the posting.
+    """
+    location_match = re.search(
+        r"(?im)^(?:[-*]\s*)?location\s*:\s*([^\n]+)$",
+        job_text,
+    )
+    uk_terms = ("london", "united kingdom", "great britain", "uk")
+    if location_match:
+        location = normalize_text(location_match.group(1))
+        return any(contains_alias(location, term) for term in uk_terms)
+
+    if re.search(r"https?://[^\s]*(?:adzuna\.co\.uk|adzuna\.gb)(?:[/\s]|$)", job_text, re.I):
+        return True
+    explicit_location_patterns = [
+        r"\b(?:role|position|job)\s+(?:is\s+)?(?:based|located)\s+in\s+(?:london|the\s+uk|the\s+united\s+kingdom)\b",
+        r"\b(?:based|located)\s+in\s+(?:london|the\s+uk|the\s+united\s+kingdom)\b",
+        r"\blondon\s*,\s*(?:uk|united\s+kingdom)\b",
+    ]
+    return any(re.search(pattern, job_text, re.I) for pattern in explicit_location_patterns)
 
 
 def asks_for_uk_work_authorization_review(job_text: str) -> bool:
@@ -193,7 +212,13 @@ def must_already_have_uk_work_authorization(job_text: str) -> bool:
 
 def find_red_flags(job_text: str, resume_text: str) -> list[str]:
     """Find requirements that need human review without assuming eligibility."""
-    normalized_job = normalize_text(job_text)
+    # Empty saved-form metadata is not an employer work-authorization demand.
+    requirement_text = re.sub(
+        r"(?im)^Visa Note:[ \t]*(?:Not provided|Unknown|N/?A|None)?[ \t]*$",
+        "",
+        job_text,
+    )
+    normalized_job = normalize_text(requirement_text)
     normalized_resume = normalize_text(resume_text)
     red_flags = []
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from typing import Callable
 
@@ -12,7 +14,7 @@ from dashboard_home_components import (
     render_recent_opportunities,
 )
 from dashboard_review import job_needs_full_jd, review_fit_band
-from scoring_types import DashboardJob, TrackerRow
+from scoring_types import DashboardJob
 
 
 @dataclass(frozen=True)
@@ -23,8 +25,6 @@ class HomePageServices:
     demo_mode_enabled: Callable[[], bool]
     go_to_page: Callable[[str], None]
     load_screened_jobs: Callable[..., list[DashboardJob]]
-    load_tracker_rows: Callable[..., list[TrackerRow]]
-    render_page_header: Callable[[str, str | None], None]
 
 
 def home_summary(
@@ -43,7 +43,7 @@ def home_summary(
 def dashboard_tab(services: HomePageServices) -> None:
     """Render the current workflow state and the most useful next action."""
     render_home_styles()
-    services.render_page_header(
+    render_page_header(
         "Dashboard",
         "Move from fresh opportunities to evidence-backed applications.",
     )
@@ -60,17 +60,24 @@ def primary_home_action(
 ) -> tuple[str, str, str]:
     """Select one deterministic next action for the Dashboard."""
     low_evidence = sum(1 for job in jobs if job_needs_full_jd(job))
-    if packages:
+    strong_matches = sum(1 for job in jobs if review_fit_band(job) == "Strong")
+    if strong_matches:
         return (
-            f"Review {packages} cover letter(s)",
-            "Verify evidence, gaps, and employer details before applying.",
-            "Cover Letter",
+            f"Review {strong_matches} strong match{'es' if strong_matches != 1 else ''}",
+            "Inspect the evidence and gaps before preparing an application.",
+            "Review Jobs",
         )
     if low_evidence:
         return (
-            f"Complete {low_evidence} job description(s)",
-            "Add the original posting before trusting fit.",
+            "Complete job descriptions before trusting fit",
+            f"{low_evidence} saved role{'s' if low_evidence != 1 else ''} still need the original posting.",
             "Review Jobs",
+        )
+    if packages:
+        return (
+            f"Review {packages} cover letter{'s' if packages != 1 else ''}",
+            "Verify evidence, gaps, and employer details before applying.",
+            "Cover Letter",
         )
     if jobs:
         return (

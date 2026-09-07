@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from jd_text import normalize_jd_boundaries
 
 
-QUALITY_SCHEMA_VERSION = 1
+QUALITY_SCHEMA_VERSION = 2
 
 
 class JDQualityError(ValueError):
@@ -91,7 +92,11 @@ def _source_hints(job_text: str, word_count: int) -> tuple[bool, bool, bool]:
         "snippet" in description_source
         or "summary" in description_source
         or fetch_status in {"snippet", "snippet_only", "missing", "partial"}
-        or (source in {"adzuna", "jooble"} and word_count < 180)
+        or (
+            source in {"adzuna", "jooble"}
+            and word_count < 180
+            and not explicit_full
+        )
     )
     return saved_source_record, explicit_full, explicit_snippet
 
@@ -102,12 +107,22 @@ def classify_jd_quality(job_text: str) -> dict[str, Any]:
     The returned score describes document quality, not candidate fit.  Rules and
     component signals are returned so every classification remains auditable.
     """
-    body = extract_description_body(job_text)
+    body = normalize_jd_boundaries(extract_description_body(job_text))
     units = _content_units(body)
     word_count = len(re.findall(r"\b[\w+#.-]+\b", body))
     section_hits = [name for name, pattern in _SECTION_PATTERNS.items() if pattern.search(body)]
     requirement_count = sum(1 for unit in units if _REQUIREMENT_SIGNALS.search(unit))
     responsibility_count = sum(1 for unit in units if _RESPONSIBILITY_SIGNALS.search(unit))
+    # Use the same canonical requirement units as evidence scoring. Local import
+    # avoids an import cycle through the legacy evidence inference helpers.
+    from structured_jd import structure_job_description
+
+    structured = structure_job_description(job_text)
+    requirement_count = max(requirement_count, sum(
+        row["type"] in {"required", "preferred", "constraint"}
+        for row in structured["requirements"]
+    ))
+    responsibility_count = max(responsibility_count, len(structured["responsibilities"]))
     boilerplate_share = _boilerplate_share(units)
     visible_truncation = bool(re.search(r"(?:\.\.\.|…)", body))
     saved_source_record, explicit_full, explicit_snippet = _source_hints(job_text, word_count)

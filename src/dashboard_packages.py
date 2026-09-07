@@ -14,6 +14,7 @@ INTERNAL_PACKAGE_FILES = {
     "cover_letter.md",
     "cover_letter.docx",
     "cover_letter_notes.md",
+    "cover_letter_plan.json",
 }
 
 PACKAGE_ZIP_FILE_ORDER = [
@@ -21,6 +22,7 @@ PACKAGE_ZIP_FILE_ORDER = [
     "cover_letter.md",
     "analysis.md",
     "cover_letter_notes.md",
+    "cover_letter_plan.json",
 ]
 
 

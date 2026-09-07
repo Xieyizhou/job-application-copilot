@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import read_text_file
+
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,14 +16,6 @@ from fetch_history import load_fetch_runs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TextReader = Callable[[Path], str]
-
-
-def read_text_file(path: Path) -> str:
-    """Read a saved Markdown preview without raising for missing files."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
 
 
 def fetch_run_label(run: dict[str, Any]) -> str:
@@ -59,6 +53,7 @@ def fetch_history_rows(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "Total returned": run.get("total_jobs_returned", 0),
             "New jobs": run.get("new_jobs_count", 0),
             "Already seen": run.get("duplicate_jobs_count", 0),
+            "Skipped previews": run.get("skipped_jobs_count", 0),
             "Status": run.get("fetch_status", ""),
         }
         for run in runs
@@ -100,9 +95,15 @@ def render_fetch_run_job_cards(
             st.markdown(f"**{company}**")
             st.write(role)
             st.caption(f"{location} | {source}")
-            st.caption(
-                "Saved locally · Fit and evidence quality are calculated in Review Jobs"
-            )
+            if job.get("path"):
+                st.caption(
+                    "Saved locally · Fit and evidence quality are calculated in Review Jobs"
+                )
+            else:
+                st.caption(
+                    "Preview only · Not saved because a full JD or recoverable original "
+                    "posting was unavailable"
+                )
             if job.get("job_url"):
                 st.link_button("Open original posting", str(job["job_url"]))
             if job.get("path"):
@@ -126,6 +127,7 @@ def render_fetch_run_details(run: dict[str, Any]) -> None:
         f"{run.get('total_jobs_returned', 0)} returned | "
         f"{run.get('new_jobs_count', 0)} new | "
         f"{run.get('duplicate_jobs_count', 0)} already seen | "
+        f"{run.get('skipped_jobs_count', 0)} previews skipped | "
         f"Status: {run.get('fetch_status', '-')}"
     )
     notes = str(run.get("notes", "") or "").strip()

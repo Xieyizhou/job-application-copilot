@@ -86,9 +86,12 @@
 
 ## Relevant Resume Evidence
 
-- Candidate source contains keywords related to Python data analysis.
-- Candidate source contains keywords related to Econometrics and statistical reasoning.
-- Candidate source contains keywords related to Teaching and communication.
+- Python => Built a classification pipeline with Python and scikit-learn. (92%, Direct support)
+- SQL => Analyzed a fictional public dataset using SQL, Python, and statistics. (92%, Direct support)
+- data visualization => data visualization with matplotlib (89%, Direct support)
+- statistics and data analysis => statistics and data analysis (90%, Direct support)
+- documentation => documentation and stakeholder communication (82%, Direct support)
+- stakeholder communication => documentation and stakeholder communication (88%, Direct support)
 
 ## Demo Output
 

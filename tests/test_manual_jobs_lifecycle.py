@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import job_document
+import manual_jd_parser
+
 import tempfile
 import unittest
 from contextlib import ExitStack
@@ -93,17 +96,17 @@ class ManualJobLifecycleTests(unittest.TestCase):
             self.assertEqual(manual_jobs.load_manual_jobs(), [{"id": "valid", "company": "Example"}])
 
     def test_text_upload_and_quality_helpers_fail_closed(self) -> None:
-        text_result = manual_jobs.extract_text_from_upload("job.txt", b"Role: Analyst")
+        text_result = job_document.extract_text_from_upload("job.txt", b"Role: Analyst")
         self.assertEqual(text_result.text, "Role: Analyst")
-        self.assertTrue(manual_jobs.extract_text_from_upload("job.exe", b"x").error)
-        self.assertTrue(manual_jobs.pdf_extraction_is_low_quality(manual_jobs.ExtractionResult("short")))
+        self.assertTrue(job_document.extract_text_from_upload("job.exe", b"x").error)
+        self.assertTrue(job_document.pdf_extraction_is_low_quality(job_document.ExtractionResult("short")))
         self.assertEqual(
-            manual_jobs.join_unique_warnings(["First\nSecond", "First", ""]),
+            job_document.join_unique_warnings(["First\nSecond", "First", ""]),
             "First\nSecond",
         )
 
     def test_structured_parser_extracts_reviewable_fields(self) -> None:
-        suggestions = manual_jobs.parse_job_description_suggestions(FULL_JD)
+        suggestions = manual_jd_parser.parse_job_description_suggestions(FULL_JD)
         self.assertEqual(suggestions["title"], "Data Analyst")
         self.assertIn("Example Analytics", suggestions["company"])
         self.assertIn("Remote", suggestions["location"])
@@ -114,18 +117,18 @@ class ManualJobLifecycleTests(unittest.TestCase):
 
     def test_cleanup_sections_and_quality_warnings(self) -> None:
         noisy = """LinkedIn\nEasy Apply\nData Analyst\nExample Analytics\nRemote\n## Requirements\nPython and SQL required.\n"""
-        cleaned = manual_jobs.clean_extracted_job_text(noisy)
+        cleaned = manual_jd_parser.clean_extracted_job_text(noisy)
         self.assertNotIn("Easy Apply", cleaned)
-        self.assertEqual(manual_jobs.canonical_section_key("## Requirements"), "requirements")
-        sections = manual_jobs.parse_structured_sections(FULL_JD)
+        self.assertEqual(manual_jd_parser.canonical_section_key("## Requirements"), "requirements")
+        sections = manual_jd_parser.parse_structured_sections(FULL_JD)
         self.assertTrue(sections["requirements"])
-        warnings = manual_jobs.job_description_quality_warnings(
+        warnings = manual_jd_parser.job_description_quality_warnings(
             company="", title="", location="", url="", job_description="short"
         )
         self.assertGreaterEqual(len(warnings), 4)
 
     def test_linkedin_header_and_location_variants(self) -> None:
-        header = manual_jobs.parse_linkedin_pdf_header(
+        header = manual_jd_parser.parse_linkedin_pdf_header(
             [
                 "Machine Learning Engineer",
                 "Example AI · Singapore · Full-time",
@@ -135,36 +138,36 @@ class ManualJobLifecycleTests(unittest.TestCase):
         self.assertEqual(header["company"], "Example AI")
         self.assertEqual(header["job_title"], "Machine Learning Engineer")
         self.assertEqual(header["job_type"], "Full-time")
-        self.assertEqual(manual_jobs.parse_linkedin_workplace_type("Workplace type is Hybrid"), "Hybrid")
-        self.assertEqual(manual_jobs.parse_linkedin_job_type("Job type is Part time"), "Part-time")
+        self.assertEqual(manual_jd_parser.parse_linkedin_workplace_type("Workplace type is Hybrid"), "Hybrid")
+        self.assertEqual(manual_jd_parser.parse_linkedin_job_type("Job type is Part time"), "Part-time")
         self.assertEqual(
-            manual_jobs.infer_title_company_location_from_header(
+            manual_jd_parser.infer_title_company_location_from_header(
                 ["Data Analyst", "Example Analytics · London, United Kingdom"]
             ),
             ("Data Analyst", "Example Analytics", "London, United Kingdom"),
         )
         self.assertEqual(
-            manual_jobs.split_location_options("Remote, Singapore, or London, United Kingdom"),
+            manual_jd_parser.split_location_options("Remote, Singapore, or London, United Kingdom"),
             ["Singapore", "London", "United Kingdom"],
         )
-        self.assertEqual(manual_jobs.detected_known_locations("Singapore or London"), ["Singapore", "London"])
+        self.assertEqual(manual_jd_parser.detected_known_locations("Singapore or London"), ["Singapore", "London"])
 
     def test_authorization_employment_and_company_evidence(self) -> None:
         authorization = (
             "Candidates must already have the right to work. "
             "No visa sponsorship is available."
         )
-        note, confidence, evidence = manual_jobs.visa_evidence_for(authorization)
+        note, confidence, evidence = manual_jd_parser.visa_evidence_for(authorization)
         self.assertEqual(note, "Existing work authorization required; no visa sponsorship.")
         self.assertEqual(confidence, "high")
         self.assertIn("visa sponsorship", evidence.lower())
-        self.assertTrue(manual_jobs.has_strict_work_authorization_phrase(authorization))
-        self.assertIn("right to work", manual_jobs.find_authorization_lines(authorization).lower())
+        self.assertTrue(manual_jd_parser.has_strict_work_authorization_phrase(authorization))
+        self.assertIn("right to work", manual_jd_parser.find_authorization_lines(authorization).lower())
         self.assertEqual(
-            manual_jobs.infer_employment_type("This is a full-time internship position."),
+            manual_jd_parser.infer_employment_type("This is a full-time internship position."),
             ("Internship", "Internship language detected."),
         )
-        company, company_confidence, company_evidence = manual_jobs.infer_company_from_body(
+        company, company_confidence, company_evidence = manual_jd_parser.infer_company_from_body(
             "Example Analytics Labs builds reporting software. "
             "Example Analytics Labs provides data tools."
         )
@@ -179,61 +182,61 @@ You will build production data pipelines and maintain dashboards.
 Requirements
 Experience with Python and SQL is required.
 """
-        suggestions = manual_jobs.parse_job_description_suggestions(job_text)
+        suggestions = manual_jd_parser.parse_job_description_suggestions(job_text)
         self.assertEqual(suggestions["company"], "")
         self.assertEqual(suggestions["company_confidence"], "low")
-        self.assertFalse(manual_jobs.looks_like_company_candidate("About the role"))
+        self.assertFalse(manual_jd_parser.looks_like_company_candidate("About the role"))
 
     def test_pdf_formatting_and_fallback_selection(self) -> None:
-        formatted = manual_jobs.format_pdf_pages(
+        formatted = job_document.format_pdf_pages(
             ["1 of 2\n## Responsibilities\nBuild dash-\nboards", "## Requirements\nPython"]
         )
         self.assertIn("--- Page 1 ---", formatted)
         self.assertIn("Build dashboards", formatted)
         self.assertEqual(
-            manual_jobs.detect_section_headings(formatted),
+            job_document.detect_section_headings(formatted),
             ["## Responsibilities", "## Requirements"],
         )
-        report = manual_jobs.build_pdf_extraction_report(
+        report = job_document.build_pdf_extraction_report(
             "test", [formatted], formatted, {"title": " Example Role "}
         )
         self.assertEqual(report["metadata_title"], "Example Role")
         self.assertEqual(report["sections_detected"], 2)
 
-        weak = manual_jobs.ExtractionResult("short", warning="weak", report={"warnings": ["weak"]})
-        strong = manual_jobs.ExtractionResult("x" * 600, report={"warnings": []})
-        with patch.object(manual_jobs, "extract_pdf_with_pdfplumber", return_value=weak), patch.object(
-            manual_jobs, "extract_pdf_with_pymupdf", return_value=strong
+        weak = job_document.ExtractionResult("short", warning="weak", report={"warnings": ["weak"]})
+        strong = job_document.ExtractionResult("x" * 600, report={"warnings": []})
+        with patch.object(job_document, "extract_pdf_with_pdfplumber", return_value=weak), patch.object(
+            job_document, "extract_pdf_with_pdfium", return_value=strong
         ):
-            selected = manual_jobs.extract_text_from_pdf(b"pdf")
+            selected = job_document.extract_text_from_pdf(b"pdf")
         self.assertEqual(selected.text, strong.text)
         self.assertIn("weak", selected.warning)
 
-        empty = manual_jobs.ExtractionResult("", warning="unavailable", report={"method": "none"})
-        with patch.object(manual_jobs, "extract_pdf_with_pdfplumber", return_value=empty), patch.object(
-            manual_jobs, "extract_pdf_with_pymupdf", return_value=empty
-        ), patch.object(manual_jobs, "extract_pdf_with_pymupdf_ocr", return_value=empty):
-            failed = manual_jobs.extract_text_from_pdf(b"pdf")
+        empty = job_document.ExtractionResult("", warning="unavailable", report={"method": "none"})
+        with patch.object(job_document, "extract_pdf_with_pdfplumber", return_value=empty), patch.object(
+            job_document, "extract_pdf_with_pdfium", return_value=empty
+        ), patch.object(job_document, "extract_pdf_with_pdfium_ocr", return_value=empty):
+            failed = job_document.extract_text_from_pdf(b"pdf")
         self.assertFalse(failed.text)
         self.assertIn("unavailable", failed.warning)
 
     def test_role_title_and_summary_helpers(self) -> None:
         self.assertEqual(
-            manual_jobs.extract_role_title_phrases("Example_AI_Machine_Learning_Engineer.pdf"),
+            manual_jd_parser.extract_role_title_phrases("Example_AI_Machine_Learning_Engineer.pdf"),
             ["AI Machine Learning Engineer"],
         )
-        self.assertTrue(manual_jobs.is_plausible_job_title_line("Data Analyst"))
-        self.assertFalse(manual_jobs.is_plausible_job_title_line("This sentence builds products for customers."))
-        self.assertEqual(manual_jobs.title_confidence_for("Data Analyst", "Found in header"), "medium")
-        self.assertEqual(manual_jobs.deduplicate_preserving_order(["a", "b", "a"]), ["a", "b"])
+        self.assertTrue(manual_jd_parser.is_plausible_job_title_line("Data Analyst"))
+        self.assertFalse(manual_jd_parser.is_plausible_job_title_line("This sentence builds products for customers."))
+        self.assertEqual(manual_jd_parser.title_confidence_for("Data Analyst", "Found in header"), "medium")
+        self.assertEqual(manual_jd_parser.deduplicate_preserving_order(["a", "b", "a"]), ["a", "b"])
         self.assertEqual(
-            manual_jobs.extract_section(
+            manual_jd_parser.extract_section(
                 "Responsibilities\n- Build models\nRequirements\n- Python",
                 ["responsibil"],
             ),
             "Build models",
         )
-        summary = manual_jobs.build_role_summary(
+        summary = manual_jd_parser.build_role_summary(
             title="Data Analyst",
             company="Example",
             employment_type="Full-time",

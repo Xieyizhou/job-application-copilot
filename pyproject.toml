@@ -8,8 +8,6 @@ select = ["E4", "E7", "E9", "F"]
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E402"]
 "scripts/ml/*.py" = ["E402"]
-"src/analyze_job.py" = ["F401"]
-"src/dashboard.py" = ["F401"]
 "tests/*.py" = ["E402"]
 
 [tool.mypy]
@@ -23,6 +21,7 @@ files = [
   "src/scoring_matching.py",
   "src/scoring_report.py",
   "src/jd_enrichment.py",
+  "src/browser_companion.py",
   "src/generate_cover_letter.py",
   "src/manual_jobs.py",
   "src/tracker.py",

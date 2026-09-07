@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_action_callout
+
 from typing import Any
 
 from dashboard_review import tracker_age_days, tracker_follow_up_due, tracker_next_action
@@ -114,7 +116,7 @@ def render_selected_tracker_row(
         f"**{row['company']} · {display_title_from_value(row['role'], fallback='Sample Job')}**"
     )
     ui.caption(f"{row.get('location') or 'Location not recorded'} · Current stage: {str(row['status']).title()}")
-    services.render_action_callout(tracker_next_action(row), caution=tracker_follow_up_due(row))
+    render_action_callout(tracker_next_action(row), caution=tracker_follow_up_due(row))
 
     current_status = str(row.get("status", "saved")).lower()
     stage_index = status_options.index(current_status) if current_status in status_options else 0

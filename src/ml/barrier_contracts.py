@@ -6,7 +6,8 @@ import hashlib
 import re
 from typing import Any, TypedDict
 
-from ml.annotation_generation import normalize_text, sanitize_snippet
+from document_text import normalize_comparison_text as normalize_text
+from ml.annotation_generation import sanitize_snippet
 
 
 BARRIER_SCHEMA_VERSION = 1

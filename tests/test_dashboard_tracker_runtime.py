@@ -77,6 +77,10 @@ class FakeStreamlit:
 
 
 class DashboardTrackerRuntimeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.enterContext(patch("dashboard_tracker.render_page_header"))
+        self.render_action_callout = self.enterContext(patch("dashboard_tracker_components.render_action_callout"))
+
     def services(
         self,
         *,
@@ -89,8 +93,6 @@ class DashboardTrackerRuntimeTests(unittest.TestCase):
             current_workspace=lambda: workspace,
             demo_mode_enabled=lambda: demo,
             load_tracker_rows=load_rows,
-            render_action_callout=Mock(),
-            render_page_header=Mock(),
             run_with_captured_output=Mock(return_value=(True, "updated")),
         )
 
@@ -133,7 +135,7 @@ class DashboardTrackerRuntimeTests(unittest.TestCase):
         with patch.object(dashboard_tracker, "st", fake):
             dashboard_tracker.tracker_tab(services)
         self.assertEqual(len(fake.tables), 1)
-        services.render_action_callout.assert_called_once()
+        self.render_action_callout.assert_called_once()
         services.run_with_captured_output.assert_called_once_with(
             dashboard_tracker.update_status,
             7,

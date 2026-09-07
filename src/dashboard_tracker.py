@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -29,14 +31,12 @@ class TrackerPageServices:
     current_workspace: Callable[[], Any]
     demo_mode_enabled: Callable[[], bool]
     load_tracker_rows: Callable[..., list[TrackerRow]]
-    render_action_callout: Callable[..., None]
-    render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
 
 
 def tracker_tab(services: TrackerPageServices) -> None:
     """Render the application list before the selected stage workflow."""
-    services.render_page_header(
+    render_page_header(
         "Applications",
         "Track the roles you chose to pursue, from preparation through interview and outcome.",
     )

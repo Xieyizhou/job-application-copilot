@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _mean
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -277,5 +279,3 @@ def evaluate_task_policy(
     }
 
 
-def _mean(values: Sequence[bool | float]) -> float:
-    return float(np.mean(values)) if values else 0.0

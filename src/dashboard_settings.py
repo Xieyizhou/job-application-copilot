@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from typing import Any, Callable
 
 import streamlit as st
 
+from dashboard_candidate_profile import render_candidate_profile_editor
+from dashboard_demo_resume import render_demo_resume
 from dashboard_settings_sections import render_settings_sections
 from scoring_types import TrackerRow
 from workspace import (
@@ -27,12 +31,11 @@ class SettingsPageServices:
     demo_mode_enabled: Callable[[], bool]
     list_job_description_files: Callable[..., list[Any]]
     load_tracker_rows: Callable[..., list[TrackerRow]]
-    render_page_header: Callable[[str, str | None], None]
 
 
 def safety_notes_tab(services: SettingsPageServices) -> None:
     """Render compact Settings health with topic-specific details."""
-    services.render_page_header(
+    render_page_header(
         "Settings",
         "Check workspace health, job sources, scoring definitions, and privacy boundaries.",
     )
@@ -52,15 +55,28 @@ def safety_notes_tab(services: SettingsPageServices) -> None:
     )
 
 
-def render_candidate_workspace_setup(workspace: Workspace, services: SettingsPageServices) -> None:
+def render_candidate_workspace_setup(workspace: Workspace) -> None:
     """Collect candidate files before enabling Personal workflows."""
-    services.render_page_header(
-        "Candidate Workspace Setup",
-        "Add your candidate source to initialize the private local workspace.",
+    if workspace.mode == "demo":
+        render_page_header("Resume", "Review the example resume setup used for local fit analysis and cover letters.")
+        render_demo_resume(workspace)
+        return
+    render_page_header(
+        "Resume",
+        (
+            "Review or replace the resume used for local fit analysis and cover letters."
+            if workspace.ready
+            else "Upload a resume before searching and scoring jobs."
+        ),
     )
-    st.info("Your resume is the required factual source for fit analysis and cover letters.")
+    if workspace.ready:
+        st.success("Resume ready. Upload another file only when you want to replace it.")
+        render_candidate_profile_editor(st, workspace)
+        st.divider()
+    else:
+        st.info("Your resume is the factual source for every fit result and cover letter.")
     resume_upload = st.file_uploader(
-        "Candidate source",
+        "Resume file",
         type=[extension.lstrip(".") for extension in sorted(SUPPORTED_RESUME_EXTENSIONS)],
         help="Files are parsed locally and stored as canonical Markdown. Text-based PDFs only; no OCR.",
         key="workspace_resume_upload",
@@ -77,8 +93,8 @@ def render_candidate_workspace_setup(workspace: Workspace, services: SettingsPag
             key="workspace_template_upload",
         )
     if workspace.ready:
-        st.caption("Submitting replaces the candidate source and any optional file selected here.")
-    if not st.button("Save Personal workspace", type="primary", disabled=resume_upload is None):
+        st.caption("Saving replaces the current resume and any optional file selected here.")
+    if not st.button("Save resume", type="primary", disabled=resume_upload is None):
         return
 
     try:

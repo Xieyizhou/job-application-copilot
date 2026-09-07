@@ -1,12 +1,17 @@
-# Job Application Toolkit
+# Job Copilot
 
-**A privacy-first, local Streamlit application for evaluating job fit and preparing
-evidence-grounded applications.**
+**A privacy-first local ML system that turns unstructured job descriptions into
+source-backed requirements, matches them to resume evidence, and prepares reviewable
+application materials.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Turns an existing resume and a job description into an explainable fit review,
-evidence trace, cover letter, and local application record.
+It is designed around one narrow, auditable ML task:
+
+```text
+full JD → structured requirements → strongest resume evidence
+        → Direct / Partial / No Support → calibrated Role Fit
+```
 
 ## Demo
 
@@ -14,27 +19,25 @@ evidence trace, cover letter, and local application record.
 
 The read-only Demo uses fictional, sanitized data and requires no API credentials.
 
-### Dashboard
+## Why ML matters here
 
-![Dashboard](docs/assets/dashboard.png)
+Keyword search alone misses paraphrases and cannot identify the strongest factual resume
+statement. Job Copilot separates four concerns:
 
-### Review Jobs
+- **JD acquisition and quality:** incomplete snippets cannot produce a trusted score.
+- **Requirement extraction:** employer text is normalized into source-backed required,
+  preferred, responsibility, and constraint records.
+- **Evidence retrieval:** each requirement is mapped to the strongest resume statement.
+- **Decision safety:** Role Fit remains separate from Eligibility, Confidence, and JD Quality.
 
-![Review Jobs](docs/assets/review_jobs.png)
+The learned MiniLM candidate uses support, Direct/Partial strength, and ranking heads. On
+frozen synthetic-teacher E15 (96 tasks / 384 pairs), v21 reached **90.63% task agreement**,
+**89.62% macro-F1**, **90% No-Support recall**, and **100% supported Top-1**. These are
+teacher-agreement measurements—not human-gold accuracy or hiring-outcome predictions.
 
-### Cover Letter
-
-![Cover Letter](docs/assets/cover_letter.png)
-
-## Highlights
-
-- Explainable Role Fit with independent Eligibility, Confidence, and JD Quality.
-- Local semantic retrieval from JD requirements to exact resume evidence.
-- Quality gates that block unreliable scoring and employer-facing output.
-- Resume-grounded cover letters with evidence traces and explicit gaps.
-- Failure-driven MiniLM distillation with grouped splits, leakage audits, frozen
-  evaluations, and an integrity-checked Web-shadow runtime.
-- Local Streamlit workflow backed by Markdown and SQLite.
+See the [Model Card](docs/MODEL_CARD.md) and
+[ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md) for promotion gates, failure analysis,
+data isolation, latency, and limitations.
 
 ## Product workflow
 
@@ -59,78 +62,59 @@ flowchart LR
 The resume remains read-only; the application generates only a cover letter and
 supporting analysis.
 
-## Machine Learning
-
-### Task and trust design
-
-The primary ML task is deliberately narrow:
-
-```text
-JD requirement + resume statements
-    → strongest evidence
-    → Direct / Partial / No Support
-```
-
-Each result retains its requirement, evidence sentence, source section, and support
-level. Low-support evidence cannot enter the cover letter.
-
-Role Fit remains separate from Eligibility, Confidence, JD Quality, and the ML
-evidence signal. Incomplete JDs remain provisional. Learned candidates are evaluated
-offline with source-grouped development data and frozen reserves. The v21 candidate is
-available through an opt-in, background Web Shadow path; learned output does not change
-product decisions.
-
-See the [Model Card](docs/MODEL_CARD.md) for evaluation results and promotion gates.
-
-### Engineering case study
-
-The learned evidence system was developed as a production-style ML lifecycle rather than
-a one-off fine-tuning experiment. It records failed candidates, isolates resume groups,
-audits exact and near-text leakage, retires consumed evaluations, freezes candidates before
-new final tests, and verifies offline/runtime parity before shadow integration.
-
-The current v21 candidate uses a shared MiniLM encoder with support, Direct/Partial
-strength, and strongest-evidence ranking heads. On frozen E15 (96 tasks / 384 pairs), it
-reached **90.63% task agreement**, **89.62% macro-F1**, **90.00% No-Support recall**, and
-**100% supported Top-1**. Its self-contained 91.6 MB bundle measured **137.9 pairs/s**,
-**41.5 ms p95 task latency**, and **876.6 MB peak RSS** on Apple MPS.
-
-These are synthetic-teacher agreement measurements, not human-gold accuracy or hiring
-outcome predictions. See [From Retrieval Prototype to Web-Ready ML Candidate](docs/ML_SYSTEM_CASE_STUDY.md)
-for the architecture, failure analysis, data contracts, deployment gates, and resume-ready
-engineering summary.
-
 ## Quick start
 
-Requires Python 3.11 or 3.12.
+The stable desktop release supports Python 3.11 or 3.12 on macOS. Chrome is the
+supported browser for the optional local import companion. Edge compatibility remains
+experimental and unverified; Safari extension import is outside this release's scope. Linux remains covered by
+automated tests, but this release does not claim Windows support.
 
 ```bash
-python3 -m venv .venv
+git clone https://github.com/Xieyizhou/job-application-copilot.git
+cd job-application-copilot
+python3.12 -m venv .venv  # python3.11 is also supported
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python run_dashboard.py
 ```
 
-Choose **Explore Read-only Demo** in the sidebar. Personal mode accepts Markdown,
-TXT, DOCX, and text-based PDF resumes.
+Choose **Explore Read-only Demo** in the sidebar. Personal mode accepts Markdown, TXT,
+DOCX, and text-based PDF resumes.
+
+Local release acceptance used macOS 26.6.2 on Apple Silicon, Python 3.11.9 and
+3.12.13, and Chrome v152.0.7977.76 for native extension import. See the
+[acceptance report](docs/RELEASE_ACCEPTANCE.md) for evidence and unverified scope.
 
 ## Optional live job search
 
-Copy `.env.example` to `.env` and configure only the desired providers. JSearch is
-preferred for complete JDs; Adzuna and Jooble results remain provisional when they
-contain only discovery snippets.
+JSearch, Adzuna, and Jooble are experimental in v1.0.0. Each passed a minimal live
+search; broader provider behavior, quotas, and availability remain outside stable acceptance.
 
-## Technical stack
+Copy `.env.example` to `.env` and configure only the desired providers. The recovery path
+prefers public Greenhouse/Lever ATS endpoints, then structured JobPosting JSON-LD, safe
+page extraction, JSearch, or a locally saved browser page. Adzuna and Jooble snippets remain
+provisional until a complete JD is verified.
 
-Python, Streamlit, scikit-learn, sentence-transformers, SQLite, python-docx,
-PyMuPDF, Pillow, JSearch, Adzuna, Jooble, pytest, Ruff, and mypy.
+### Import the job page already open in your browser
+
+For employer sites that block server-side fetching, Job Copilot includes a local Chrome
+companion in `browser_companion/`. Start the app with `python run_dashboard.py`, then open
+**Settings → Job sources** for the one-time **Load unpacked** path and local connection token.
+When a previously saved job page is open, click **Import and verify this posting**. The extension
+reads JobPosting JSON-LD or the visible job container and sends it only to `127.0.0.1`; the local
+service updates the saved job only after URL/company/role and JD-quality checks pass.
 
 ## Validation
 
-The portfolio release validation suite passes **565 tests and 160 subtests**, plus Ruff, mypy,
-compileall, dependency, artifact-integrity, and privacy checks. Curated or teacher-proxy
-agreement is not reported as real-world model accuracy.
+The release workflow runs the complete core and ML suites on Python 3.11 and 3.12, plus
+Ruff, mypy, compileall, dependency, scoring, v21 contract, privacy, and macOS launcher
+checks. Test collection is audited, but a fixed test count is not used as a release gate.
+Curated or teacher-proxy agreement is not reported as real-world model accuracy.
+
+The [code simplification review](docs/CODE_SIMPLIFICATION_REVIEW.md) records the full
+feature matrix, architecture changes, compatibility notes, and rollback checkpoints.
+The core runner includes both pytest functions and unittest classes.
 
 Main checks:
 
@@ -145,12 +129,17 @@ python scripts/privacy_audit.py
 python -m pip check
 ```
 
+The default mypy target is Python 3.11, matching the compatibility CI job. In a Python
+3.12 environment with optional ML dependencies, run `python -m mypy --python-version 3.12`
+so third-party type stubs are parsed for the installed interpreter.
+
 ## Privacy and product boundaries
 
 - Personal data, credentials, annotations, models, reports, and generated documents
   remain local and excluded from Git.
-- Mobile is a responsive companion for the same locally run Streamlit app—not a
-  hosted service, separate mobile client, cloud-sync layer, or remote inference path.
+- Desktop is the v1.0.0 acceptance target; narrow-screen acceptance is deferred.
+  Narrow-screen controls remain part of the same locally run Streamlit app, not a
+  hosted service or cloud-sync client.
 - The application does not scrape restricted platforms, submit applications, alter
   employer systems, or predict hiring outcomes.
 - Employer-facing documents require human review.
@@ -167,7 +156,7 @@ data/demo/            Fictional read-only demo assets
 data/ml/              Local-only data and model artifacts; excluded from Git
 ```
 
-The portfolio release intentionally omits private data and one-off v1–v20 experiment
+The public release intentionally omits private data and one-off v1–v20 experiment
 launchers. Their failures and design consequences remain documented in the ML case study.
 The exact v21 release contract, reusable objective components, lifecycle controls, Web
 adapter, and tests remain public; a clean clone validates the contract but cannot retrain
@@ -175,12 +164,10 @@ the private teacher dataset or download unpublished weights.
 
 ## Documentation
 
-- [Usage](docs/USAGE.md)
-- [Scoring Method](docs/SCORING_METHOD.md)
-- [Model Card](docs/MODEL_CARD.md)
-- [ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md)
-- [ML Relevance](docs/ML_RELEVANCE.md)
-- [Annotation](docs/ML_ANNOTATION.md)
+[Usage](docs/USAGE.md) · [Scoring Method](docs/SCORING_METHOD.md) ·
+[Model Card](docs/MODEL_CARD.md) · [ML System Case Study](docs/ML_SYSTEM_CASE_STUDY.md) ·
+[Release acceptance](docs/RELEASE_ACCEPTANCE.md) · [Security](SECURITY.md) ·
+[Third-party notices](THIRD_PARTY_NOTICES.md)
 
 ## License
 

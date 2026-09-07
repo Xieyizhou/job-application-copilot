@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import dashboard_manual
 import dashboard_manual_entry
-from manual_jobs import ExtractionResult
+from job_document import ExtractionResult
 
 
 class UploadedFile:
@@ -23,6 +23,10 @@ class UploadedFile:
 
 
 class DashboardManualHelperTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.company_generation_allowed = self.enterContext(patch("dashboard_manual.company_generation_allowed"))
+        self.render_page_header = self.enterContext(patch("dashboard_manual.render_page_header"))
+
     def test_suggestions_populate_only_empty_reviewable_fields(self) -> None:
         state = {"manual_company": "Accepted Company", "manual_title": ""}
         suggestions = {
@@ -173,7 +177,8 @@ class DashboardManualHelperTests(unittest.TestCase):
         ui = MagicMock()
         ui.session_state = {}
         render_confirmation = Mock(return_value={"company": "Example"})
-        generation_allowed = Mock(return_value=True)
+        generation_allowed = self.company_generation_allowed
+        generation_allowed.return_value = True
         summary = {
             "match_score": 78,
             "recommendation": "Review",
@@ -183,13 +188,11 @@ class DashboardManualHelperTests(unittest.TestCase):
             "tracker_id": 9,
         }
         services = dashboard_manual.ManualPageServices(
-            company_generation_allowed=generation_allowed,
             current_workspace=Mock(return_value=object()),
             demo_mode_enabled=Mock(return_value=False),
             go_to_page=Mock(),
             relative_path=lambda path: str(path),
             render_manual_company_confirmation=render_confirmation,
-            render_page_header=Mock(),
             run_with_captured_output=Mock(return_value=(summary, "backend output")),
             switch_workspace_mode=Mock(),
         )
@@ -254,19 +257,17 @@ class DashboardManualHelperTests(unittest.TestCase):
         ui = MagicMock()
         ui.button.side_effect = [False, True]
         services = dashboard_manual.ManualPageServices(
-            company_generation_allowed=Mock(),
             current_workspace=Mock(),
             demo_mode_enabled=Mock(return_value=True),
             go_to_page=Mock(),
             relative_path=Mock(),
             render_manual_company_confirmation=Mock(),
-            render_page_header=Mock(),
             run_with_captured_output=Mock(),
             switch_workspace_mode=Mock(),
         )
         with patch.object(dashboard_manual, "st", ui):
             dashboard_manual.manual_job_target_tab(services)
-        services.render_page_header.assert_called_once()
+        self.render_page_header.assert_called_once()
         ui.info.assert_not_called()
         ui.caption.assert_called_once()
         services.switch_workspace_mode.assert_called_once_with("Personal")

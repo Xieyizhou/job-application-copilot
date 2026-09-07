@@ -1,12 +1,10 @@
-"""Run explicit core or ML unittest groups without ambiguous glob exclusions."""
+"""Run complete core or ML test groups, including pytest and unittest cases."""
 
 from __future__ import annotations
 
 import argparse
-import importlib.util
 from pathlib import Path
 import sys
-import unittest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,28 +23,16 @@ def selected_test_files(group: str) -> list[Path]:
     raise ValueError(f"Unknown test group: {group}")
 
 
-def build_suite(group: str) -> unittest.TestSuite:
-    """Load each selected test file without requiring ``tests`` to be a package."""
-    loader = unittest.defaultTestLoader
-    suite = unittest.TestSuite()
-    for path in selected_test_files(group):
-        module_name = f"job_copilot_tests.{path.stem}"
-        spec = importlib.util.spec_from_file_location(module_name, path)
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Unable to load test file: {path}")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[module_name] = module
-        spec.loader.exec_module(module)
-        suite.addTests(loader.loadTestsFromModule(module))
-    return suite
-
-
 def main() -> int:
+    import pytest
+
     parser = argparse.ArgumentParser(description="Run one repository test group.")
     parser.add_argument("group", choices=["core", "ml"])
     args = parser.parse_args()
-    result = unittest.TextTestRunner(verbosity=2).run(build_suite(args.group))
-    return 0 if result.wasSuccessful() else 1
+    files = selected_test_files(args.group)
+    if not files:
+        parser.error(f"No tests found for group: {args.group}")
+    return int(pytest.main(["-q", *(str(path) for path in files)]))
 
 
 if __name__ == "__main__":

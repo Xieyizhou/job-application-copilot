@@ -28,8 +28,8 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from ml.annotation import load_jsonl, write_queue  # noqa: E402
-from ml.annotation_generation import normalize_text  # noqa: E402
-from ml.evidence import useful_tokens  # noqa: E402
+from document_text import normalize_comparison_text as normalize_text  # noqa: E402
+from ml.evidence_text import useful_tokens  # noqa: E402
 from ml.operational_development_v3 import (  # noqa: E402
     CONSTRUCTION_STRATA,
     TAXONOMY_REFERENCE,

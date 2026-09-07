@@ -11,13 +11,17 @@ It does not submit applications or interact with job platforms.
 
 from __future__ import annotations
 
+from output_paths import relative_path
+
+from job_urls import sanitize_job_url
+
 import argparse
 import re
 from pathlib import Path
 from typing import Any, TypedDict
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from analyze_job import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARNING, UK_HPI_NOTE, analyze_job
+from scoring_config import UK_ALREADY_AUTHORIZED_WARNING, UK_HPI_MANUAL_REVIEW_WARNING, UK_HPI_NOTE
+from scoring_report import analyze_job
 from company_verification import assert_cover_letter_company_verified, parse_bool
 from export_documents import export_application_package
 from generate_cover_letter import generate_cover_letter
@@ -35,16 +39,6 @@ MARKDOWN_FIELD_LABELS = {
     "role": "Role",
     "location": "Location",
     "job_url": "Job URL",
-}
-TRACKING_QUERY_PARAMETERS = {
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "app_id",
-    "app_key",
-    "aztt",
 }
 
 
@@ -100,14 +94,6 @@ def collect_uk_review_notes(analysis_report: str) -> list[str]:
     return notes
 
 
-def relative_path(path: Path) -> str:
-    """Return a project-relative path when possible for cleaner tracker records."""
-    try:
-        return str(path.relative_to(PROJECT_ROOT))
-    except ValueError:
-        return str(path)
-
-
 def parse_job_metadata(job_description_path: Path) -> dict[str, str]:
     """Extract common metadata fields from a Markdown job description.
 
@@ -131,44 +117,6 @@ def parse_job_metadata(job_description_path: Path) -> dict[str, str]:
                     metadata[field] = value
 
     return metadata
-
-
-def sanitize_job_url(job_url: str) -> str:
-    """Remove tracking parameters and canonicalize common Adzuna redirect URLs."""
-    if not job_url:
-        return ""
-
-    split_url = urlsplit(job_url)
-
-    # Older fetched files may contain Adzuna redirect links. Convert them to the
-    # cleaner details URL before storing tracker records.
-    land_ad_match = re.match(r"^/land/ad/(\d+)", split_url.path)
-    if "adzuna." in split_url.netloc.lower() and land_ad_match:
-        return urlunsplit(
-            (
-                split_url.scheme,
-                split_url.netloc,
-                f"/details/{land_ad_match.group(1)}",
-                "",
-                "",
-            )
-        )
-
-    safe_query_pairs = [
-        (key, value)
-        for key, value in parse_qsl(split_url.query, keep_blank_values=True)
-        if key.lower() not in TRACKING_QUERY_PARAMETERS
-    ]
-    safe_query = urlencode(safe_query_pairs)
-    return urlunsplit(
-        (
-            split_url.scheme,
-            split_url.netloc,
-            split_url.path,
-            safe_query,
-            split_url.fragment,
-        )
-    )
 
 
 def resolve_metadata(args: argparse.Namespace, job_description_path: Path) -> dict[str, str]:
@@ -255,7 +203,7 @@ def create_application_package(
         recommendation=recommendation,
         status="ready",
         resume_file="",
-        cover_letter_file=relative_path(cover_letter_docx_path),
+        cover_letter_file=relative_path(cover_letter_docx_path, PROJECT_ROOT),
         notes=build_tracker_notes(match_score, recommendation),
     )
     tracker_id = add_application(tracker_args, workspace.tracker_database_path)

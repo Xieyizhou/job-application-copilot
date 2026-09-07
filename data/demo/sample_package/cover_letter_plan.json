@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "company": "Northstar Metrics Studio",
+  "role": "Data Analyst",
+  "candidate_name": "Demo Candidate",
+  "claims": [
+    {
+      "claim_id": "claim_1",
+      "requirement": "Python",
+      "demand": "required",
+      "support_label": "Direct",
+      "evidence": "Built a classification pipeline with Python and scikit-learn.",
+      "source_section": "Classification Pipeline",
+      "rank_score": 0.925
+    },
+    {
+      "claim_id": "claim_2",
+      "requirement": "SQL",
+      "demand": "required",
+      "support_label": "Direct",
+      "evidence": "Analyzed a fictional public dataset using SQL, Python, and statistics.",
+      "source_section": "Public Data Dashboard",
+      "rank_score": 0.925
+    }
+  ],
+  "paragraphs": [
+    {
+      "kind": "opening",
+      "text": "The Data Analyst position at Northstar Metrics Studio centers on Python, with SQL also important to the work. I am interested in the role because these priorities connect to specific projects and experience in my background, including the examples below.",
+      "claim_ids": ["claim_1", "claim_2"]
+    },
+    {
+      "kind": "evidence_primary",
+      "text": "In Classification Pipeline, I built a classification pipeline with Python and scikit-learn. This directly supports the position's emphasis on Python. It gives me a concrete basis for contributing to similar work while adapting to the team's tools and operating context.",
+      "claim_ids": ["claim_1"]
+    },
+    {
+      "kind": "evidence_secondary",
+      "text": "In Public Data Dashboard, I analyzed a fictional public dataset using SQL, Python, and statistics. This evidence aligns directly with the position's need for SQL. It is a second, distinct example of how I have applied relevant skills to concrete work and communicated the result.",
+      "claim_ids": ["claim_2"]
+    },
+    {
+      "kind": "closing",
+      "text": "Together, these examples represent the work in my background that is most relevant to this position. I would welcome the opportunity to discuss how this experience could support the Data Analyst team at Northstar Metrics Studio. Thank you for your time and consideration.",
+      "claim_ids": ["claim_1", "claim_2"]
+    }
+  ],
+  "word_count": 174,
+  "validation_status": "passed",
+  "validation_errors": []
+}

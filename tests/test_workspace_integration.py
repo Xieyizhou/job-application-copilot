@@ -9,11 +9,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from docx import Document
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from apply_package import create_application_package
+from generate_cover_letter import CoverLetterGenerationError
 from ml.jd_quality import JDQualityError
 from workspace import initialize_personal_workspace
 
@@ -98,9 +101,18 @@ clearly explained evidence in routine planning and operational reviews.
             self.assertFalse((summary["package_dir"] / "tailored_resume.docx").exists())
             cover_letter_text = summary["cover_letter_path"].read_text(encoding="utf-8")
             notes_text = summary["cover_letter_notes_path"].read_text(encoding="utf-8")
+            plan_path = summary["package_dir"] / "cover_letter_plan.json"
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
             self.assertIn("Python, SQL, pandas, and data visualization", cover_letter_text)
             self.assertIn("Requirement-to-Resume Evidence Map", notes_text)
             self.assertIn("Direct support", notes_text)
+            self.assertEqual(plan["schema_version"], 1)
+            self.assertEqual(plan["validation_status"], "passed")
+            self.assertEqual(len(plan["claims"]), 2)
+            document = Document(summary["cover_letter_docx_path"])
+            document_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            self.assertNotIn("Candidate Name", document_text)
+            self.assertEqual(document_text.count("Fictional Candidate"), 2)
             self.assertTrue(workspace.tracker_database_path and workspace.tracker_database_path.is_file())
             self.assertIsInstance(summary["tracker_id"], int)
 
@@ -141,6 +153,73 @@ Use Python and SQL for reporting...
                 )
 
             self.assertFalse(any(workspace.generated_dir.rglob("cover_letter.md")))
+
+    def test_insufficient_resume_evidence_creates_no_docx_or_tracker_record(self) -> None:
+        candidate_text = """# Fictional Candidate
+
+## History Project
+- Presented archival research to a student seminar.
+"""
+        job_text = """# Platform Engineer
+Company: Fictional Platform Lab
+Role: Platform Engineer
+Location: Remote
+Job URL: https://example.invalid/jobs/platform-engineer
+Source: manual
+Company Confirmed By User: yes
+Company Confidence: High
+Company Evidence: Confirmed during sanitized test setup.
+Description Source: full_jd_manual
+JD Fetch Status: complete
+
+## Job Description
+Responsibilities
+Operate production Kubernetes services and maintain infrastructure automation.
+Collaborate with platform teams on incident response, reliability, and documentation.
+
+Requirements
+Required experience managing Kubernetes infrastructure in production.
+Must have experience building Terraform automation and deployment pipelines.
+Experience monitoring distributed systems and responding to incidents is required.
+Ability to document platform changes and communicate operational risk is required.
+
+About the team
+The fictional platform team maintains shared services, reviews production changes, and uses
+documented operating procedures. Engineers participate in peer review, reliability planning,
+incident follow-up, security reviews, and continuous improvement across several internal systems.
+The team owns service deployment, configuration review, observability, capacity planning, and
+recovery exercises for internal products. Changes are tested in isolated environments before
+release, reviewed by another engineer, and documented in a shared operating record. Engineers
+work with security and application teams to investigate failures, define service-level goals,
+reduce repetitive operational work, and communicate tradeoffs to technical stakeholders.
+
+The role includes regular design reviews, incident simulations, maintenance planning, and
+mentoring from experienced platform engineers. The successful candidate will balance independent
+investigation with careful escalation, use reproducible automation, verify changes against stated
+requirements, and contribute clear documentation that another engineer can follow. This is a
+fictional posting created only for a local, sanitized integration test.
+"""
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            workspace = initialize_personal_workspace(
+                "fictional_candidate.md",
+                candidate_text.encode("utf-8"),
+                root=Path(temporary_dir) / "local_workspace",
+            )
+            job_path = workspace.jobs_dir / "platform_engineer.md"
+            job_path.write_text(job_text, encoding="utf-8")
+
+            with self.assertRaises(CoverLetterGenerationError):
+                create_application_package(
+                    job_path,
+                    workspace,
+                    company="Fictional Platform Lab",
+                    role="Platform Engineer",
+                    location="Remote",
+                    job_url="https://example.invalid/jobs/platform-engineer",
+                )
+
+            self.assertFalse(any(workspace.generated_dir.rglob("cover_letter.docx")))
+            self.assertFalse(workspace.tracker_database_path and workspace.tracker_database_path.exists())
 
 
 if __name__ == "__main__":

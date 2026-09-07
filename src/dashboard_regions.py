@@ -203,6 +203,8 @@ def source_display_name(source: str) -> str:
         "jooble": "Jooble",
         "adzuna": "Adzuna",
         "jsearch": "JSearch · Full JD",
+        "company ats": "Company ATS · Full JD",
+        "company_ats": "Company ATS · Full JD",
     }
     return aliases.get(cleaned.lower(), cleaned.title() if cleaned else "Unknown")
 
@@ -210,7 +212,7 @@ def source_display_name(source: str) -> str:
 def dynamic_source_options(jobs: list[DashboardJob]) -> list[str]:
     """Build source filter options from the currently loaded jobs."""
     discovered = sorted({source_display_name(str(job.get("source", ""))) for job in jobs})
-    preferred = ["LinkedIn", "Jooble", "Adzuna", "Company Website", "Indeed", "Handshake", "Manual"]
+    preferred = ["Company ATS · Full JD", "LinkedIn", "Jooble", "Adzuna", "JSearch · Full JD", "Company Website", "Indeed", "Handshake", "Manual"]
     ordered = ["all"]
     for source in preferred + discovered:
         if source in discovered and source not in ordered:

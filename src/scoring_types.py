@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal, NotRequired, TypedDict
 
+from structured_jd import StructuredJob
+
 
 class ScoreCategoryConfig(TypedDict):
     points: int
@@ -140,6 +142,10 @@ class StructuredAnalysis(ScoringResult):
     semantic_evidence: dict[str, Any]
     jd_quality: dict[str, Any]
     raw_analysis: str
+    scoring_method: NotRequired[str]
+    legacy_score: NotRequired[int]
+    structured_job: NotRequired[StructuredJob]
+    jd_pipeline: NotRequired[dict[str, Any]]
 
 
 class DashboardJob(TypedDict, total=False):
@@ -196,6 +202,7 @@ class DashboardJob(TypedDict, total=False):
     high_level_region: str
     jd_fetch_status: str
     description_word_count: int
+    description_fingerprint: str
     company_needs_review: bool
 
 

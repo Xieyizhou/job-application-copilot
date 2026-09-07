@@ -6,12 +6,8 @@ from typing import Any, Callable
 
 import streamlit as st
 
-from manual_jobs import (
-    SOURCE_OPTIONS,
-    STATUS_OPTIONS,
-    job_description_quality_warnings,
-    normalize_job_title,
-)
+from manual_jobs import SOURCE_OPTIONS, STATUS_OPTIONS
+from manual_jd_parser import job_description_quality_warnings, normalize_job_title
 from ml.jd_quality import classify_jd_quality
 
 
@@ -93,9 +89,12 @@ def render_verification_form(
             with st.expander("Fields to verify", expanded=False):
                 for warning in warnings:
                     st.warning(warning)
-        can_save = bool(job_description.strip() and normalized_title)
+        # Form fields reach Python only on submission. A title-based disabled state
+        # would prevent users from submitting a title they entered after inference.
+        # The submission handler validates the fresh title before any persistence.
+        can_save = bool(job_description.strip())
         if not can_save:
-            st.caption("Add the full job description and job title to enable saving.")
+            st.caption("Add the job description to enable saving, then enter the job title.")
         submitted = st.form_submit_button(
             "Save Target Job", type="primary", width="stretch", disabled=not can_save
         )

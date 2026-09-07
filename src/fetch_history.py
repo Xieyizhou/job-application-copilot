@@ -6,6 +6,10 @@ small JSONL/JSON sidecar instead of requiring a database migration.
 
 from __future__ import annotations
 
+from output_paths import relative_path
+
+from document_text import read_markdown_field
+
 import hashlib
 import json
 import re
@@ -120,25 +124,6 @@ def make_canonical_job_key(job: dict[str, Any], source: str | None = None) -> st
     return f"{normalized_source}|snippet:{digest}"
 
 
-def read_markdown_field(markdown_text: str, field_name: str, default: str = "") -> str:
-    """Read a simple Markdown metadata field."""
-    prefix = f"{field_name}:"
-    for line in markdown_text.splitlines():
-        if line.lower().startswith(prefix.lower()):
-            value = line.split(":", 1)[1].strip()
-            if value and value.lower() != "not provided":
-                return value
-    return default
-
-
-def relative_path(path: Path) -> str:
-    """Return project-relative paths for JSON sidecar storage."""
-    try:
-        return str(path.relative_to(PROJECT_ROOT))
-    except ValueError:
-        return str(path)
-
-
 def path_from_record(record: dict[str, Any]) -> Path:
     """Resolve a stored job path."""
     path = Path(str(record.get("path", "")))
@@ -175,7 +160,7 @@ def existing_markdown_record(path: Path) -> dict[str, Any]:
         "company": job["company"],
         "role": job["role"],
         "location": job["location"],
-        "path": relative_path(path),
+        "path": relative_path(path, PROJECT_ROOT),
         "first_seen_at": first_seen,
         "last_seen_at": last_seen,
         "first_seen_fetch_run_id": read_markdown_field(text, "First Seen Fetch Run ID"),
@@ -222,6 +207,39 @@ def write_job_index(index: dict[str, dict[str, Any]]) -> None:
     """Persist fetched-job index."""
     ensure_fetch_history_dirs()
     FETCH_JOB_INDEX_JSON.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def sync_job_index_record(path: Path) -> bool:
+    """Synchronize enrichment fields for one indexed Markdown job, if present."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        raw = json.loads(FETCH_JOB_INDEX_JSON.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(raw, dict):
+        return False
+    canonical_key = read_markdown_field(text, "Canonical Job Key")
+    matched_key = ""
+    for key, record in raw.items():
+        if not isinstance(record, dict):
+            continue
+        if canonical_key and str(key) == canonical_key:
+            matched_key = str(key)
+            break
+    if not matched_key:
+        return False
+    record = dict(raw[matched_key])
+    record.update(
+        {
+            "job_url": read_markdown_field(text, "Job URL"),
+            "description_source": read_markdown_field(text, "Description Source"),
+            "jd_fetch_status": read_markdown_field(text, "JD Fetch Status"),
+            "path": relative_path(Path(path), PROJECT_ROOT),
+        }
+    )
+    raw[matched_key] = record
+    write_job_index({str(key): value for key, value in raw.items() if isinstance(value, dict)})
+    return True
 
 
 def new_fetch_run_id(source: str) -> str:

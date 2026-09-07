@@ -10,8 +10,8 @@ import json
 import random
 from typing import Any
 
-from ml.annotation_generation import normalize_text
-from ml.evidence import useful_tokens
+from document_text import normalize_comparison_text as normalize_text
+from ml.evidence_text import useful_tokens
 from ml.operational_development_v3 import construction_features
 from ml.real_development import ROLE_FAMILIES
 from ml.real_development_isolation import (

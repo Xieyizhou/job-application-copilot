@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "JobCopilot Local Import",
+  "version": "1.0.1",
+  "description": "Import the job posting open in this tab into your local JobCopilot workspace.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:8765/*"],
+  "action": {
+    "default_title": "Import current job to JobCopilot",
+    "default_popup": "popup.html"
+  }
+}

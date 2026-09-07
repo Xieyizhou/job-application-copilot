@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 import hashlib
 from typing import Any, Iterable
 
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.candidate_judgments import CANDIDATE_SUPPORT_LABELS
 
 

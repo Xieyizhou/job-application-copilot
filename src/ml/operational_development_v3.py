@@ -11,12 +11,12 @@ import random
 from typing import Any
 
 from ml.annotation import validate_queue
-from ml.annotation_generation import normalize_text
+from document_text import normalize_comparison_text as normalize_text
 from ml.candidate_judgments import (
     normalized_candidate_labels,
     validate_complete_candidate_labels,
 )
-from ml.evidence import concept_tags, useful_tokens
+from ml.evidence_text import concept_tags, useful_tokens
 from ml.evidence_constraints import named_terms, term_families
 from ml.real_development import ROLE_FAMILIES, evidence_overlap
 from ml.real_development_isolation import (

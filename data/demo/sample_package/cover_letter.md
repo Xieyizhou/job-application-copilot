@@ -1,18 +1,15 @@
-I am interested in the fictional Data Analyst role at Northstar Metrics Studio.
-My entry-level internship and academic projects include Python and SQL analysis,
-data visualization, statistics, documentation, and communicating findings to a
-small project team.
+Dear Hiring Team,
 
-In a fictional community research internship, I cleaned tabular datasets, built
-recurring dashboards, documented quality checks, and presented results to
-non-technical stakeholders. I also built a classification pipeline with Python
-and scikit-learn, evaluated it with cross-validation, and created charts explaining
-the model's performance and limitations.
+The Data Analyst position at Northstar Metrics Studio centers on Python, with SQL also important to the work. I am interested in the role because these priorities connect to specific projects and experience in my background, including the examples below.
 
-These experiences align with the role's practical analysis and communication
-requirements. I would bring an evidence-focused approach while continuing to learn
-from project review and feedback.
+In Classification Pipeline, I built a classification pipeline with Python and scikit-learn. This directly supports the position's emphasis on Python. It gives me a concrete basis for contributing to similar work while adapting to the team's tools and operating context.
 
-Thank you for considering this fictional Demo application.
+In Public Data Dashboard, I analyzed a fictional public dataset using SQL, Python, and statistics. This evidence aligns directly with the position's need for SQL. It is a second, distinct example of how I have applied relevant skills to concrete work and communicated the result.
+
+Together, these examples represent the work in my background that is most relevant to this position. I would welcome the opportunity to discuss how this experience could support the Data Analyst team at Northstar Metrics Studio. Thank you for your time and consideration.
 
 This is fictional Demo output and must not be submitted to an employer.
+
+Sincerely,
+
+Demo Candidate

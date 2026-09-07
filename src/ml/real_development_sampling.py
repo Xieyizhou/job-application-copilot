@@ -8,8 +8,8 @@ import random
 from typing import Any
 
 from ml.annotation import validate_queue
-from ml.annotation_generation import normalize_text
-from ml.evidence import concept_tags, useful_tokens
+from document_text import normalize_comparison_text as normalize_text
+from ml.evidence_text import concept_tags, useful_tokens
 from ml.evidence_constraints import named_terms, term_families
 from ml.real_development import (
     ROLE_FAMILIES,

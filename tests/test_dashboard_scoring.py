@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import dashboard_fit
+import dashboard_review
+
+
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +15,8 @@ from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+import scoring_extraction
 
 import dashboard
 from apply_package import parse_analysis_summary
@@ -40,10 +46,58 @@ def analyzed_job(job_text: str, candidate_text: str = MATCHING_CANDIDATE) -> dic
         candidate_text,
         use_cache=False,
     )
-    return dashboard.apply_canonical_analysis(job, analysis)
+    return dashboard_fit.apply_canonical_analysis(job, analysis)
 
 
 class CanonicalDashboardAnalysisTests(unittest.TestCase):
+    def test_non_uk_location_does_not_inherit_uk_warning_from_boilerplate(self) -> None:
+        job_text = """# AI Intern
+Location: Singapore
+
+## Job Description
+The role is based in Singapore. Our company also has offices in London and New York.
+Requirements: Python and machine learning.
+"""
+
+        self.assertFalse(scoring_extraction.is_uk_job(job_text))
+        self.assertFalse(any("UK HPI" in item for item in dashboard.warnings_for_job(job_text)))
+
+    def test_explicit_uk_location_still_gets_manual_warning(self) -> None:
+        job_text = """# AI Intern
+Location: London, UK
+
+## Job Description
+The role requires Python and machine learning.
+"""
+
+        self.assertTrue(scoring_extraction.is_uk_job(job_text))
+        self.assertTrue(any("UK HPI" in item for item in dashboard.warnings_for_job(job_text)))
+
+    def test_canonical_analysis_replaces_stale_jd_quality(self) -> None:
+        job = {
+            "jd_quality": {
+                "display_label": "Requirements missing",
+                "reliable_scoring_ready": False,
+            }
+        }
+        analysis = {
+            "analysis_available": True,
+            "score": 26,
+            "recommendation": "Skip or Low Priority",
+            "eligibility": {"status": "passed", "reasons": []},
+            "confidence": {"level": "high"},
+            "score_breakdown": [],
+            "jd_quality": {
+                "display_label": "Scoring-ready",
+                "reliable_scoring_ready": True,
+            },
+        }
+
+        updated = dashboard_fit.apply_canonical_analysis(job, analysis)
+
+        self.assertEqual(updated["jd_quality"]["display_label"], "Scoring-ready")
+        self.assertTrue(updated["jd_quality"]["reliable_scoring_ready"])
+
     def test_personal_web_shadow_does_not_change_analysis_result(self) -> None:
         job = {
             "company": "Fictional Signal Works",
@@ -75,14 +129,14 @@ class CanonicalDashboardAnalysisTests(unittest.TestCase):
 
     def test_dashboard_uses_full_analyzer_not_lightweight_score(self) -> None:
         job = analyzed_job("Machine learning")
-        self.assertEqual(dashboard.score_job_for_dashboard("Machine learning"), 57)
+        self.assertNotIn("score_job_for_dashboard", vars(dashboard))
         self.assertEqual(job["score"], 62)
         self.assertEqual(job["analysis_result"]["coverage_score"], 100)
         self.assertEqual(job["recommendation"], "Manual Review")
         self.assertEqual(job["confidence"]["level"], "low")
 
     def test_low_confidence_labels_numeric_fit_as_provisional(self) -> None:
-        presentation = dashboard.build_fit_presentation(analyzed_job("Machine learning"))
+        presentation = dashboard_fit.build_fit_presentation(analyzed_job("Machine learning"))
         self.assertEqual(presentation["role_fit"], "Provisional 62/100")
         self.assertIn("Low confidence", presentation["card_status"])
         self.assertIn("Provisional 62/100", presentation["card_status"])
@@ -102,9 +156,9 @@ class CanonicalDashboardAnalysisTests(unittest.TestCase):
             "data visualization, communication, documentation, and teamwork across project work."
         )
         self.assertEqual(medium["confidence"]["level"], "medium")
-        self.assertRegex(dashboard.build_fit_presentation(medium)["role_fit"], r"^\d+/100$")
+        self.assertRegex(dashboard_fit.build_fit_presentation(medium)["role_fit"], r"^\d+/100$")
         self.assertEqual(high["confidence"]["level"], "high")
-        self.assertRegex(dashboard.build_fit_presentation(high)["role_fit"], r"^\d+/100$")
+        self.assertRegex(dashboard_fit.build_fit_presentation(high)["role_fit"], r"^\d+/100$")
 
     def test_failed_and_manual_eligibility_override_apply(self) -> None:
         failed = analyzed_job(
@@ -125,7 +179,7 @@ class CanonicalDashboardAnalysisTests(unittest.TestCase):
         self.assertFalse(job["analysis_available"])
         self.assertIsNone(job["score"])
         self.assertEqual(job["recommendation"], "Manual Review")
-        presentation = dashboard.build_fit_presentation(job)
+        presentation = dashboard_fit.build_fit_presentation(job)
         self.assertEqual(presentation["role_fit"], "Not available")
         self.assertIn("Stored legacy score: 57/100", presentation["card_status"])
 
@@ -138,7 +192,7 @@ class RequirementSummaryTests(unittest.TestCase):
             "Nice to have: PCA and data visualization for additional project work.",
             "Recent graduate with Python and data visualization evidence.",
         )
-        terms = dashboard.summarize_analysis_requirements(job["analysis_result"])
+        terms = dashboard_fit.summarize_analysis_requirements(job["analysis_result"])
         self.assertEqual(terms["matched_required"], ["Python"])
         self.assertEqual(terms["missing_required"], ["SQL", "model evaluation"])
         self.assertEqual(terms["matched_preferred"], ["data visualization"])
@@ -153,8 +207,8 @@ class RequirementSummaryTests(unittest.TestCase):
             "Python is required. Robotics is preferred for this fictional junior role.",
             "Junior engineer with Python, UAV, and route planning evidence.",
         )
-        required_terms = dashboard.summarize_analysis_requirements(required["analysis_result"])
-        preferred_terms = dashboard.summarize_analysis_requirements(preferred["analysis_result"])
+        required_terms = dashboard_fit.summarize_analysis_requirements(required["analysis_result"])
+        preferred_terms = dashboard_fit.summarize_analysis_requirements(preferred["analysis_result"])
         self.assertTrue(required_terms["partial_required"])
         self.assertIn("Partial match", required_terms["partial_required"][0])
         self.assertTrue(preferred_terms["partial_preferred"])
@@ -167,7 +221,7 @@ class RequirementSummaryTests(unittest.TestCase):
             "PCA is preferred for additional project work.",
             "Recent graduate with Python evidence.",
         )
-        terms = dashboard.summarize_analysis_requirements(job["analysis_result"])
+        terms = dashboard_fit.summarize_analysis_requirements(job["analysis_result"])
         combined = terms["matched_required"] + terms["missing_required"] + terms["missing_preferred"]
         self.assertEqual(len(combined), len(set(combined)))
         self.assertEqual(terms["matched_required"], ["Python"])
@@ -177,7 +231,7 @@ class RequirementSummaryTests(unittest.TestCase):
         job = analyzed_job("Fictional employer offers a pleasant office and reviewed applications.")
         self.assertFalse(job["analysis_available"])
         self.assertEqual(
-            dashboard.build_fit_presentation(job)["terms"]["active_requirement_count"],
+            dashboard_fit.build_fit_presentation(job)["terms"]["active_requirement_count"],
             0,
         )
 
@@ -190,7 +244,11 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
         higher["score"] = 80
         lower["legacy_score"] = 99
         higher["legacy_score"] = 1
-        sorted_jobs = dashboard.sorted_review_jobs([lower, higher], "Role Fit high to low")
+        lower["confidence"] = {"level": "high"}
+        higher["confidence"] = {"level": "high"}
+        lower["analysis_available"] = True
+        higher["analysis_available"] = True
+        sorted_jobs = dashboard_review.sorted_review_jobs([lower, higher], "Role Fit high to low")
         self.assertGreaterEqual(sorted_jobs[0]["score"], sorted_jobs[1]["score"])
         self.assertIs(sorted_jobs[0], higher)
 
@@ -218,9 +276,9 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
             "Senior Machine Learning Engineer requires Python SQL pandas machine learning model evaluation "
             "data analysis visualization communication and 5+ years experience required."
         )
-        self.assertTrue(dashboard.is_strong_match(strong))
-        self.assertFalse(dashboard.is_strong_match(low))
-        self.assertFalse(dashboard.is_strong_match(failed))
+        self.assertTrue(dashboard_review.is_strong_match(strong))
+        self.assertFalse(dashboard_review.is_strong_match(low))
+        self.assertFalse(dashboard_review.is_strong_match(failed))
 
     def test_tracker_arguments_use_canonical_values_and_title(self) -> None:
         job = analyzed_job(
@@ -276,18 +334,18 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
 
 class DashboardActionGuidanceTests(unittest.TestCase):
     def test_tracker_actions_change_with_pipeline_stage(self) -> None:
-        self.assertIn("Review fit", dashboard.tracker_next_action({"status": "saved"}))
-        self.assertIn("apply manually", dashboard.tracker_next_action({"status": "ready"}))
-        self.assertIn("Prepare role-specific", dashboard.tracker_next_action({"status": "interview"}))
+        self.assertIn("Review fit", dashboard_review.tracker_next_action({"status": "saved"}))
+        self.assertIn("apply manually", dashboard_review.tracker_next_action({"status": "ready"}))
+        self.assertIn("Prepare role-specific", dashboard_review.tracker_next_action({"status": "interview"}))
 
     def test_old_applied_role_is_flagged_for_follow_up(self) -> None:
         row = {"status": "applied", "applied_date": "2020-01-01"}
-        self.assertTrue(dashboard.tracker_follow_up_due(row))
-        self.assertIn("Follow up", dashboard.tracker_next_action(row))
+        self.assertTrue(dashboard_review.tracker_follow_up_due(row))
+        self.assertIn("Follow up", dashboard_review.tracker_next_action(row))
 
     def test_review_action_prioritizes_evidence_and_eligibility(self) -> None:
         missing_analysis = {"analysis_available": False}
-        self.assertIn("complete job description", dashboard.review_job_next_action(missing_analysis))
+        self.assertIn("complete job description", dashboard_review.review_job_next_action(missing_analysis))
 
         failed = analyzed_job(
             "Senior Data Engineer requires Python SQL pandas data analysis communication "
@@ -297,10 +355,10 @@ class DashboardActionGuidanceTests(unittest.TestCase):
             "display_label": "Complete",
             "reliable_scoring_ready": True,
         }
-        self.assertIn("hard constraint", dashboard.review_job_next_action(failed))
+        self.assertIn("hard constraint", dashboard_review.review_job_next_action(failed))
 
         low_confidence = analyzed_job("Machine learning")
-        self.assertIn("full job description", dashboard.review_job_next_action(low_confidence))
+        self.assertIn("full job description", dashboard_review.review_job_next_action(low_confidence))
 
     def test_workspace_switch_clears_cross_workspace_selection(self) -> None:
         session_state = {

@@ -15,13 +15,6 @@ from dashboard_evidence_map import build_evidence_cards, evidence_counts
 Sanitizer = Callable[[Any], str]
 
 
-def _as_int(value: object) -> int:
-    try:
-        return int(str(value or 0))
-    except ValueError:
-        return 0
-
-
 def _render_requirement_details(terms: dict[str, Any], sanitize: Sanitizer) -> None:
     if not terms.get("active_requirement_count"):
         st.write("Requirements could not be extracted reliably.")

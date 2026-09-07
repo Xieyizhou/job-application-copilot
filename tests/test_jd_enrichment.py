@@ -185,6 +185,23 @@ class FullJDEnrichmentTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1][1], "Data Analyst")
 
+    def test_verified_jsearch_match_promotes_employer_url_and_keeps_discovery_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "job.md"
+            path.write_text(TARGET_TEXT, encoding="utf-8")
+            employer_candidate = candidate()
+            employer_candidate["job_url"] = "https://boards.greenhouse.io/example/jobs/123"
+            result = enrich_saved_job_description(
+                path,
+                search_jobs=lambda *_args: [employer_candidate],
+                configured=lambda: True,
+            )
+            updated = path.read_text(encoding="utf-8")
+
+        self.assertTrue(result["updated"])
+        self.assertIn("Job URL: https://boards.greenhouse.io/example/jobs/123", updated)
+        self.assertIn("Discovery URL: https://jobs.example.com/data-analyst", updated)
+
     def test_search_attempts_include_company_jobs_fallback(self) -> None:
         calls: list[tuple[str, str, str, int]] = []
 

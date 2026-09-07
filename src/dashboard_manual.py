@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dashboard_company_verification import company_generation_allowed
+from dashboard_ui import render_page_header
+
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,19 +20,9 @@ from dashboard_regions import normalize_location
 from dashboard_titles import display_title_from_value
 from fetch_jobs import jsearch_configured
 from jd_enrichment import enrich_saved_job_description
-from manual_jobs import (
-    SOURCE_OPTIONS,
-    STATUS_OPTIONS,
-    clean_extracted_job_text,
-    duplicate_manual_job_exists,
-    extract_text_from_upload,
-    is_valid_url,
-    load_manual_jobs,
-    parse_job_description_suggestions,
-    save_manual_job,
-    sync_manual_job_from_markdown,
-    update_manual_job,
-)
+from manual_jobs import SOURCE_OPTIONS, STATUS_OPTIONS, duplicate_manual_job_exists, is_valid_url, load_manual_jobs, save_manual_job, sync_manual_job_from_markdown, update_manual_job
+from manual_jd_parser import clean_extracted_job_text, parse_job_description_suggestions
+from job_document import extract_text_from_upload
 from ml.jd_quality import classify_jd_quality
 from output_cleanup import delete_directory_tree
 
@@ -42,13 +35,11 @@ SHOW_DEBUG_UI = False
 class ManualPageServices:
     """Shared dashboard operations required by the manual-job page."""
 
-    company_generation_allowed: Callable[[dict[str, Any]], bool]
     current_workspace: Callable[[], Any]
     demo_mode_enabled: Callable[[], bool]
     go_to_page: Callable[[str], None]
     relative_path: Callable[[Path], str]
     render_manual_company_confirmation: Callable[[dict[str, Any], str], dict[str, Any]]
-    render_page_header: Callable[[str, str | None], None]
     run_with_captured_output: Callable[..., tuple[Any, str]]
     switch_workspace_mode: Callable[[str], None]
 
@@ -362,7 +353,7 @@ def generate_package_for_manual_record(
         return
 
     fields = services.render_manual_company_confirmation(record, f"{button_key}_manual_company")
-    if not services.company_generation_allowed(fields):
+    if not company_generation_allowed(fields):
         st.info(
             "Company name needs confirmation before looking up a full JD or generating a cover letter. "
             "This prevents using the wrong employer in your application."
@@ -692,7 +683,7 @@ def render_manual_debug_tab() -> None:
 
 def manual_job_target_tab(services: ManualPageServices) -> None:
     """Render the target-job workflow with JD capture as the primary task."""
-    services.render_page_header(
+    render_page_header(
         "Add Target Job",
         "Capture the complete posting once so fit, documents, and interview prep share the same source.",
     )

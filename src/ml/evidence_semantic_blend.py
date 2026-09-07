@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from ml.evidence_metrics import _validate_aligned
+
+from ml.evidence_metrics import _mean
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -12,13 +16,6 @@ from ml.evidence import score_transparent_evidence_pair
 
 
 SEMANTIC_BLEND_CHARACTER_WEIGHTS = (0.0, 0.25, 0.5, 0.75, 1.0)
-
-
-def _validate_aligned(requirements: Sequence[str], evidence: Sequence[str]) -> None:
-    if len(requirements) != len(evidence):
-        raise ValueError("requirements and evidence must have equal lengths")
-    if not requirements:
-        raise ValueError("at least one requirement/evidence pair is required")
 
 
 class CharacterTfidfCosineScorer:
@@ -229,5 +226,3 @@ def evaluate_ranker_with_fixed_gate(
     }
 
 
-def _mean(values: Sequence[bool] | Sequence[float]) -> float:
-    return float(np.mean(values)) if values else 0.0

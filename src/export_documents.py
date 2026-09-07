@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from document_text import clean_duplicated_punctuation
+
 import argparse
 import re
 import warnings
@@ -13,16 +15,10 @@ from docx.document import Document as DocumentType
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
 
-from workspace import Workspace, WorkspaceError, generic_cover_letter_template, personal_workspace
+from workspace import CandidateProfile, Workspace, WorkspaceError, generic_cover_letter_template, personal_workspace
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-USER_NAME = "Candidate Name"
-USER_EMAIL = "candidate@example.com"
-USER_LOCATION = "Example City"
-USER_LINKEDIN = "https://www.linkedin.com/in/example-profile/"
-
-
 FORBIDDEN_EMPLOYER_PHRASES = [
     "YOUR NAME",
     "[Date]",
@@ -39,6 +35,9 @@ FORBIDDEN_EMPLOYER_PHRASES = [
     "MS",
     "M.S.",
     "# Cover Letter",
+    "uploaded resume",
+    "evidence threshold",
+    "claim plan",
 ]
 
 
@@ -46,8 +45,9 @@ def validate_employer_content(label: str, markdown_text: str) -> list[str]:
     """Return forbidden phrases found in employer-facing Markdown."""
     warnings = []
 
+    folded = markdown_text.casefold()
     for phrase in FORBIDDEN_EMPLOYER_PHRASES:
-        if phrase in markdown_text:
+        if phrase.casefold() in folded:
             warnings.append(f"{label}: found forbidden phrase '{phrase}'")
 
     for line in markdown_text.splitlines():
@@ -55,21 +55,6 @@ def validate_employer_content(label: str, markdown_text: str) -> list[str]:
             warnings.append(f"{label}: found forbidden standalone title 'Cover Letter'")
 
     return warnings
-
-
-def clean_duplicated_punctuation(text: str) -> str:
-    """Fix common duplicated periods before writing employer-facing content."""
-    replacements = {
-        "Pte..": "Pte.",
-        "Ltd..": "Ltd.",
-        "Inc..": "Inc.",
-        "Company..": "Company.",
-    }
-
-    for bad_text, clean_text in replacements.items():
-        text = text.replace(bad_text, clean_text)
-
-    return text
 
 
 def configure_document_styles(document: DocumentType) -> None:
@@ -98,7 +83,7 @@ def clear_document_body(document: DocumentType) -> None:
         body.remove(child)
 
 
-def clean_cover_letter_parts(markdown_text: str) -> list[str]:
+def clean_cover_letter_parts(markdown_text: str, candidate_name: str = "") -> list[str]:
     """Return body paragraphs without Markdown headings, greeting, or signature."""
     lines = clean_duplicated_punctuation(markdown_text).splitlines()
     paragraph_lines: list[str] = []
@@ -119,7 +104,7 @@ def clean_cover_letter_parts(markdown_text: str) -> list[str]:
             continue
         if line == "Sincerely,":
             continue
-        if line == USER_NAME:
+        if candidate_name and line == candidate_name:
             continue
 
         paragraph_lines.append(line)
@@ -161,18 +146,31 @@ def add_cover_letter_to_template(
     document: DocumentType,
     markdown_text: str,
     metadata: dict[str, str],
+    candidate_profile: CandidateProfile,
 ) -> None:
     """Write contact, employer metadata, and cover letter body into template."""
-    body_paragraphs = clean_cover_letter_parts(markdown_text)
+    if not candidate_profile.name.strip():
+        raise WorkspaceError("Confirm your name on the Resume page before exporting a cover letter.")
+    body_paragraphs = clean_cover_letter_parts(markdown_text, candidate_profile.name)
 
-    add_paragraph(document, USER_NAME, bold=True, center=True, font_size=16, space_after=2)
-    add_paragraph(
-        document,
-        f"{USER_EMAIL} | {USER_LOCATION} | {USER_LINKEDIN}",
-        center=True,
-        font_size=10.5,
-        space_after=12,
+    add_paragraph(document, candidate_profile.name, bold=True, center=True, font_size=16, space_after=2)
+    contact_line = " | ".join(
+        value
+        for value in (
+            candidate_profile.email,
+            candidate_profile.location,
+            candidate_profile.linkedin,
+        )
+        if value.strip()
     )
+    if contact_line:
+        add_paragraph(
+            document,
+            contact_line,
+            center=True,
+            font_size=10.5,
+            space_after=12,
+        )
 
     today = datetime.now()
     add_paragraph(document, f"{today.strftime('%B')} {today.day}, {today.year}", space_after=6)
@@ -190,7 +188,7 @@ def add_cover_letter_to_template(
         add_paragraph(document, paragraph_text, space_after=6)
 
     add_paragraph(document, "Sincerely,", space_after=6)
-    add_paragraph(document, USER_NAME, space_after=0)
+    add_paragraph(document, candidate_profile.name, space_after=0)
 
 
 def final_document_text(document: DocumentType) -> str:
@@ -231,6 +229,7 @@ def export_cover_letter_to_docx(
     docx_path: Path,
     metadata: dict[str, str],
     template_path: Path,
+    candidate_profile: CandidateProfile,
 ) -> list[str]:
     """Validate and export cover_letter.md to cover_letter.docx."""
     markdown_text = clean_duplicated_punctuation(markdown_path.read_text(encoding="utf-8"))
@@ -239,7 +238,7 @@ def export_cover_letter_to_docx(
     document = Document(str(template_path))
     configure_document_styles(document)
     clear_document_body(document)
-    add_cover_letter_to_template(document, markdown_text, metadata)
+    add_cover_letter_to_template(document, markdown_text, metadata, candidate_profile)
     warnings.extend(validate_employer_content("cover_letter.docx", final_document_text(document)))
     document.save(str(docx_path))
 
@@ -267,6 +266,7 @@ def export_application_package(
         cover_letter_docx,
         metadata,
         template_path,
+        workspace.candidate_profile,
     )
     return cover_letter_docx, export_warnings
 

@@ -20,7 +20,6 @@ from ml.evidence import (
     extract_resume_evidence_records,
     score_transparent_evidence_pair,
 )
-from ml.evidence_shadow import comparison_status
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -175,6 +174,10 @@ def build_web_candidate_shadow_report(
     max_requirements: int = MAX_REQUIREMENTS,
 ) -> dict[str, Any]:
     """Compare the product baseline and candidate without changing either output."""
+    # The comparison module imports optional ML dependencies. Load it only when
+    # an opted-in shadow report is actually built, not during base Personal use.
+    from ml.evidence_shadow import comparison_status
+
     legacy_requirements = extract_requirement_records(job_text)[:max_requirements]
     requirements: list[dict[str, Any]]
     if requirement_extractor is None:
