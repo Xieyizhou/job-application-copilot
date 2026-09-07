@@ -82,6 +82,7 @@ class _VisibleTextParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.capture_all = capture_all
         self.json_ld: list[str] = []
+        self.markdown_links: list[str] = []
         self.containers: list[list[str]] = []
         self._script_type = ""
         self._script_parts: list[str] = []
@@ -93,6 +94,13 @@ class _VisibleTextParser(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._depth += 1
         attributes = {key.lower(): str(value or "") for key, value in attrs}
+        if (
+            tag.lower() == "link"
+            and "alternate" in attributes.get("rel", "").lower().split()
+            and attributes.get("type", "").lower() == "text/markdown"
+            and attributes.get("href")
+        ):
+            self.markdown_links.append(attributes["href"])
         if tag.lower() == "script":
             self._script_type = attributes.get("type", "").lower()
             self._script_parts = []
@@ -226,6 +234,46 @@ def extract_job_page(html_text: str, source_url: str) -> FetchedJobPage:
     raise JobPageFetchError(
         "The page loaded, but no complete structured job description was detected."
     )
+
+
+def _fetch_linked_job_markdown(html_text: str, source_url: str) -> FetchedJobPage | None:
+    """Read a page-advertised Markdown representation of the same public job."""
+    parser = _VisibleTextParser()
+    parser.feed(html_text)
+    for href in parser.markdown_links:
+        markdown_url = urljoin(source_url, href)
+        if not _public_http_url(markdown_url):
+            continue
+        try:
+            response = requests.get(
+                markdown_url,
+                headers={**REQUEST_HEADERS, "Accept": "text/markdown,text/plain"},
+                timeout=(5, 20),
+                allow_redirects=False,
+            )
+            response.raise_for_status()
+        except requests.RequestException:
+            continue
+        content_type = response.headers.get("Content-Type", "").lower()
+        if content_type and not any(kind in content_type for kind in ("markdown", "text/plain")):
+            continue
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            continue
+        response.encoding = response.encoding or "utf-8"
+        description = _normalize_text(response.text)
+        if len(description.split()) < 50:
+            continue
+        title = next(
+            (line.removeprefix("# ").strip() for line in description.splitlines() if line.startswith("# ")),
+            "",
+        )
+        return FetchedJobPage(
+            description=description,
+            source_url=source_url,
+            extractor="linked_job_markdown",
+            title=title,
+        )
+    return None
 
 
 def _fetch_public_json(url: str) -> dict[str, Any]:
@@ -465,5 +513,11 @@ def fetch_job_page(url: str) -> FetchedJobPage:
         if len(response.content) > MAX_RESPONSE_BYTES:
             raise JobPageFetchError("The original job page was too large to process safely.")
         response.encoding = response.encoding or "utf-8"
-        return extract_job_page(response.text, current_url)
+        try:
+            return extract_job_page(response.text, current_url)
+        except JobPageFetchError as extraction_error:
+            markdown_result = _fetch_linked_job_markdown(response.text, current_url)
+            if markdown_result is not None:
+                return markdown_result
+            raise extraction_error
     raise JobPageFetchError("The original job page redirected too many times.")
