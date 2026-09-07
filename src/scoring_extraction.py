@@ -212,7 +212,13 @@ def must_already_have_uk_work_authorization(job_text: str) -> bool:
 
 def find_red_flags(job_text: str, resume_text: str) -> list[str]:
     """Find requirements that need human review without assuming eligibility."""
-    normalized_job = normalize_text(job_text)
+    # Empty saved-form metadata is not an employer work-authorization demand.
+    requirement_text = re.sub(
+        r"(?im)^Visa Note:[ \t]*(?:Not provided|Unknown|N/?A|None)?[ \t]*$",
+        "",
+        job_text,
+    )
+    normalized_job = normalize_text(requirement_text)
     normalized_resume = normalize_text(resume_text)
     red_flags = []
 

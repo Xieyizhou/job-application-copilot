@@ -5,14 +5,6 @@ from __future__ import annotations
 import json
 import sys
 import unittest
-
-
-def test_empty_manual_visa_metadata_is_not_an_employer_requirement() -> None:
-    from scoring_extraction import find_red_flags
-
-    text = '# Analyst\nVisa Note: Not provided\n\n## Job Description\nPython required.'
-    assert find_red_flags(text, 'Python experience') == []
-    assert find_red_flags(text.replace('Not provided', 'Visa sponsorship required'), 'Python experience')
 from pathlib import Path
 
 
@@ -26,6 +18,14 @@ from scoring_extraction import find_keywords, infer_candidate_experience_profile
 
 
 CASES_PATH = PROJECT_ROOT / "tests" / "fixtures" / "scoring_cases.json"
+
+
+def test_empty_manual_visa_metadata_is_not_an_employer_requirement() -> None:
+    from scoring_extraction import find_red_flags
+
+    text = '# Analyst\nVisa Note: Not provided\n\n## Job Description\nPython required.'
+    assert find_red_flags(text, 'Python experience') == []
+    assert find_red_flags(text.replace('Not provided', 'Visa sponsorship required'), 'Python experience')
 
 
 def recommendation_group(value: str) -> str:
