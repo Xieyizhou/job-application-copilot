@@ -522,13 +522,13 @@ def analyze_job(
     resume_text = workspace.resume_source_path.read_text(encoding="utf-8")
     job_text = job_description_path.read_text(encoding="utf-8")
 
-    result = score_job_texts(job_text, resume_text)
+    result = analyze_job_structured(job_text, resume_text)
     themes = choose_relevant_themes(result["job_keywords"], result["resume_keywords"])
     score_breakdown = result["score_breakdown"]
     matched_skills, partial_matches, missing_skills = collect_report_matches(score_breakdown)
     parsed_job = result["parsed_job"]
     red_flags = parsed_job["red_flags"]
-    semantic_evidence = build_semantic_evidence_index(job_text, resume_text)
+    semantic_evidence = result["semantic_evidence"]
     resume_evidence = [
         (
             f"{match['requirement']} => {match['evidence']} "
