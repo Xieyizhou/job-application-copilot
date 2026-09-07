@@ -49,7 +49,7 @@ jobs:
         run: python -m coverage report --fail-under=68
       - name: Enforce workflow coverage baselines
         run: |
-          python -m coverage report --include='src/manual_jobs.py' --fail-under=70
+          python -m coverage report --include='src/manual_jobs.py,src/job_document.py,src/manual_jd_parser.py' --fail-under=70
           python -m coverage report --include='src/dashboard_manual.py' --fail-under=45
           python -m coverage report --include='src/dashboard_fetch.py' --fail-under=70
           python -m coverage report --include='src/tracker.py,src/dashboard_tracker.py' --fail-under=80

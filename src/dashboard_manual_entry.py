@@ -6,12 +6,8 @@ from typing import Any, Callable
 
 import streamlit as st
 
-from manual_jobs import (
-    SOURCE_OPTIONS,
-    STATUS_OPTIONS,
-    job_description_quality_warnings,
-    normalize_job_title,
-)
+from manual_jobs import SOURCE_OPTIONS, STATUS_OPTIONS
+from manual_jd_parser import job_description_quality_warnings, normalize_job_title
 from ml.jd_quality import classify_jd_quality
 
 

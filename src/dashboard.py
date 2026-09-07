@@ -160,7 +160,6 @@ from dashboard_tracker import (  # noqa: E402
 )
 from workspace import (  # noqa: E402
     Workspace,
-    WorkspaceError,
     generic_cover_letter_template,
     resolve_workspace,
 )
@@ -574,26 +573,6 @@ def default_review_inbox_view(
     return "All"
 
 
-def mark_job_not_interested(
-    job: DashboardJob,
-    tracker_rows: list[TrackerRow],
-) -> tuple[int | None, str]:
-    """Archive a tracked job, creating a tracker row first if needed."""
-    row = tracker_row_for_job(job, tracker_rows)
-    if row is None:
-        tracker_id, output = save_job_to_tracker(job)
-    else:
-        tracker_id = int(row["id"])
-        output = ""
-    if tracker_id is None:
-        raise WorkspaceError("Tracker record could not be created.")
-    database_path = current_workspace().tracker_database_path
-    if database_path is None:
-        raise WorkspaceError("Tracker is unavailable in Demo workspace.")
-    _, status_output = run_with_captured_output(update_status, int(tracker_id), "archived", database_path)
-    return tracker_id, "\n".join(part for part in [output, status_output] if part)
-
-
 def remember_generated_package(summary: dict[str, Any]) -> None:
     """Store the latest generated bundle selection for the Cover Letter page."""
     tracker_id = summary.get("tracker_id")
@@ -743,14 +722,6 @@ def clean_job_card_snippet(preview: str, limit: int = 180) -> str:
 
     snippet = " ".join(" ".join(body_lines).split())
     return snippet[:limit].rstrip()
-
-
-def build_job_snippet(job: dict[str, Any], limit: int = 240) -> str:
-    """Return a short readable snippet for a job card."""
-    warnings_text = str(job.get("warnings_text", "") or "").strip()
-    if warnings_text and warnings_text != "-":
-        return clean_card_text(f"Review note: {warnings_text}")
-    return clean_job_card_snippet(str(job.get("preview", "") or ""), limit)
 
 
 def structured_fit_analysis(job: DashboardJob, job_text: str) -> dict[str, Any]:

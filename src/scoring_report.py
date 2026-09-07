@@ -221,11 +221,6 @@ def _enforce_evidence_consistency(
     return True
 
 
-def find_resume_evidence(themes: list[str]) -> list[str]:
-    """Return resume-backed evidence bullets for the selected themes."""
-    return [f"Candidate source contains keywords related to {theme}." for theme in themes]
-
-
 def format_reason_messages(reasons: object) -> str:
     """Format structured eligibility reasons without exposing implementation detail."""
     if not isinstance(reasons, list) or not reasons:
@@ -368,24 +363,6 @@ def build_markdown_report(
             "",
         ]
     )
-
-
-def explain_overall_score(
-    score: int,
-    recommendation: str,
-    penalties: list[Penalty],
-    red_flags: list[str],
-) -> str:
-    """Write a short plain-English explanation for the final score."""
-    explanation = (
-        f"{recommendation} because the score is {score}/100 after normalizing only "
-        "the categories the job description actually mentions."
-    )
-    if penalties:
-        explanation += " Penalties were applied for seniority, experience, or degree requirements."
-    if red_flags:
-        explanation += " Red flags need human review before applying."
-    return explanation
 
 
 def analyze_job_structured(

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import dashboard_manual
 import dashboard_manual_entry
-from manual_jobs import ExtractionResult
+from job_document import ExtractionResult
 
 
 class UploadedFile:

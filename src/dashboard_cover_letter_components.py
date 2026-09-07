@@ -19,7 +19,6 @@ from dashboard_cover_letter_materials import (
 from dashboard_packages import existing_package_files
 from dashboard_titles import display_title_from_value
 from generate_cover_letter import validate_manual_cover_letter_draft
-from output_paths import safe_slug
 from tracker import update_status
 from workspace import WorkspaceError
 
@@ -47,18 +46,6 @@ def cover_letter_artifacts(package_dir: Path) -> CoverLetterArtifacts:
         internal_notes=existing_package_files(package_dir, ["cover_letter_notes.md"]),
         plan=package_dir / "cover_letter_plan.json",
     )
-
-
-def render_cover_letter_workspace(
-    package_dir: Path,
-    tracker_row: dict[str, Any] | None,
-    services: Any,
-) -> None:
-    """Compatibility wrapper for the cover-letter context and document."""
-    artifacts = cover_letter_artifacts(package_dir)
-    package_key = safe_slug(services.relative_path(package_dir)) or "selected_package"
-    render_cover_letter_context(artifacts, tracker_row, services)
-    render_cover_letter_document(artifacts, tracker_row, package_key, services)
 
 
 def render_cover_letter_context(

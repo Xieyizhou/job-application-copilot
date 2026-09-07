@@ -421,35 +421,6 @@ def build_focus_summary(detected_themes: list[str]) -> str:
     return ", ".join(labels[:2]) + (" and " + labels[2] if len(labels) == 3 else "")
 
 
-def build_primary_evidence_paragraph(selection: dict[str, Any]) -> str:
-    """Build a source-grounded proof paragraph from the strongest resume block."""
-    experience = selection["experience"]
-    bullets = selection.get("selected_evidence", [])
-    name = str(experience.get("name", "this experience"))
-
-    if not bullets:
-        return ""
-
-    sentences = [first_person_evidence_sentence(bullet) for bullet in bullets[:2]]
-    if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
-        return " ".join(sentences)
-    return f"In {name}, " + " ".join(sentences)
-
-
-def build_secondary_evidence_paragraph(selected: list[dict[str, Any]]) -> str:
-    """Add one concise, independently sourced proof when another block is relevant."""
-    if len(selected) > 1:
-        secondary = selected[1]
-        evidence = list(secondary.get("selected_evidence", []))
-        if evidence:
-            sentence = first_person_evidence_sentence(evidence[0])
-            name = str(secondary["experience"].get("name", "another resume experience"))
-            if name.lower() in {"skills", "technical skills", "core competencies", "summary", "profile"}:
-                return sentence
-            return f"In {name}, {sentence}"
-    return ""
-
-
 def concise_requirement(text: str, *, limit: int = 18) -> str:
     """Return a compact source-grounded requirement phrase for prose."""
     cleaned = re.sub(

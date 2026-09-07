@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status, effective_role_fit
+from dashboard_fit import confidence_level, eligibility_status, effective_role_fit
 from scoring_types import DashboardJob, TrackerRow
 
 
@@ -309,12 +309,3 @@ def primary_review_action(
     )
 
 
-def job_evidence_label(job: DashboardJob | dict[str, Any]) -> str:
-    """Summarize evidence count, observed coverage, and JD completeness."""
-    presentation = build_fit_presentation(job)
-    confidence = dict(job.get("confidence", {}) or {})
-    requirement_count = int(confidence.get("active_requirement_count", 0) or 0)
-    coverage = presentation.get("coverage_score")
-    source_quality = "API snippet" if job_needs_full_jd(job) else "Full JD"
-    coverage_text = f"{int(coverage)}% coverage" if coverage is not None else "Coverage unavailable"
-    return f"{requirement_count} requirements · {coverage_text} · {source_quality}"

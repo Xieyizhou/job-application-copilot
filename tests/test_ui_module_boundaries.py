@@ -39,6 +39,7 @@ class UIOrchestrationBoundaryTests(unittest.TestCase):
     def test_domain_services_do_not_import_presentation(self) -> None:
         modules = (
             "dashboard_repository", "dashboard_analysis_service", "manual_jobs",
+            "job_document", "manual_jd_parser",
             "jd_enrichment", "fetch_jobs", "generate_cover_letter", "tracker", "workspace",
         )
         for name in modules:

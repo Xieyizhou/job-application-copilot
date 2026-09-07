@@ -20,19 +20,9 @@ from dashboard_regions import normalize_location
 from dashboard_titles import display_title_from_value
 from fetch_jobs import jsearch_configured
 from jd_enrichment import enrich_saved_job_description
-from manual_jobs import (
-    SOURCE_OPTIONS,
-    STATUS_OPTIONS,
-    clean_extracted_job_text,
-    duplicate_manual_job_exists,
-    extract_text_from_upload,
-    is_valid_url,
-    load_manual_jobs,
-    parse_job_description_suggestions,
-    save_manual_job,
-    sync_manual_job_from_markdown,
-    update_manual_job,
-)
+from manual_jobs import SOURCE_OPTIONS, STATUS_OPTIONS, duplicate_manual_job_exists, is_valid_url, load_manual_jobs, save_manual_job, sync_manual_job_from_markdown, update_manual_job
+from manual_jd_parser import clean_extracted_job_text, parse_job_description_suggestions
+from job_document import extract_text_from_upload
 from ml.jd_quality import classify_jd_quality
 from output_cleanup import delete_directory_tree
 
