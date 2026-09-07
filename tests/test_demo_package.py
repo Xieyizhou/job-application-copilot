@@ -26,6 +26,7 @@ EXPECTED_ZIP_NAMES = {
     "cover_letter.docx",
     "analysis.md",
     "cover_letter_notes.md",
+    "cover_letter_plan.json",
 }
 
 
@@ -38,7 +39,7 @@ class DemoPackageTests(unittest.TestCase):
             timeout=30
         )
         self.assertTrue(
-            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+            any("Resume" in str(title.value) for title in app.markdown)
         )
 
         next(
@@ -49,7 +50,7 @@ class DemoPackageTests(unittest.TestCase):
         self.assertEqual(app.session_state["workspace_mode"], "Demo")
         self.assertEqual(app.session_state["active_page"], "Dashboard")
         self.assertFalse(
-            any("Candidate Workspace Setup" in str(title.value) for title in app.markdown)
+            any("Resume" in str(title.value) for title in app.markdown)
         )
         self.assertTrue(any("Demo · Read-only" in str(item.value) for item in app.caption))
 
@@ -77,8 +78,8 @@ class DemoPackageTests(unittest.TestCase):
             "cover_letter.docx": [
                 "Demo Candidate",
                 "Northstar Metrics Studio",
-                "fictional Data Analyst role",
-                "fictional community research internship",
+                "classification pipeline with Python and scikit-learn",
+                "fictional public dataset using SQL, Python, and statistics",
                 "This is fictional Demo output and must not be submitted to an employer.",
             ],
         }
@@ -155,6 +156,9 @@ class DemoPackageTests(unittest.TestCase):
             },
         )
         self.assertEqual(local_workspace.exists(), existed_before)
+        self.assertTrue(
+            any("Evidence used" in str(markdown.value) for markdown in app.markdown)
+        )
 
         next(button for button in app.button if button.label == "View Stored Match Report").click().run(
             timeout=30

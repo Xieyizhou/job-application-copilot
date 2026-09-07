@@ -78,6 +78,9 @@ class FakeStreamlit:
     def form_submit_button(self, label: str, **kwargs: object) -> bool:
         return self.submitted
 
+    def button(self, label: str, **kwargs: object) -> bool:
+        return False
+
     def status(self, *args: object, **kwargs: object) -> ContextBlock:
         return ContextBlock(self)
 
@@ -249,6 +252,47 @@ class DashboardFetchRuntimeTests(unittest.TestCase):
         self.assertEqual(summary.full_descriptions, 3)
         self.assertEqual(len(summary.new_jobs), 1)
         self.assertEqual(len(summary.seen_jobs), 1)
+        self.assertEqual(summary.skipped_jobs, [])
+
+    def test_preview_only_results_are_visible_but_not_saved(self) -> None:
+        preview = {
+            "company": "Preview Company",
+            "role": "Data Analyst",
+            "source": "jooble",
+        }
+        outcome = dashboard_fetch.FetchSearchOutcome(
+            runs=[
+                {
+                    "total_jobs_returned": 1,
+                    "new_jobs_count": 0,
+                    "duplicate_jobs_count": 0,
+                    "skipped_jobs_count": 1,
+                    "skipped_jobs": [preview],
+                }
+            ]
+        )
+        fake = FakeStreamlit()
+        services = self.services(demo=False)
+        request = dashboard_fetch.FetchSearchRequest(
+            submitted=True,
+            query="Data Analyst",
+            sources=["jooble"],
+            recommendation_limit=12,
+            fetch_limit_per_source=20,
+            adzuna_country="us",
+            adzuna_location="Remote",
+            jooble_location="Remote",
+            adzuna_supported=True,
+        )
+
+        with patch.object(dashboard_fetch, "st", fake):
+            dashboard_fetch.render_fetch_results(outcome, request, services)
+
+        services.render_fetch_run_job_cards.assert_called_once_with(
+            [preview],
+            "No preview-only results in this search.",
+        )
+        self.assertEqual(fake.metrics["Skipped previews"], 1)
 
 
 if __name__ == "__main__":

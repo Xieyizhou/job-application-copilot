@@ -1,6 +1,11 @@
 """Contract tests for source-backed JD structuring and pipeline diagnostics."""
 
-from structured_jd import pipeline_diagnostic_message, pipeline_trace, structure_job_description
+from structured_jd import (
+    pipeline_diagnostic_message,
+    pipeline_trace,
+    requirement_records,
+    structure_job_description,
+)
 from scoring_report import analyze_job_structured
 
 
@@ -102,6 +107,60 @@ Who you probably are • Python • PyTorch • Production ML systems • Monito
     assert result["jd_quality"]["reliable_scoring_ready"] is True
 
 
+def test_colonless_flat_full_jd_uses_requirement_evidence_instead_of_keyword_score() -> None:
+    job = """# AI / Machine Learning Intern
+Company: Example Capital
+Role: AI / Machine Learning Intern
+Location: Singapore
+Source: JSearch
+Description Source: full_jd_api
+JD Fetch Status: complete
+
+## Job Description
+We build responsible data products for investment teams.
+Responsibilities Working knowledge of AI and machine learning frameworks Collaborate with
+engineering teams Implement retrieval workflows Write clean and maintainable code
+Requirements Familiarity with orchestration frameworks for multi-agent systems Knowledge of
+embeddings, semantic search, and document processing Prior internship or project experience
+in production AI applications Pursuing a Bachelor's Degree in Computer Science or related fields
+Development knowledge and experience in Python, SQL, Pandas Strong communication skills
+Ability to work with minimal supervision Please state your availability clearly in your resume.
+"""
+    resume = """# Candidate
+- Built Python and SQL data pipelines with pandas.
+- Evaluated a small machine-learning classifier in an academic project.
+"""
+
+    result = analyze_job_structured(job, resume)
+    requirements = requirement_records(structure_job_description(job))
+
+    assert len(requirements) >= 8
+    assert result["scoring_method"] == "structured_requirement_evidence_v1"
+    assert result["score"] <= result["coverage_score"]
+    assert result["score"] < result["legacy_score"]
+    assert not any(row["text"].lower().startswith("and/or") for row in requirements)
+
+
+def test_all_missing_evidence_can_never_keep_a_high_keyword_score() -> None:
+    job = """# AI Intern
+Location: Singapore
+Source: JSearch
+Description Source: full_jd_api
+JD Fetch Status: complete
+## Job Description
+Requirements:
+- Must have production experience with a proprietary orchestration platform.
+"""
+    resume = "Candidate has unrelated retail operations experience."
+
+    result = analyze_job_structured(job, resume)
+
+    assert result["semantic_evidence"]["accepted_count"] == 0
+    assert result["score"] == 0
+    assert result["coverage_score"] == 0
+    assert result["scoring_method"] == "semantic_evidence_consistency_guard_v1"
+
+
 def test_structurer_joins_wrapped_paragraphs_and_hides_internal_metadata() -> None:
     source = """# Data Analyst
 Company: Example Co
@@ -161,3 +220,70 @@ Requirements:
     structured = structure_job_description(source)
 
     assert all("We help companies" not in row["text"] for row in structured["requirements"])
+
+
+def test_flat_provider_sections_exclude_company_benefits_and_legal_boilerplate() -> None:
+    source = """# Machine Learning Graduate
+## Job Description
+Who We Are: We help companies connect and act on their data at the speed required.
+Job Description: • Design, develop, and implement machine learning models.
+• Collaborate with product teams to ship ML systems.
+Education and Experience Required: • Must have a Bachelor's degree.
+• Possess good knowledge of machine learning techniques.
+Additional Skills: Python, SQL, model evaluation.
+What We Can Offer You: Health benefits and flexible working hours.
+Recruitment Fraud Alert: We never charge candidates a registration fee.
+"""
+
+    structured = structure_job_description(source)
+    texts = [row["text"] for row in structured["requirements"]]
+
+    assert any(text.startswith("Design, develop, and implement") for text in texts)
+    assert not any(text in {"Design", "develop"} for text in texts)
+    assert not any("connect and act" in text for text in texts)
+    assert not any("Health benefits" in text for text in texts)
+    assert not any("registration fee" in text for text in texts)
+
+
+def test_scoring_contract_prioritizes_at_most_twelve_real_requirements() -> None:
+    responsibilities = "\n".join(
+        f"- Build production workflow number {index}." for index in range(15)
+    )
+    source = f"""# Platform Engineer
+## Job Description
+Responsibilities:
+{responsibilities}
+Required Qualifications:
+- Must have experience with Python.
+- Bachelor's degree is required.
+Preferred Qualifications:
+- Experience with Airflow is preferred.
+"""
+
+    records = requirement_records(structure_job_description(source))
+
+    assert len(records) == 12
+    assert any("Python" in row["text"] for row in records)
+    assert any("Bachelor" in row["text"] for row in records)
+    assert any(row["classification"] == "Responsibility" for row in records)
+
+
+def test_repeated_provider_requirement_suffix_is_not_rescored() -> None:
+    repeated = (
+        "We provide benefits and flexible working arrangements for everyone in the "
+        "company while supporting long term professional development goals."
+    )
+    source = f"""# Engineer
+## Job Description
+Benefits:
+{repeated}
+Requirements:
+- Must have experience with Python.
+
+## Requirements
+{repeated}
+"""
+
+    records = requirement_records(structure_job_description(source))
+
+    assert [row["text"] for row in records] == ["Must have experience with Python"]

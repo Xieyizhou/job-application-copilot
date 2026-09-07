@@ -45,6 +45,19 @@ def display_requirement(requirement: str) -> str:
         or any(char.isdigit() for char in first_word)
     ):
         return value
+    words = value.split()
+    title_style = len(words) > 1 and all(
+        not any(char.isalpha() for char in word)
+        or word in _PROPER_FIRST_WORDS
+        or word.isupper()
+        or word[:1].isupper()
+        for word in words
+    )
+    if title_style:
+        return " ".join(
+            word if word in _PROPER_FIRST_WORDS or word.isupper() else word.lower()
+            for word in words
+        )
     return value[:1].lower() + value[1:]
 
 
@@ -56,6 +69,15 @@ class EvidenceCard(TypedDict):
     evidence: str
     status: EvidenceStatus
     explanation: str
+
+
+def concise_requirement(requirement: str, max_words: int = 18) -> str:
+    """Keep the table scannable while expanded details retain the source text."""
+    value = display_requirement(requirement)
+    words = value.split()
+    if len(words) <= max_words:
+        return value
+    return " ".join(words[:max_words]).rstrip(",;:") + "…"
 
 
 def evidence_status(match: dict[str, Any]) -> EvidenceStatus:
@@ -75,6 +97,8 @@ def evidence_status(match: dict[str, Any]) -> EvidenceStatus:
 
 def missing_dimension(match: dict[str, Any], status: EvidenceStatus) -> str:
     """Explain the evidence boundary without inventing candidate experience."""
+    if match.get("label_reasons"):
+        return " ".join(str(reason) for reason in match["label_reasons"])
     if status == "Direct":
         return "The resume provides explicit evidence for this requirement."
     if status == "No Support":
@@ -110,7 +134,7 @@ def build_evidence_cards(analysis: dict[str, Any]) -> list[EvidenceCard]:
             }
         )
     if cards:
-        return cards
+        return sorted(cards, key=lambda card: {"Direct": 0, "Partial": 1, "No Support": 2}[card["status"]])
 
     # Snippet-only JDs may expose keyword signals before they expose complete
     # sentence-level requirements. Keep those signals visible, but never promote
@@ -182,23 +206,28 @@ def render_evidence_map(
         [0.34, 0.52, 0.14], vertical_alignment="center", gap="small"
     )
     with title_column:
-        st.markdown('<div class="evidence-map-title">Requirement evidence</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="evidence-map-title">Requirement evidence</div>', unsafe_allow_html=True
+        )
     options = [
         f"All ({len(cards)})",
-        f'Direct ({counts["Direct"]})',
-        f'Partial ({counts["Partial"]})',
-        f'Missing ({counts["No Support"]})',
+        f"Direct ({counts['Direct']})",
+        f"Partial ({counts['Partial']})",
+        f"Missing ({counts['No Support']})",
     ]
     with filter_column:
-        selected_label = st.segmented_control(
-            "Evidence status",
-            options,
-            default=options[0],
-            selection_mode="single",
-            key="evidence_map_segment",
-            label_visibility="collapsed",
-            width="stretch",
-        ) or options[0]
+        selected_label = (
+            st.segmented_control(
+                "Evidence status",
+                options,
+                default=options[0],
+                selection_mode="single",
+                key="evidence_map_segment",
+                label_visibility="collapsed",
+                width="stretch",
+            )
+            or options[0]
+        )
     if render_analysis_action is not None:
         with action_column:
             render_analysis_action()
@@ -211,7 +240,10 @@ def render_evidence_map(
         unsafe_allow_html=True,
     )
     if not visible_cards:
-        st.markdown('<div class="evidence-map-filter-empty">No requirements in this state.</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="evidence-map-filter-empty">No requirements in this state.</div>',
+            unsafe_allow_html=True,
+        )
         return True
     for index, card in enumerate(visible_cards):
         status_slug = card["status"].lower().replace(" ", "-")
@@ -223,15 +255,20 @@ def render_evidence_map(
             with requirement_column:
                 st.markdown(
                     '<div class="evidence-map-requirement">'
-                    f'<strong>{html.escape(sanitize(display_requirement(card["requirement"])))}</strong>'
-                    f'<span>{html.escape(sanitize(card["context"]))}</span>'
+                    f'<strong title="{html.escape(sanitize(card["requirement"]))}">'
+                    f"{html.escape(sanitize(concise_requirement(card['requirement'])))}</strong>"
+                    f"<span>{html.escape(sanitize(card['context']))}</span>"
                     "</div>",
                     unsafe_allow_html=True,
                 )
             with evidence_column:
                 evidence = sanitize(card["evidence"])
-                content = html.escape(evidence) if evidence else "No reliable resume evidence found."
-                st.markdown(f'<div class="evidence-map-quote">{content}</div>', unsafe_allow_html=True)
+                content = (
+                    html.escape(evidence) if evidence else "No reliable resume evidence found."
+                )
+                st.markdown(
+                    f'<div class="evidence-map-quote">{content}</div>', unsafe_allow_html=True
+                )
             with status_column:
                 badge, action = st.columns([0.7, 0.3], vertical_alignment="center", gap="small")
                 with badge:
@@ -244,16 +281,20 @@ def render_evidence_map(
                     if st.button(
                         "Collapse" if expanded else "Expand",
                         key=f"evidence_map_toggle_{index}_{status_slug}",
-                        icon=":material/keyboard_arrow_down:" if expanded else ":material/chevron_right:",
+                        icon=":material/keyboard_arrow_down:"
+                        if expanded
+                        else ":material/chevron_right:",
                         type="tertiary",
-                        help="Hide evidence explanation" if expanded else "Show evidence explanation",
+                        help="Hide evidence explanation"
+                        if expanded
+                        else "Show evidence explanation",
                     ):
                         st.session_state[expanded_key] = not expanded
                         st.rerun()
             if st.session_state.get(expanded_key, False):
                 st.markdown(
                     '<div class="evidence-map-expanded"><strong>Why this label:</strong> '
-                    f'{html.escape(sanitize(card["explanation"]))}</div>',
+                    f"{html.escape(sanitize(card['explanation']))}</div>",
                     unsafe_allow_html=True,
                 )
     return True

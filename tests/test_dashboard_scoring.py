@@ -44,6 +44,29 @@ def analyzed_job(job_text: str, candidate_text: str = MATCHING_CANDIDATE) -> dic
 
 
 class CanonicalDashboardAnalysisTests(unittest.TestCase):
+    def test_non_uk_location_does_not_inherit_uk_warning_from_boilerplate(self) -> None:
+        job_text = """# AI Intern
+Location: Singapore
+
+## Job Description
+The role is based in Singapore. Our company also has offices in London and New York.
+Requirements: Python and machine learning.
+"""
+
+        self.assertFalse(dashboard.is_uk_job_text(job_text))
+        self.assertFalse(any("UK HPI" in item for item in dashboard.warnings_for_job(job_text)))
+
+    def test_explicit_uk_location_still_gets_manual_warning(self) -> None:
+        job_text = """# AI Intern
+Location: London, UK
+
+## Job Description
+The role requires Python and machine learning.
+"""
+
+        self.assertTrue(dashboard.is_uk_job_text(job_text))
+        self.assertTrue(any("UK HPI" in item for item in dashboard.warnings_for_job(job_text)))
+
     def test_canonical_analysis_replaces_stale_jd_quality(self) -> None:
         job = {
             "jd_quality": {
@@ -215,6 +238,10 @@ class DashboardFilteringAndPersistenceTests(unittest.TestCase):
         higher["score"] = 80
         lower["legacy_score"] = 99
         higher["legacy_score"] = 1
+        lower["confidence"] = {"level": "high"}
+        higher["confidence"] = {"level": "high"}
+        lower["analysis_available"] = True
+        higher["analysis_available"] = True
         sorted_jobs = dashboard.sorted_review_jobs([lower, higher], "Role Fit high to low")
         self.assertGreaterEqual(sorted_jobs[0]["score"], sorted_jobs[1]["score"])
         self.assertIs(sorted_jobs[0], higher)

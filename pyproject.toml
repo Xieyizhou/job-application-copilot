@@ -23,6 +23,7 @@ files = [
   "src/scoring_matching.py",
   "src/scoring_report.py",
   "src/jd_enrichment.py",
+  "src/browser_companion.py",
   "src/generate_cover_letter.py",
   "src/manual_jobs.py",
   "src/tracker.py",

@@ -9,6 +9,8 @@ from typing import Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DASHBOARD_PATH = PROJECT_ROOT / "src" / "dashboard.py"
+SRC_DIR = PROJECT_ROOT / "src"
+COMPANION_DIR = PROJECT_ROOT / "data" / "local_workspace" / "browser_companion"
 
 
 def configure_arrow_memory_pool() -> str:
@@ -43,8 +45,41 @@ def main(extra_args: Sequence[str] | None = None) -> int:
 
     from streamlit.web import cli as streamlit_cli
 
+    if str(SRC_DIR) not in sys.path:
+        sys.path.insert(0, str(SRC_DIR))
+    from browser_companion import DEFAULT_PORT, load_or_create_token, start_browser_companion
+    from workspace import personal_workspace
+
+    companion = None
+    connection_path = COMPANION_DIR / "connection.json"
+    connection_path.unlink(missing_ok=True)
+    try:
+        workspace = personal_workspace()
+        token = load_or_create_token(COMPANION_DIR / "token")
+        companion = start_browser_companion(workspace.jobs_dir, port=DEFAULT_PORT, token=token)
+        COMPANION_DIR.mkdir(parents=True, exist_ok=True)
+        connection_path.write_text(
+            __import__("json").dumps(
+                {
+                    "endpoint": f"http://127.0.0.1:{companion.port}",
+                    "token": companion.token,
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        connection_path.chmod(0o600)
+    except OSError as error:
+        print(f"Browser companion unavailable: {error}", file=sys.stderr)
+
     sys.argv = build_streamlit_argv(sys.argv[1:] if extra_args is None else extra_args)
-    streamlit_cli.main()
+    try:
+        streamlit_cli.main()
+    finally:
+        if companion is not None:
+            companion.stop()
+            connection_path.unlink(missing_ok=True)
     return 0
 
 

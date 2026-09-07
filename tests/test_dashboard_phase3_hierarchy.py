@@ -62,7 +62,8 @@ def test_shell_keeps_navigation_in_sidebar_and_bounds_main_width() -> None:
     assert "render_app_title" not in source
     assert "st.sidebar.radio(" not in source
     assert "Personal · {workspace_status} · Local" in source
-    assert "Manage workspace files" in source
+    assert "Manage workspace files" not in source
+    assert "Resume ready" in source
     assert 'resume_open if page == "Resume"' in source
     assert 'else:\n                st.session_state["workspace_setup_open"] = False' in source
     assert "Candidate source:" not in source
@@ -70,9 +71,9 @@ def test_shell_keeps_navigation_in_sidebar_and_bounds_main_width() -> None:
     assert "No automatic submissions." not in source
     assert [label for label, _page, _icon in NAVIGATION_ITEMS] == [
         "Dashboard",
+        "Resume",
         "Find Jobs",
         "Review Jobs",
-        "Resume",
         "Cover Letters",
         "Settings",
     ]

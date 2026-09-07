@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from ml.inference import DEFAULT_MODEL_PATH, portable_text_similarities, portable_text_similarity
+from jd_text import normalize_jd_boundaries
 
 
 MIN_ACCEPTED_SIMILARITY = 0.42
@@ -48,7 +49,7 @@ CONCEPT_ALIASES = {
         "precision", "recall", "roc auc", "evaluation pipeline", "evaluation pipelines", "evals",
     ),
     "communication": (
-        "communicate", "communication", "presented", "presentation", "stakeholder",
+        "communicate", "communicated", "communicating", "communication", "presented", "presentation", "stakeholder",
         "stakeholders", "documentation", "documented", "technical writing",
     ),
     "software_delivery": (
@@ -190,7 +191,7 @@ def extract_requirement_records(job_text: str) -> list[dict[str, str]]:
     """Extract ordered required/preferred statements from a saved JD."""
     records: list[dict[str, str]] = []
     current_section = ""
-    source_lines = job_text.splitlines()
+    source_lines = normalize_jd_boundaries(job_text).splitlines()
     for line_index, raw_line in enumerate(source_lines):
         stripped = raw_line.strip()
         if not stripped:
@@ -391,9 +392,13 @@ def _score_evidence_pair(
         and numeric_constraint_supported
         and compound_requirement_supported
     )
-    if accepted and (len(shared_tokens) >= 2 or requirement_coverage >= 0.5):
+    from ml.evidence_label_guard import label_checks
+
+    rejected, label_reasons = label_checks(requirement, evidence)
+    accepted = accepted and not rejected
+    if accepted and not label_reasons and (len(shared_tokens) >= 2 or requirement_coverage >= 0.5):
         match_type = "Direct support"
-    elif accepted and shared_concepts:
+    elif accepted:
         match_type = "Semantic support"
     else:
         match_type = "Insufficient evidence"
@@ -406,6 +411,7 @@ def _score_evidence_pair(
         "model_similarity": round(model_similarity, 4) if model_similarity is not None else None,
         "numeric_constraint_supported": numeric_constraint_supported,
         "compound_requirement_supported": compound_requirement_supported,
+        "label_reasons": label_reasons,
     }
 
 
@@ -437,7 +443,7 @@ def build_semantic_evidence_index(
                 model_similarity=similarity_by_pair[(requirement["text"], evidence["text"])],
             )
             candidates.append({**evidence, **score})
-        best = max(candidates, key=lambda item: (item["similarity"], -item["line_index"]), default=None)
+        best = max(candidates, key=lambda item: (item["accepted"], item["match_type"] == "Direct support", item["similarity"], -item["line_index"]), default=None)
         if best and best["accepted"]:
             matches.append({**requirement, **best})
         else:
@@ -450,6 +456,7 @@ def build_semantic_evidence_index(
                     "similarity": float(best["similarity"]) if best else 0.0,
                     "accepted": False,
                     "match_type": "Insufficient evidence",
+                    "label_reasons": best.get("label_reasons", []) if best else [],
                     "shared_terms": [],
                     "shared_concepts": [],
                     "model_similarity": best.get("model_similarity") if best else None,

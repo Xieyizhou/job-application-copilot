@@ -20,9 +20,9 @@ PAGE_NAMES = (
 
 NAVIGATION_ITEMS = (
     ("Dashboard", "Dashboard", ":material/home:"),
+    ("Resume", "Resume", ":material/description:"),
     ("Find Jobs", "Find Jobs", ":material/search:"),
     ("Review Jobs", "Review Jobs", ":material/assignment:"),
-    ("Resume", "Resume", ":material/description:"),
     ("Cover Letters", "Cover Letter", ":material/edit_note:"),
     ("Settings", "Settings", ":material/settings:"),
 )
@@ -373,8 +373,6 @@ def render_sidebar(
             width="stretch",
         ):
             if page == "Resume":
-                if str(st.session_state.get("workspace_mode", "Personal")) == "Demo":
-                    switch_workspace_mode(st.session_state, "Personal")
                 st.session_state["workspace_setup_open"] = True
             else:
                 st.session_state["workspace_setup_open"] = False
@@ -394,11 +392,8 @@ def render_sidebar(
 
     workspace = current_workspace()
     if workspace.mode == "personal":
-        workspace_status = "Ready" if workspace.ready else "Setup required"
+        workspace_status = "Resume ready" if workspace.ready else "Resume required"
         st.sidebar.caption(f"Personal · {workspace_status} · Local")
-        if workspace.ready and st.sidebar.button("Manage workspace files", width="stretch"):
-            st.session_state["workspace_setup_open"] = True
-            st.rerun()
     else:
         st.sidebar.caption("Demo · Read-only")
 
@@ -428,8 +423,8 @@ def run_app(
     )
 
     workspace = current_workspace()
-    if workspace.mode == "personal" and (
-        not workspace.ready or st.session_state.get("workspace_setup_open", False)
+    if st.session_state.get("workspace_setup_open", False) or (
+        workspace.mode == "personal" and not workspace.ready
     ):
         render_candidate_workspace_setup(workspace)
         return

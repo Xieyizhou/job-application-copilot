@@ -9,6 +9,7 @@ from typing import Any, Callable, cast
 from analyze_job import extract_job_description_body
 from company_verification import verification_from_markdown, verification_status_label
 from dashboard_fit import apply_canonical_analysis, build_fit_presentation
+from dashboard_job_dedup import description_fingerprint
 from dashboard_regions import (
     infer_high_level_region,
     infer_location_from_path,
@@ -153,6 +154,7 @@ def build_dashboard_job_record(
         "description_source": read_markdown_field(job_text, "Description Source", ""),
         "jd_fetch_status": read_markdown_field(job_text, "JD Fetch Status", ""),
         "description_word_count": len(extract_job_description_body(job_text).split()),
+        "description_fingerprint": description_fingerprint(job_text),
         "jd_quality": jd_quality,
         "first_seen_at": first_seen_at,
         "last_seen_at": read_markdown_field(job_text, "Last Seen At", first_seen_at),
@@ -197,16 +199,28 @@ def job_description_preference(job: DashboardJob) -> tuple[int, int, int]:
 
 
 def deduplicate_dashboard_jobs(jobs: list[DashboardJob]) -> list[DashboardJob]:
-    """Deduplicate records while retaining the strongest JD evidence."""
+    """Deduplicate exact records and syndicated copies of the same preview."""
     unique_jobs: list[DashboardJob] = []
     url_indexes: dict[str, int] = {}
     fallback_indexes: dict[tuple[str, str, str], int] = {}
+    syndicated_preview_indexes: dict[tuple[str, str, str], int] = {}
     for job in jobs:
         job_url, company, role, location = job_duplicate_key(job)
         fallback = (company, role, location)
         existing_index = url_indexes.get(job_url) if job_url else None
         if existing_index is None and all(fallback):
             existing_index = fallback_indexes.get(fallback)
+        fingerprint = str(job.get("description_fingerprint", "") or "")
+        syndicated_preview = (
+            (company, role, fingerprint)
+            if company
+            and role
+            and fingerprint
+            and str(job.get("jd_fetch_status", "")).lower() == "snippet_only"
+            else None
+        )
+        if existing_index is None and syndicated_preview is not None:
+            existing_index = syndicated_preview_indexes.get(syndicated_preview)
         if existing_index is None:
             existing_index = len(unique_jobs)
             unique_jobs.append(job)
@@ -218,6 +232,8 @@ def deduplicate_dashboard_jobs(jobs: list[DashboardJob]) -> list[DashboardJob]:
             url_indexes[job_url] = existing_index
         if all(fallback):
             fallback_indexes[fallback] = existing_index
+        if syndicated_preview is not None:
+            syndicated_preview_indexes[syndicated_preview] = existing_index
     return unique_jobs
 
 

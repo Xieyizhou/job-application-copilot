@@ -27,12 +27,19 @@ from scoring_types import (
     Penalty,
     RoleAlignment,
     ScoreBreakdownItem,
+    ScoreCalibration,
     ScoringConfidence,
     ScoringResult,
     StructuredAnalysis,
 )
 from workspace import Workspace
-from structured_jd import StructuredJob, pipeline_trace, requirement_records, structure_job_description
+from structured_jd import (
+    StructuredJob,
+    pipeline_trace,
+    requirement_records,
+    scoring_requirements,
+    structure_job_description,
+)
 
 
 def _structured_requirement_score(
@@ -41,7 +48,7 @@ def _structured_requirement_score(
     legacy: ScoringResult,
 ) -> dict[str, Any]:
     """Score extracted requirements while retaining the deterministic result as audit data."""
-    rows = list(structured["requirements"])
+    rows = list(scoring_requirements(structured))
     matches = list(semantic_evidence.get("matches", []) or [])
     by_text = {str(row.get("requirement", "")): row for row in matches}
     matched: list[str] = []
@@ -52,7 +59,13 @@ def _structured_requirement_score(
     for value in rows:
         row = dict(value)
         text = str(row.get("text", ""))
-        weight = 0.5 if row.get("type") == "preferred" else 0.75 if row.get("type") == "responsibility" else 1.0
+        weight = (
+            0.5
+            if row.get("type") == "preferred"
+            else 0.75
+            if row.get("type") == "responsibility"
+            else 1.0
+        )
         possible += weight
         evidence = dict(by_text.get(text, {}) or {})
         if not evidence.get("accepted"):
@@ -134,6 +147,78 @@ def _structured_requirement_score(
     }
 
 
+def _enforce_evidence_consistency(
+    result: ScoringResult,
+    semantic_evidence: dict[str, Any],
+) -> bool:
+    """Prevent keyword coverage from contradicting an all-missing evidence table."""
+    matches = list(semantic_evidence.get("matches", []) or [])
+    quality = dict(result["confidence"].get("job_description_quality", {}) or {})
+    if (
+        not quality.get("explicit_full_source")
+        or not matches
+        or int(semantic_evidence.get("accepted_count", 0) or 0) > 0
+    ):
+        return False
+
+    requirements = [str(match.get("requirement", "")).strip() for match in matches]
+    requirements = [value for value in requirements if value]
+    confidence = cast(ScoringConfidence, dict(result["confidence"]))
+    confidence["active_requirement_count"] = len(requirements)
+    confidence["coverage_score"] = 0
+    confidence["observed_score"] = 0
+    confidence["reasons"] = [
+        "No resume statement passed the evidence threshold for the extracted requirements."
+    ]
+    if len(requirements) < 4:
+        confidence["level"] = "low"
+        if quality.get("explicit_full_source"):
+            quality.update(
+                {
+                    "label": "requirements_missing",
+                    "display_label": "Requirements unclear",
+                    "reliable_scoring_ready": False,
+                    "provisional_scoring_ready": False,
+                    "next_action": "Review the extracted requirements before using the fit score.",
+                }
+            )
+        confidence["job_description_quality"] = quality
+
+    calibration: ScoreCalibration = {
+        "applied": int(result["score"]) != 0,
+        "observed_score": 0,
+        "calibrated_score": 0,
+        "active_requirement_count": len(requirements),
+        "role_signal_count": 0,
+        "effective_evidence_count": len(requirements),
+        "evidence_target": 4,
+        "evidence_factor": min(1.0, len(requirements) / 4.0),
+        "reason": "The score was reset because every extracted requirement lacked accepted resume evidence.",
+    }
+    confidence["score_calibration"] = calibration
+    result["score"] = 0
+    result["coverage_score"] = 0
+    result["observed_score"] = 0
+    result["score_calibration"] = calibration
+    result["confidence"] = confidence
+    result["recommendation"] = final_recommendation(
+        0, result["eligibility"], confidence
+    )
+    result["score_breakdown"] = [
+        {
+            "category": "Requirement evidence coverage",
+            "earned": 0.0,
+            "possible": 100,
+            "active_terms": requirements,
+            "matched": [],
+            "partial": [],
+            "missing": requirements,
+            "note": "Every extracted requirement lacked accepted resume evidence.",
+        }
+    ]
+    return True
+
+
 def find_resume_evidence(themes: list[str]) -> list[str]:
     """Return resume-backed evidence bullets for the selected themes."""
     return [f"Candidate source contains keywords related to {theme}." for theme in themes]
@@ -150,7 +235,9 @@ def format_reason_messages(reasons: object) -> str:
     """Format structured eligibility reasons without exposing implementation detail."""
     if not isinstance(reasons, list) or not reasons:
         return "None"
-    return "; ".join(str(reason.get("message", "")) for reason in reasons if isinstance(reason, dict))
+    return "; ".join(
+        str(reason.get("message", "")) for reason in reasons if isinstance(reason, dict)
+    )
 
 
 def format_inline_list(items: object) -> str:
@@ -172,7 +259,9 @@ def format_score_breakdown(score_breakdown: list[ScoreBreakdownItem]) -> str:
         lines.append(f"  - JD terms scored: {format_inline_list(item['active_terms'])}")
         lines.append(f"  - Matched: {format_inline_list(item['matched'])}")
         lines.append(f"  - Partial / adjacent: {format_inline_list(item['partial'])}")
-        lines.append(f"  - Missing required or preferred terms: {format_inline_list(item['missing'])}")
+        lines.append(
+            f"  - Missing required or preferred terms: {format_inline_list(item['missing'])}"
+        )
         lines.append(f"  - Note: {item['note']}")
     return "\n".join(lines)
 
@@ -304,13 +393,15 @@ def explain_overall_score(
     return explanation
 
 
-def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = "") -> StructuredAnalysis:
+def analyze_job_structured(
+    job_text: str, resume_text: str, raw_analysis: str = ""
+) -> StructuredAnalysis:
     """Return structured, dependency-light fit analysis for UI display."""
     result = score_job_texts(job_text, resume_text)
     legacy_score = result["score"]
     structured_job = structure_job_description(job_text)
     structured_records = requirement_records(structured_job)
-    semantic_limit = min(32, max(12, len(structured_records)))
+    semantic_limit = max(1, len(structured_records))
     semantic_evidence = build_semantic_evidence_index(
         job_text,
         resume_text,
@@ -322,15 +413,8 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     # Controlled migration: fill the legacy parser's blind spots without changing
     # already-recognized product results. The audit fields keep both paths visible.
     legacy_quality = dict(result["confidence"].get("job_description_quality", {}) or {})
-    structured_takeover = (
-        len(structured_records) >= 4
-        and (
-            legacy_requirement_count <= 2
-            or (
-                legacy_quality.get("explicit_full_source")
-                and int(legacy_quality.get("requirement_statement_count", 0) or 0) == 0
-            )
-        )
+    structured_takeover = len(structured_records) >= 4 and (
+        legacy_requirement_count <= 2 or legacy_quality.get("explicit_full_source")
     )
     if structured_takeover:
         promoted = _structured_requirement_score(structured_job, semantic_evidence, result)
@@ -343,6 +427,8 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         result["recommendation"] = promoted["recommendation"]
         result["score_breakdown"] = promoted["score_breakdown"]
         scoring_method = "structured_requirement_evidence_v1"
+    elif _enforce_evidence_consistency(result, semantic_evidence):
+        scoring_method = "semantic_evidence_consistency_guard_v1"
     job_keywords = result["job_keywords"]
     parsed_job = result["parsed_job"]
     score_breakdown = result["score_breakdown"]
@@ -350,7 +436,9 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     red_flags = list(parsed_job["red_flags"])
     score = result["score"]
     recommendation = result["recommendation"]
-    main_reason = explain_final_decision(score, recommendation, result["eligibility"], result["confidence"])
+    main_reason = explain_final_decision(
+        score, recommendation, result["eligibility"], result["confidence"]
+    )
 
     matched_strengths = [
         (
@@ -370,24 +458,28 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
     if not matched_strengths:
         matched_strengths.append("No strong keyword overlap was detected; review manually.")
 
-    weak_areas = [f"Missing or unclear evidence for: {keyword}." for keyword in missing_keywords[:6]]
+    weak_areas = [
+        f"Missing or unclear evidence for: {keyword}." for keyword in missing_keywords[:6]
+    ]
     role_alignment = result["role_alignment"]
     if role_alignment.get("detected"):
         focus = str(role_alignment.get("focus", "the title's core domain"))
         if role_alignment.get("score") == 100:
-            matched_strengths.insert(0, f"Candidate source supports the title's core role focus: {focus}.")
+            matched_strengths.insert(
+                0, f"Candidate source supports the title's core role focus: {focus}."
+            )
         else:
-            weak_areas.insert(0, f"Candidate source does not clearly support the title's core role focus: {focus}.")
+            weak_areas.insert(
+                0,
+                f"Candidate source does not clearly support the title's core role focus: {focus}.",
+            )
     if red_flags and len(weak_areas) < 6:
         weak_areas.extend(red_flags[: 6 - len(weak_areas)])
     if not weak_areas:
         weak_areas.append("No major weak areas were detected by the lightweight analyzer.")
 
     resume_evidence = list(
-        dict.fromkeys(
-            str(match["evidence"])
-            for match in semantic_evidence["accepted_matches"]
-        )
+        dict.fromkeys(str(match["evidence"]) for match in semantic_evidence["accepted_matches"])
     )
     return {
         "score": score,
@@ -409,13 +501,17 @@ def analyze_job_structured(job_text: str, resume_text: str, raw_analysis: str = 
         "partial_matches": partial_matches,
         "missing_skills": missing_keywords,
         "main_reason": main_reason,
-        "main_risk": red_flags[0] if red_flags else (weak_areas[0] if weak_areas else "No major risk detected."),
+        "main_risk": red_flags[0]
+        if red_flags
+        else (weak_areas[0] if weak_areas else "No major risk detected."),
         "matched_strengths": matched_strengths[:6],
         "weak_areas": weak_areas[:6],
         "matched_keywords": matched_keywords,
         "missing_keywords": missing_keywords,
         "optional_keywords": list(parsed_job["preferred_skills"]),
-        "resume_suggestions": resume_suggestions_for_keywords(matched_keywords, missing_keywords, red_flags),
+        "resume_suggestions": resume_suggestions_for_keywords(
+            matched_keywords, missing_keywords, red_flags
+        ),
         "jd_evidence": short_evidence_snippets(job_text, matched_keywords or job_keywords),
         "profile_evidence": resume_evidence[:3],
         "semantic_evidence": semantic_evidence,

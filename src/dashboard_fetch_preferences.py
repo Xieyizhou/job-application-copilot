@@ -8,7 +8,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FETCH_PREFERENCES_PATH = PROJECT_ROOT / "data" / "ui_state" / "fetch_preferences.json"
-FETCH_SOURCES = ("jsearch", "adzuna", "jooble")
+FETCH_SOURCES = ("company_ats", "jsearch", "adzuna", "jooble")
 
 
 def load_fetch_sources(default: list[str]) -> list[str]:

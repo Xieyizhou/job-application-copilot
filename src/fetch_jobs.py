@@ -23,6 +23,7 @@ from company_verification import (
     company_verification_fields,
     markdown_metadata_from_verification,
 )
+from company_ats import search_configured_ats_boards
 from dotenv import load_dotenv
 from fetch_history import (
     append_fetch_run,
@@ -38,6 +39,7 @@ from fetch_history import (
     write_job_index,
 )
 from output_paths import date_slug, safe_slug
+from ml.jd_quality import classify_jd_quality
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +48,7 @@ JOB_DESCRIPTION_DIR = PROJECT_ROOT / "data" / "job_descriptions"
 ADZUNA_API_URL = "https://api.adzuna.com/v1/api/jobs/{country}/search/1"
 JOOBLE_API_URL = "https://jooble.org/api/{api_key}"
 JSEARCH_API_URL = "https://api.openwebninja.com/jsearch/search-v2"
+LOCAL_WORKSPACE_ROOT = PROJECT_ROOT / "data" / "local_workspace"
 API_REQUEST_DELAY_SECONDS = 0
 DEFAULT_MAX_RESULTS = 8
 MAX_RESULTS_PER_SOURCE = 20
@@ -59,6 +62,7 @@ TRACKING_QUERY_PARAMETERS = {
     "app_key",
     "aztt",
 }
+AGGREGATOR_HOST_MARKERS = ("adzuna.", "jooble.")
 
 
 class JSearchNoResultsError(RuntimeError):
@@ -308,6 +312,41 @@ def fetch_jsearch_jobs(
     return full_description_jobs
 
 
+def fetch_company_ats_jobs(
+    query: str,
+    location: str,
+    max_results: int,
+) -> list[dict[str, Any]]:
+    """Search the enabled employer ATS boards stored in the Personal workspace."""
+    if not query.strip():
+        raise ValueError("--query is required for Company ATS searches.")
+    jobs, errors = search_configured_ats_boards(
+        LOCAL_WORKSPACE_ROOT,
+        query=query,
+        location=location,
+        max_results=max_results,
+    )
+    normalized = [
+        enrich_job_with_company_verification(job, structured_company=True)
+        for job in jobs
+    ]
+    normalized = [
+        job
+        for job in normalized
+        if classify_jd_quality(
+            "Description Source: company_ats_public_api\n"
+            "JD Fetch Status: complete\n\n## Job Description\n\n"
+            + str(job.get("description", ""))
+        )["reliable_scoring_ready"]
+    ]
+    if not normalized:
+        detail = f" Board issues: {'; '.join(errors)}" if errors else ""
+        raise RuntimeError(f"No matching jobs were found on the configured employer boards.{detail}")
+    if errors:
+        print("Company ATS board issues: " + "; ".join(errors))
+    return normalized
+
+
 def clean_text(value: object) -> str:
     """Convert API text into readable plain text for Markdown."""
     if value is None:
@@ -330,12 +369,14 @@ def normalize_adzuna_job(job: dict[str, object]) -> dict[str, Any]:
     location = clean_text(
         location_data.get("display_name") if isinstance(location_data, dict) else ""
     )
+    listing_url = sanitize_job_url(clean_text(job.get("redirect_url")))
     normalized = {
         "source_job_id": clean_text(job.get("id")),
         "company": company,
         "role": role,
         "location": location,
-        "job_url": sanitize_job_url(clean_text(job.get("redirect_url"))),
+        "job_url": listing_url,
+        "discovery_url": listing_url,
         "description": clean_text(job.get("description")),
         "requirements": extract_requirements(job),
         "salary": format_salary(job),
@@ -350,12 +391,14 @@ def normalize_adzuna_job(job: dict[str, object]) -> dict[str, Any]:
 def normalize_jooble_job(job: dict[str, object], fallback_location: str) -> dict[str, Any]:
     """Convert a Jooble result into the local normalized job shape."""
     description = clean_text(job.get("snippet") or job.get("description"))
+    listing_url = sanitize_job_url(clean_text(job.get("link")))
     normalized = {
         "source_job_id": clean_text(job.get("id")),
         "company": clean_text(job.get("company")),
         "role": clean_text(job.get("title")),
         "location": clean_text(job.get("location")) or clean_text(fallback_location),
-        "job_url": sanitize_job_url(clean_text(job.get("link"))),
+        "job_url": listing_url,
+        "discovery_url": listing_url,
         "description": description,
         "requirements": extract_requirements_from_text(description),
         "salary": clean_text(job.get("salary")),
@@ -386,14 +429,17 @@ def normalize_jsearch_job(job: dict[str, object], fallback_location: str) -> dic
                 requirement_parts.extend(clean_text(value) for value in values if clean_text(value))
     requirements = " ".join(requirement_parts) or extract_requirements_from_text(description)
 
+    apply_url = sanitize_job_url(
+        clean_text(job.get("job_apply_link") or job.get("job_google_link"))
+    )
+    discovery_url = sanitize_job_url(clean_text(job.get("job_google_link")))
     normalized = {
         "source_job_id": clean_text(job.get("job_id")),
         "company": clean_text(job.get("employer_name")),
         "role": clean_text(job.get("job_title")),
         "location": structured_location or clean_text(fallback_location),
-        "job_url": sanitize_job_url(
-            clean_text(job.get("job_apply_link") or job.get("job_google_link"))
-        ),
+        "job_url": apply_url,
+        "discovery_url": discovery_url,
         "description": description,
         "requirements": requirements,
         "salary": format_jsearch_salary(job),
@@ -501,12 +547,14 @@ def build_job_markdown(job: dict[str, Any]) -> str:
     role = clean_text(job.get("role"))
     location = clean_text(job.get("location"))
     job_url = sanitize_job_url(clean_text(job.get("job_url")))
+    discovery_url = sanitize_job_url(clean_text(job.get("discovery_url")))
     source = clean_text(job.get("source"))
     source_job_id = clean_text(job.get("source_job_id"))
     description = clean_text(job.get("description"))
     requirements = clean_text(job.get("requirements"))
     salary = clean_text(job.get("salary"))
     ats_company_token = clean_text(job.get("ats_company_token"))
+    ats_provider = clean_text(job.get("ats_provider"))
     created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     description_source = clean_text(job.get("description_source"))
     jd_fetch_status = clean_text(job.get("jd_fetch_status"))
@@ -518,12 +566,17 @@ def build_job_markdown(job: dict[str, Any]) -> str:
         f"Role: {role or 'Not provided'}",
         f"Location: {location or 'Not provided'}",
         f"Job URL: {job_url or 'Not provided'}",
+        f"Discovery URL: {discovery_url or job_url or 'Not provided'}",
         f"Source: {source.title() if source else 'Not provided'}",
         f"Source Job ID: {source_job_id or 'Not provided'}",
         f"Created at: {created_at}",
         f"Description Source: {description_source or 'Not provided'}",
         f"JD Fetch Status: {jd_fetch_status or 'Not provided'}",
     ]
+    if ats_provider:
+        lines.append(f"ATS Provider: {ats_provider}")
+    if ats_company_token:
+        lines.append(f"ATS Board: {ats_company_token}")
     for field_name, value in markdown_metadata_from_verification(job).items():
         lines.append(f"{field_name}: {clean_text(value) or 'Not provided'}")
     lines.extend([
@@ -538,9 +591,6 @@ def build_job_markdown(job: dict[str, Any]) -> str:
 
     if salary:
         lines.extend(["", "## Salary", "", salary])
-
-    if ats_company_token:
-        lines.extend(["", "ATS company token:", "", ats_company_token])
 
     lines.append("")
     return "\n".join(lines)
@@ -571,7 +621,7 @@ def save_job_markdown(
         f"{index:02d}_"
         f"{safe_slug(role)}"
     )
-    if source in {"adzuna", "jsearch"}:
+    if source in {"adzuna", "jsearch", "company_ats"}:
         base_filename = f"{index:02d}_{safe_slug(company)}_{safe_slug(role)}"
 
     output_path = unique_output_path(output_dir, base_filename)
@@ -635,12 +685,31 @@ def sanitize_job_url(job_url: str) -> str:
     )
 
 
+def has_recoverable_original_url(job_url: object) -> bool:
+    """Return whether a saved URL can plausibly recover the employer posting."""
+    sanitized = sanitize_job_url(clean_text(job_url))
+    split_url = urlsplit(sanitized)
+    host = split_url.netloc.lower().split(":", 1)[0]
+    if split_url.scheme not in {"http", "https"} or not host:
+        return False
+    return not any(marker in host for marker in AGGREGATOR_HOST_MARKERS)
+
+
+def should_save_fetched_job(job: dict[str, Any]) -> tuple[bool, str]:
+    """Keep full JDs and previews that retain a recoverable original link."""
+    if clean_text(job.get("jd_fetch_status")).lower() == "complete":
+        return True, "full_description"
+    if has_recoverable_original_url(job.get("job_url")):
+        return True, "recoverable_original_url"
+    return False, "preview_without_original"
+
+
 def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
     """Fetch jobs, record a fetch run, and save only newly discovered jobs."""
     source = args.source.lower()
-    if source not in {"adzuna", "jooble", "jsearch"}:
+    if source not in {"adzuna", "jooble", "jsearch", "company_ats"}:
         raise ValueError(
-            f"Invalid source '{args.source}'. Supported sources: jsearch, adzuna, jooble."
+            f"Invalid source '{args.source}'. Supported sources: company_ats, jsearch, adzuna, jooble."
         )
     max_results = cap_max_results(args.max_results)
     fetch_run_id = new_fetch_run_id(source)
@@ -666,7 +735,7 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
             )
             source_scope = jooble_region_scope(args.location)
             location_scope = args.location or "remote"
-        else:
+        elif source == "jsearch":
             jobs = fetch_jsearch_jobs(
                 country=args.country,
                 query=args.query,
@@ -674,6 +743,14 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
                 max_results=max_results,
             )
             source_scope = args.country
+            location_scope = args.location or "all_locations"
+        else:
+            jobs = fetch_company_ats_jobs(
+                query=args.query,
+                location=args.location,
+                max_results=max_results,
+            )
+            source_scope = "configured_boards"
             location_scope = args.location or "all_locations"
     except Exception as error:
         append_fetch_run(
@@ -701,10 +778,25 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
     duplicate_jobs = []
     new_jobs = []
     skipped_jobs_count = 0
+    skipped_jobs = []
 
     # Duplicate detection is source-scoped and based on canonical keys. Repeated
     # jobs update last-seen metadata instead of creating duplicate Markdown files.
     for index, job in enumerate(jobs, start=1):
+        should_save, excluded_reason = should_save_fetched_job(job)
+        if not should_save:
+            skipped_jobs_count += 1
+            skipped_jobs.append(
+                {
+                    "company": clean_text(job.get("company_normalized") or job.get("company")),
+                    "role": clean_text(job.get("role")),
+                    "location": clean_text(job.get("location")),
+                    "source": normalize_source(source),
+                    "job_url": sanitize_job_url(clean_text(job.get("job_url"))),
+                    "excluded_reason": excluded_reason,
+                }
+            )
+            continue
         canonical_key = make_canonical_job_key(job, source)
         existing_record = job_index.get(canonical_key)
         if existing_record:
@@ -798,10 +890,16 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
             1 for job in jobs if clean_text(job.get("jd_fetch_status")) == "complete"
         ),
         "skipped_jobs_count": skipped_jobs_count,
-        "fetch_status": "success",
-        "notes": "",
+        "fetch_status": "partial" if skipped_jobs_count else "success",
+        "notes": (
+            f"Skipped {skipped_jobs_count} preview-only result(s) without a recoverable "
+            "original posting."
+            if skipped_jobs_count
+            else ""
+        ),
         "new_jobs": new_jobs,
         "previously_seen_jobs": duplicate_jobs,
+        "skipped_jobs": skipped_jobs,
     }
     append_fetch_run(run_record)
 
@@ -809,6 +907,7 @@ def fetch_and_save_jobs(args: argparse.Namespace) -> dict[str, object]:
     print(f"Returned: {len(jobs)}")
     print(f"New jobs: {len(new_jobs)}")
     print(f"Previously seen: {duplicate_jobs_count}")
+    print(f"Skipped previews: {skipped_jobs_count}")
 
     return {
         "fetch_run": run_record,

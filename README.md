@@ -84,6 +84,15 @@ prefers public Greenhouse/Lever ATS endpoints, then structured JobPosting JSON-L
 page extraction, JSearch, or a locally saved browser page. Adzuna and Jooble snippets remain
 provisional until a complete JD is verified.
 
+### Import the job page already open in your browser
+
+For employer sites that block server-side fetching, Job Copilot includes a local Chrome/Edge
+companion in `browser_companion/`. Start the app with `python run_dashboard.py`, then open
+**Settings → Job sources** for the one-time **Load unpacked** path and local connection token.
+When a previously saved job page is open, click **Import and verify this posting**. The extension
+reads JobPosting JSON-LD or the visible job container and sends it only to `127.0.0.1`; the local
+service updates the saved job only after URL/company/role and JD-quality checks pass.
+
 ## Validation
 
 The portfolio release validation suite passes **565 tests and 160 subtests**, plus Ruff, mypy,

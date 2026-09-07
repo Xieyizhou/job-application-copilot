@@ -202,6 +202,7 @@ class DashboardJob(TypedDict, total=False):
     high_level_region: str
     jd_fetch_status: str
     description_word_count: int
+    description_fingerprint: str
     company_needs_review: bool
 
 

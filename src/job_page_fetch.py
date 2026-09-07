@@ -9,7 +9,7 @@ import socket
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 import re
 
 import requests
@@ -270,7 +270,7 @@ def _fetch_greenhouse(url: str) -> FetchedJobPage | None:
         source_url=url,
         extractor="greenhouse_public_api",
         title=str(payload.get("title", "")),
-        company=board.replace("-", " ").replace("_", " ").title(),
+        company=str(payload.get("company_name", "")),
     )
 
 
@@ -296,13 +296,134 @@ def _fetch_lever(url: str) -> FetchedJobPage | None:
         source_url=url,
         extractor="lever_public_api",
         title=str(payload.get("text", "")),
-        company=company.replace("-", " ").title(),
+        company="",
     )
+
+
+def _fetch_ashby(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname != "jobs.ashbyhq.com":
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    board, job_id = parts[0], parts[1]
+    payload = _fetch_public_json(
+        f"https://api.ashbyhq.com/posting-api/job-board/{quote(board, safe='')}"
+    )
+    jobs = payload.get("jobs", [])
+    if not isinstance(jobs, list):
+        raise JobPageFetchError("Ashby returned an unexpected job-board payload.")
+    matches: list[dict[str, Any]] = []
+    for item in jobs:
+        if not isinstance(item, dict):
+            continue
+        candidate_ids = {
+            path_parts[-1]
+            for key in ("jobUrl", "applyUrl")
+            if (path_parts := [
+                part for part in urlsplit(str(item.get(key, ""))).path.split("/") if part
+            ])
+        }
+        if job_id in candidate_ids or str(item.get("id", "")) == job_id:
+            matches.append(item)
+    if len(matches) != 1:
+        raise JobPageFetchError(
+            "Ashby did not return exactly one posting matching the saved job URL."
+        )
+    posting = matches[0]
+    description = str(posting.get("descriptionPlain", "") or "").strip()
+    if not description:
+        description = _clean_html_text(str(posting.get("descriptionHtml", "")))
+    if not description:
+        raise JobPageFetchError("Ashby returned the job, but its description was empty.")
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="ashby_public_api",
+        title=str(posting.get("title", "")),
+        company="",
+    )
+
+
+def _smartrecruiters_section_text(value: Any) -> str:
+    if isinstance(value, dict):
+        title = str(value.get("title", "") or "").strip()
+        text = _clean_html_text(str(value.get("text", "") or value.get("content", "")))
+        return "\n".join(part for part in (title, text) if part)
+    return _clean_html_text(str(value or ""))
+
+
+def _fetch_smartrecruiters(url: str) -> FetchedJobPage | None:
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"jobs.smartrecruiters.com", "careers.smartrecruiters.com"}:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return None
+    company, posting_slug = parts[0], parts[1]
+    posting_id = posting_slug.split("-", 1)[0]
+    if not posting_id:
+        return None
+    payload = _fetch_public_json(
+        "https://api.smartrecruiters.com/v1/companies/"
+        f"{quote(company, safe='')}/postings/{quote(posting_id, safe='')}"
+    )
+    job_ad = payload.get("jobAd", {})
+    sections = job_ad.get("sections", {}) if isinstance(job_ad, dict) else {}
+    ordered_sections = []
+    if isinstance(sections, dict):
+        for key in (
+            "companyDescription",
+            "jobDescription",
+            "qualifications",
+            "additionalInformation",
+        ):
+            section = _smartrecruiters_section_text(sections.get(key))
+            if section:
+                ordered_sections.append(section)
+    description = "\n\n".join(ordered_sections)
+    if not description:
+        description = _smartrecruiters_section_text(payload.get("description"))
+    if not description:
+        raise JobPageFetchError(
+            "SmartRecruiters returned the job, but its description was empty."
+        )
+    company_payload = payload.get("company", {})
+    company_name = (
+        str(company_payload.get("name", "")) if isinstance(company_payload, dict) else ""
+    )
+    return FetchedJobPage(
+        description=description,
+        source_url=url,
+        extractor="smartrecruiters_public_api",
+        title=str(payload.get("name", "")),
+        company=company_name,
+    )
+
+
+def public_ats_provider(url: str) -> str | None:
+    """Return the supported public ATS behind one canonical job URL."""
+    hostname = (urlsplit(str(url or "")).hostname or "").lower()
+    if hostname in {"boards.greenhouse.io", "job-boards.greenhouse.io"}:
+        return "Greenhouse"
+    if hostname in {"jobs.lever.co", "jobs.eu.lever.co"}:
+        return "Lever"
+    if hostname == "jobs.ashbyhq.com":
+        return "Ashby"
+    if hostname in {"jobs.smartrecruiters.com", "careers.smartrecruiters.com"}:
+        return "SmartRecruiters"
+    return None
 
 
 def fetch_public_ats_job(url: str) -> FetchedJobPage | None:
     """Use stable public ATS APIs before attempting generic page extraction."""
-    return _fetch_greenhouse(url) or _fetch_lever(url)
+    return (
+        _fetch_greenhouse(url)
+        or _fetch_lever(url)
+        or _fetch_ashby(url)
+        or _fetch_smartrecruiters(url)
+    )
 
 
 def fetch_job_page(url: str) -> FetchedJobPage:
@@ -332,7 +453,7 @@ def fetch_job_page(url: str) -> FetchedJobPage:
         if response.status_code in {401, 403, 429}:
             raise JobPageFetchError(
                 "This employer page blocked the server fetch. Open it in your browser "
-                "and use Paste full JD, or try Search provider."
+                "and paste the full job description, or try automatic completion."
             )
         try:
             response.raise_for_status()

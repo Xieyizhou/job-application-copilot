@@ -40,6 +40,7 @@ class JSearchNormalizationTests(unittest.TestCase):
         self.assertEqual(job["description"], "Build reliable analytics products with Python and SQL.")
         self.assertIn("Clear communication", job["requirements"])
         self.assertNotIn("utm_source", job["job_url"])
+        self.assertEqual(job["discovery_url"], "")
 
     @patch("fetch_jobs.load_jsearch_api_key", return_value="test-key")
     @patch("requests.get")
@@ -136,6 +137,7 @@ class JSearchNormalizationTests(unittest.TestCase):
         )
         self.assertIn("Description Source: full_jd_api", markdown)
         self.assertIn("JD Fetch Status: complete", markdown)
+        self.assertIn("Discovery URL: https://careers.example.com/jobs/123", markdown)
 
 
 class DashboardEvidencePreferenceTests(unittest.TestCase):
@@ -165,6 +167,75 @@ class DashboardEvidencePreferenceTests(unittest.TestCase):
 
         self.assertEqual(len(unique), 1)
         self.assertEqual(unique[0]["source"], "jsearch")
+
+    def test_identical_snippet_syndication_collapses_across_locations(self) -> None:
+        shared = {
+            "company": "Example Analytics",
+            "role": "Data Analyst",
+            "job_url": "",
+            "source": "jooble",
+            "description_source": "api_snippet",
+            "jd_fetch_status": "snippet_only",
+            "description_fingerprint": "same-preview",
+        }
+
+        unique = dashboard.deduplicate_dashboard_jobs(
+            [
+                {**shared, "location": "Singapore"},
+                {**shared, "location": "Remote"},
+            ]
+        )
+
+        self.assertEqual(len(unique), 1)
+
+    def test_complete_jobs_at_distinct_locations_remain_distinct(self) -> None:
+        shared = {
+            "company": "Example Analytics",
+            "role": "Data Analyst",
+            "job_url": "",
+            "source": "jsearch",
+            "description_source": "full_jd_api",
+            "jd_fetch_status": "complete",
+            "description_fingerprint": "same-description",
+        }
+
+        unique = dashboard.deduplicate_dashboard_jobs(
+            [
+                {**shared, "location": "Singapore"},
+                {**shared, "location": "Canada"},
+            ]
+        )
+
+        self.assertEqual(len(unique), 2)
+
+
+class FetchQualityGateTests(unittest.TestCase):
+    def test_full_description_is_saved_without_original_url(self) -> None:
+        decision = fetch_jobs.should_save_fetched_job(
+            {"jd_fetch_status": "complete", "job_url": ""}
+        )
+
+        self.assertEqual(decision, (True, "full_description"))
+
+    def test_aggregator_preview_without_original_is_skipped(self) -> None:
+        decision = fetch_jobs.should_save_fetched_job(
+            {
+                "jd_fetch_status": "snippet_only",
+                "job_url": "https://www.jooble.org/desc/123",
+            }
+        )
+
+        self.assertEqual(decision, (False, "preview_without_original"))
+
+    def test_preview_with_employer_url_can_be_recovered(self) -> None:
+        decision = fetch_jobs.should_save_fetched_job(
+            {
+                "jd_fetch_status": "snippet_only",
+                "job_url": "https://careers.example.com/jobs/123",
+            }
+        )
+
+        self.assertEqual(decision, (True, "recoverable_original_url"))
 
 
 if __name__ == "__main__":

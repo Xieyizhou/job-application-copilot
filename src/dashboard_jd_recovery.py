@@ -177,34 +177,34 @@ def render_full_jd_recovery(
     )
     st.markdown(
         '<div class="jd-recovery-note">Employer sites often block server-side requests. '
-        "Open the posting in your browser, try the safe direct fetch, paste the text, "
-        "or search the configured provider index.</div>",
+        "Try automatic completion first. If the page is blocked, open the original posting "
+        "and import it from the browser, or paste the text.</div>",
         unsafe_allow_html=True,
     )
     _render_notice(key_prefix)
     with st.container(key="jd_recovery_actions"):
-        open_column, fetch_column, paste_column, provider_column = st.columns(4, gap="small")
+        automatic_column, open_column, paste_column = st.columns(3, gap="small")
+        with automatic_column:
+            automatic_clicked = st.button(
+                "Complete automatically",
+                key=f"{key_prefix}_complete_automatically",
+                icon=":material/auto_fix_high:",
+                type="primary",
+                width="stretch",
+                disabled=not resolved_url and not services.jsearch_configured(),
+                help="Try the saved original page, then the configured full-posting source.",
+            )
         with open_column:
             if resolved_url:
                 st.link_button(
-                    "Open job page",
+                    "Open original",
                     resolved_url,
                     icon=":material/open_in_new:",
                     type="secondary",
                     width="stretch",
                 )
             else:
-                st.button("Open job page", disabled=True, width="stretch")
-        with fetch_column:
-            fetch_clicked = st.button(
-                "Fetch page",
-                key=f"{key_prefix}_fetch_original_jd",
-                icon=":material/download:",
-                type="secondary",
-                width="stretch",
-                disabled=not resolved_url,
-                help="Attempt a safe server-side fetch. Some employer sites block this request.",
-            )
+                st.button("Open original", disabled=True, width="stretch")
         with paste_column:
             paste_clicked = st.button(
                 "Paste full JD",
@@ -213,52 +213,38 @@ def render_full_jd_recovery(
                 type="secondary",
                 width="stretch",
             )
-        with provider_column:
-            provider_clicked = st.button(
-                "Search provider",
-                key=f"{key_prefix}_find_full_jd",
-                icon=":material/search:",
-                type="secondary",
-                width="stretch",
-                disabled=not services.jsearch_configured(),
-                help=(
-                    "Search the configured JSearch index for a matching full posting."
-                    if services.jsearch_configured()
-                    else "JSearch is unavailable because JSEARCH_API_KEY is not configured."
-                ),
-            )
+    with st.expander("Import from a blocked page", expanded=False):
+        st.caption(
+            "Open the original posting, click **Import current job** in the JobCopilot "
+            "browser companion, then return here and refresh. Setup is under Settings → Job sources."
+        )
     if paste_clicked:
         _paste_full_jd_dialog(selected_path, key_prefix=key_prefix, services=services)
-    if fetch_clicked:
-        try:
-            with st.spinner("Reading and verifying the original job page…"):
-                result = services.enrich_saved_job_description_from_url(selected_path)
-        except Exception as error:  # noqa: BLE001
-            _set_notice(key_prefix, "warning", f"Direct fetch could not read this page: {error}")
-            st.rerun()
+    if automatic_clicked:
+        result: dict[str, Any] = {}
+        with st.spinner("Looking for a complete, matching employer posting…"):
+            if resolved_url:
+                try:
+                    result = services.enrich_saved_job_description_from_url(selected_path)
+                except Exception:  # noqa: BLE001
+                    result = {}
+            if not result.get("updated") and services.jsearch_configured():
+                try:
+                    result = services.enrich_saved_job_description(selected_path)
+                except Exception as error:  # noqa: BLE001
+                    result = {"updated": False, "message": f"Automatic completion failed: {error}"}
         if result.get("updated"):
             _set_notice(key_prefix, "success", str(result["message"]))
         else:
             _set_notice(
                 key_prefix,
                 "warning",
-                str(result.get("message", "No complete JD was found on the original page.")),
-            )
-        st.rerun()
-    if provider_clicked:
-        try:
-            with st.spinner("Checking this workspace, then the provider index…"):
-                result = services.enrich_saved_job_description(selected_path)
-        except Exception as error:  # noqa: BLE001
-            _set_notice(key_prefix, "warning", f"Provider search failed: {error}")
-            st.rerun()
-        if result.get("updated"):
-            _set_notice(key_prefix, "success", str(result["message"]))
-        else:
-            _set_notice(
-                key_prefix,
-                "warning",
-                str(result.get("message", "No safe provider match was found.")),
+                str(
+                    result.get(
+                        "message",
+                        "No complete posting passed the employer, role, and quality checks.",
+                    )
+                ),
             )
         st.rerun()
     return False

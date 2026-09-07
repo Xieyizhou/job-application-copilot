@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 from typing import Any
 
@@ -15,14 +16,13 @@ from dashboard_cover_letter_materials import (
 )
 from dashboard_packages import existing_package_files
 from dashboard_titles import display_title_from_value
+from generate_cover_letter import validate_manual_cover_letter_draft
 from output_paths import safe_slug
 from tracker import update_status
 from workspace import WorkspaceError
 
 
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-
 @dataclass(frozen=True)
 class CoverLetterArtifacts:
     """Known files for one generated cover-letter bundle."""
@@ -32,6 +32,7 @@ class CoverLetterArtifacts:
     docx: Path
     analysis: Path
     internal_notes: list[Path]
+    plan: Path
 
 
 def cover_letter_artifacts(package_dir: Path) -> CoverLetterArtifacts:
@@ -42,6 +43,7 @@ def cover_letter_artifacts(package_dir: Path) -> CoverLetterArtifacts:
         docx=package_dir / "cover_letter.docx",
         analysis=package_dir / "analysis.md",
         internal_notes=existing_package_files(package_dir, ["cover_letter_notes.md"]),
+        plan=package_dir / "cover_letter_plan.json",
     )
 
 
@@ -64,8 +66,33 @@ def render_cover_letter_context(
 ) -> None:
     """Render the evidence context in the left side of the desktop workspace."""
     _render_identity(tracker_row)
+    _render_evidence_used(artifacts)
     render_evidence_and_gaps(artifacts, services)
     _render_readiness_statement(artifacts)
+
+
+def _render_evidence_used(artifacts: CoverLetterArtifacts) -> None:
+    """Show the compact v2 claim provenance while preserving old packages."""
+    if not artifacts.plan.exists():
+        return
+    try:
+        payload = json.loads(artifacts.plan.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        st.warning("The cover letter evidence plan could not be read.")
+        return
+    claims = payload.get("claims", []) if isinstance(payload, dict) else []
+    if not isinstance(claims, list) or not claims:
+        return
+    st.markdown("**Evidence used**")
+    for claim in claims[:3]:
+        if not isinstance(claim, dict):
+            continue
+        label = str(claim.get("support_label", "Evidence"))
+        requirement = str(claim.get("requirement", "Job requirement"))
+        section = str(claim.get("source_section", "Resume evidence"))
+        evidence = str(claim.get("evidence", ""))
+        st.markdown(f"**{label} · {requirement}**")
+        st.caption(f"{section} — {evidence}")
 
 
 def render_cover_letter_document(
@@ -152,12 +179,28 @@ def _render_primary_actions(
     package_key: str,
     services: Any,
 ) -> None:
+    original_draft = artifacts.markdown.read_text(encoding="utf-8")
+    draft_changed = edited_draft.rstrip() != original_draft.rstrip()
+    validation_errors, validation_warnings = (
+        validate_manual_cover_letter_draft(edited_draft) if draft_changed else ([], [])
+    )
+    for error in validation_errors:
+        st.error(error)
+    for warning in validation_warnings:
+        st.warning(warning)
+    edit_confirmed = True
+    if draft_changed:
+        edit_confirmed = st.checkbox(
+            "I verified every manual claim; added text is outside the automatic evidence trace.",
+            key=f"confirm_manual_cover_letter_{package_key}",
+        )
     save_column, applied_column = st.columns(2, gap="small")
     with save_column:
         save_clicked = st.button(
             "Save Draft",
             key=f"save_cover_letter_{package_key}",
             help="Saving refreshes the employer-facing DOCX from this draft.",
+            disabled=bool(validation_errors) or not edit_confirmed,
             width="stretch",
         )
     with applied_column:
@@ -170,6 +213,20 @@ def _render_primary_actions(
         )
     if save_clicked:
         artifacts.markdown.write_text(edited_draft.rstrip() + "\n", encoding="utf-8")
+        if draft_changed and artifacts.plan.exists():
+            try:
+                plan_payload = json.loads(artifacts.plan.read_text(encoding="utf-8"))
+                if isinstance(plan_payload, dict):
+                    plan_payload["manual_edit_untraced"] = True
+                    plan_payload["manual_edit_confirmed"] = True
+                    plan_payload["manual_validation_warnings"] = validation_warnings
+                    plan_payload["validation_status"] = "manual_review_required"
+                    artifacts.plan.write_text(
+                        json.dumps(plan_payload, indent=2, ensure_ascii=False) + "\n",
+                        encoding="utf-8",
+                    )
+            except (OSError, json.JSONDecodeError):
+                st.warning("Draft saved, but its evidence plan could not be updated.")
         generated_path, warnings = services.generate_cover_letter_docx_for_package(artifacts.package_dir)
         if generated_path:
             st.success("Draft saved and DOCX refreshed.")
@@ -179,6 +236,8 @@ def _render_primary_actions(
             with st.expander("DOCX warnings", expanded=False):
                 for warning in warnings:
                     st.write(f"- {warning}")
+        if draft_changed:
+            st.info("Manual edits are not covered by the automatic evidence trace; verify each added claim before sending.")
     if applied_clicked and tracker_row:
         try:
             database_path = services.current_workspace().tracker_database_path

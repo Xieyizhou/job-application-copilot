@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobCopilot Local Import</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">✓</div>
+        <div>
+          <h1>Import current job</h1>
+          <p>Browser → your local workspace</p>
+        </div>
+      </header>
+
+      <section id="setup" class="setup" hidden>
+        <label for="token">Local connection token</label>
+        <input id="token" type="password" autocomplete="off" placeholder="Paste from JobCopilot Settings" />
+        <button id="save-token" class="secondary">Save connection</button>
+      </section>
+
+      <section class="privacy-note">
+        The current page is read only after you click Import. Nothing is sent to a remote server.
+      </section>
+
+      <button id="import" class="primary">Import and verify this posting</button>
+      <button id="open-app" class="secondary">Open JobCopilot</button>
+      <button id="change-token" class="link">Connection settings</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

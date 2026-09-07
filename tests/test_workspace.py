@@ -10,11 +10,13 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from analyze_job import analyze_job
 from tracker import initialize_database
 from src.workspace import (
+    CandidateProfile,
     WorkspaceError,
     demo_workspace,
     initialize_personal_workspace,
     personal_workspace,
     sanitize_upload_filename,
+    update_candidate_profile,
 )
 
 
@@ -54,12 +56,51 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(manifest["resume_source"], "candidate/candidate_source.md")
             self.assertEqual(manifest["candidate_original_extension"], ".md")
             self.assertEqual(manifest["candidate_extraction_method"], "markdown")
+            self.assertEqual(
+                manifest["candidate_profile"],
+                {"name": "Sanitized Candidate", "email": "", "location": "", "linkedin": ""},
+            )
             self.assertEqual(workspace.jobs_dir, root.resolve() / "jobs")
             self.assertEqual(workspace.generated_dir, root.resolve() / "generated")
             self.assertEqual(workspace.tracker_database_path, root.resolve() / "applications.db")
             assert workspace.tracker_database_path is not None
             initialize_database(workspace.tracker_database_path)
             self.assertTrue(workspace.tracker_database_path.is_file())
+
+    def test_candidate_profile_is_local_validated_and_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            root = Path(temporary_dir) / "local_workspace"
+            initialize_personal_workspace(
+                "candidate.md",
+                (
+                    b"# Ada Example\n"
+                    b"candidate@example.com\n"
+                    b"https://linkedin.com/in/example-profile\n"
+                ),
+                root=root,
+            )
+            updated = update_candidate_profile(
+                CandidateProfile(
+                    name="Ada Example",
+                    email="candidate@example.com",
+                    location="San Diego, CA",
+                    linkedin="https://linkedin.com/in/example-profile",
+                ),
+                root=root,
+            )
+            self.assertEqual(updated.candidate_profile.location, "San Diego, CA")
+            with self.assertRaisesRegex(WorkspaceError, "valid email"):
+                update_candidate_profile(
+                    CandidateProfile(name="Ada Example", email="invalid"),
+                    root=root,
+                )
+
+            reuploaded = initialize_personal_workspace(
+                "replacement.md",
+                b"# Ada Example\n\n## Skills\n- Python\n",
+                root=root,
+            )
+            self.assertEqual(reuploaded.candidate_profile, updated.candidate_profile)
 
     def test_upload_filename_cannot_escape_workspace(self) -> None:
         self.assertEqual(sanitize_upload_filename("../../profile.md", {".md"}), "profile.md")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 
 import streamlit as st
+from dashboard_fit import decision_tone
 
 
 def decision_field_html(label: str, value: object) -> str:
@@ -13,22 +14,23 @@ def decision_field_html(label: str, value: object) -> str:
         "Role Fit": "track_changes",
         "Eligibility": "shield",
         "Confidence": "trending_up",
+        "Assessment confidence": "trending_up",
         "JD Quality": "description",
     }.get(label, "info")
     value_text = str(value)
-    tone = "success"
-    if any(marker in value_text.lower() for marker in ("partial", "review", "medium", "needs")):
-        tone = "warning"
-    if any(marker in value_text.lower() for marker in ("failed", "low", "not reliable")):
-        tone = "danger"
+    tone = decision_tone(label, value_text)
     escaped_value = html.escape(value_text)
     if label == "Role Fit" and value_text.endswith("/100"):
         escaped_value = f'{html.escape(value_text.removesuffix("/100"))}<small>/100</small>'
+    help_text = (
+        ' title="Reliability of this assessment, not how well you match. High confidence can accompany a low fit score."'
+        if label in {"Confidence", "Assessment confidence"} else ""
+    )
     return (
         f'<div class="review-decision-field review-decision-{tone}">'
         f'<span class="review-decision-icon">{icon}</span>'
         '<div class="review-decision-copy">'
-        f'<div class="review-decision-label">{html.escape(label)}</div>'
+        f'<div class="review-decision-label"{help_text}>{html.escape(label)}</div>'
         f'<div class="review-decision-value">{escaped_value}</div></div>'
         "</div>"
     )

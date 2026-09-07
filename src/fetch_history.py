@@ -224,6 +224,39 @@ def write_job_index(index: dict[str, dict[str, Any]]) -> None:
     FETCH_JOB_INDEX_JSON.write_text(json.dumps(index, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def sync_job_index_record(path: Path) -> bool:
+    """Synchronize enrichment fields for one indexed Markdown job, if present."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        raw = json.loads(FETCH_JOB_INDEX_JSON.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(raw, dict):
+        return False
+    canonical_key = read_markdown_field(text, "Canonical Job Key")
+    matched_key = ""
+    for key, record in raw.items():
+        if not isinstance(record, dict):
+            continue
+        if canonical_key and str(key) == canonical_key:
+            matched_key = str(key)
+            break
+    if not matched_key:
+        return False
+    record = dict(raw[matched_key])
+    record.update(
+        {
+            "job_url": read_markdown_field(text, "Job URL"),
+            "description_source": read_markdown_field(text, "Description Source"),
+            "jd_fetch_status": read_markdown_field(text, "JD Fetch Status"),
+            "path": relative_path(Path(path)),
+        }
+    )
+    raw[matched_key] = record
+    write_job_index({str(key): value for key, value in raw.items() if isinstance(value, dict)})
+    return True
+
+
 def new_fetch_run_id(source: str) -> str:
     """Create a readable fetch run id."""
     return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{safe_slug(source)}_{uuid.uuid4().hex[:6]}"

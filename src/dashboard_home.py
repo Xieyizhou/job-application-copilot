@@ -60,17 +60,24 @@ def primary_home_action(
 ) -> tuple[str, str, str]:
     """Select one deterministic next action for the Dashboard."""
     low_evidence = sum(1 for job in jobs if job_needs_full_jd(job))
-    if packages:
+    strong_matches = sum(1 for job in jobs if review_fit_band(job) == "Strong")
+    if strong_matches:
         return (
-            f"Review {packages} cover letter(s)",
-            "Verify evidence, gaps, and employer details before applying.",
-            "Cover Letter",
+            f"Review {strong_matches} strong match{'es' if strong_matches != 1 else ''}",
+            "Inspect the evidence and gaps before preparing an application.",
+            "Review Jobs",
         )
     if low_evidence:
         return (
-            f"Complete {low_evidence} job description(s)",
-            "Add the original posting before trusting fit.",
+            "Complete job descriptions before trusting fit",
+            f"{low_evidence} saved role{'s' if low_evidence != 1 else ''} still need the original posting.",
             "Review Jobs",
+        )
+    if packages:
+        return (
+            f"Review {packages} cover letter{'s' if packages != 1 else ''}",
+            "Verify evidence, gaps, and employer details before applying.",
+            "Cover Letter",
         )
     if jobs:
         return (

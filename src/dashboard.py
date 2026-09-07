@@ -30,7 +30,7 @@ DEFAULT_RECOMMENDATION_LIMIT = 12
 MIN_RECOMMENDATION_LIMIT = 5
 MAX_RECOMMENDATION_LIMIT = 30
 SHOW_DEBUG_UI = False
-DASHBOARD_SCORING_VERSION = "canonical-v8-structured-full-jd-quality"
+DASHBOARD_SCORING_VERSION = "canonical-v11-evidence-label-guards"
 SCREENING_KEYWORDS = {
     "python": 8,
     "pandas": 8,
@@ -94,10 +94,15 @@ from export_documents import (  # noqa: E402
 )
 from fetch_history import load_fetch_runs  # noqa: E402
 from fetch_jobs import jsearch_configured  # noqa: E402
+from saved_job_deletion import archive_all_saved_jobs, archive_saved_job  # noqa: E402
 from jd_enrichment import (  # noqa: E402
     enrich_saved_job_description,
     enrich_saved_job_description_from_url,
     replace_saved_job_description,
+)
+from ats_jd_completion import (  # noqa: E402
+    complete_public_ats_jobs,
+    public_ats_completion_candidates,
 )
 import manual_jobs as manual_jobs_module  # noqa: E402
 from ml.inference import predict_relevance_batch, suppress_collapsed_relevance_signals  # noqa: E402
@@ -377,19 +382,10 @@ def warnings_for_job(job_text: str) -> list[str]:
 
 
 def is_uk_job_text(job_text: str) -> bool:
-    """Return True when a saved job appears to be UK/London based."""
-    normalized = normalize_text(job_text)
-    return any(
-        phrase in normalized
-        for phrase in [
-            " london ",
-            " united kingdom ",
-            " uk ",
-            " great britain ",
-            " adzuna.co.uk ",
-            " adzuna.gb ",
-        ]
-    )
+    """Return True when the saved role itself is UK based."""
+    from scoring_extraction import is_uk_job
+
+    return is_uk_job(job_text)
 
 
 def asks_for_uk_work_authorization(job_text: str) -> bool:
@@ -758,11 +754,13 @@ def generate_cover_letter_docx_for_package(package_dir: Path) -> tuple[Path | No
     if not cover_letter_md_path.exists():
         return None, ["Cover letter source is missing."]
     cover_letter_docx_path = package_dir / "cover_letter.docx"
+    workspace = current_workspace()
     warnings = export_cover_letter_to_docx(
         cover_letter_md_path,
         cover_letter_docx_path,
         parse_job_metadata_from_package(package_dir),
-        generic_cover_letter_template(current_workspace()),
+        generic_cover_letter_template(workspace),
+        workspace.candidate_profile,
     )
     return cover_letter_docx_path, warnings
 
@@ -1012,7 +1010,10 @@ def render_generation_success(summary: dict[str, Any]) -> None:
 def review_page_services() -> ReviewPageServices:
     """Build the explicit dependency surface for Review Jobs."""
     return ReviewPageServices(
+        archive_all_saved_jobs=archive_all_saved_jobs,
+        archive_saved_job=archive_saved_job,
         company_generation_allowed=company_generation_allowed,
+        complete_public_ats_jobs=complete_public_ats_jobs,
         current_workspace=current_workspace,
         default_review_inbox_view=default_review_inbox_view,
         demo_mode_enabled=demo_mode_enabled,
@@ -1026,6 +1027,7 @@ def review_page_services() -> ReviewPageServices:
         load_tracker_rows=load_tracker_rows,
         package_dir_for_job=package_dir_for_job,
         package_status_for_job=package_status_for_job,
+        public_ats_completion_candidates=public_ats_completion_candidates,
         read_text_file=read_text_file,
         relative_path=relative_path,
         render_fit_analysis_sections=render_fit_analysis_sections,

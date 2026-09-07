@@ -6,7 +6,7 @@ import json
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -35,6 +35,25 @@ class WorkspaceError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class CandidateProfile:
+    """Confirmed local identity fields used only in employer-facing documents."""
+
+    name: str = ""
+    email: str = ""
+    location: str = ""
+    linkedin: str = ""
+
+    def as_dict(self) -> dict[str, str]:
+        """Return the JSON-safe profile representation."""
+        return {
+            "name": self.name,
+            "email": self.email,
+            "location": self.location,
+            "linkedin": self.linkedin,
+        }
+
+
+@dataclass(frozen=True)
 class Workspace:
     """Resolved paths and readiness for one local application workspace."""
 
@@ -53,12 +72,13 @@ class Workspace:
     candidate_original_extension: str | None = None
     candidate_extraction_method: str | None = None
     candidate_pdf_page_count: int | None = None
+    candidate_profile: CandidateProfile = field(default_factory=CandidateProfile)
 
     def require_ready(self) -> None:
         """Reject candidate workflows until required workspace inputs exist."""
         if not self.ready or self.resume_source_path is None:
             raise WorkspaceError(
-                "Personal workspace is not configured. Add a candidate source in Candidate Workspace Setup."
+                "Personal workspace is not configured. Upload a resume from the Resume page."
             )
 
     def require_writable(self) -> None:
@@ -92,6 +112,43 @@ def demo_workspace() -> Workspace:
         ready=not missing,
         missing_inputs=tuple(missing),
         read_only=True,
+        candidate_profile=CandidateProfile(
+            name="Demo Candidate",
+            email="candidate@example.com",
+            location="Example City",
+        ),
+    )
+
+
+def _candidate_profile_from_manifest(value: object) -> CandidateProfile:
+    """Load only recognized string fields from a local workspace manifest."""
+    if not isinstance(value, dict):
+        return CandidateProfile()
+    return CandidateProfile(
+        **{
+            field_name: str(value.get(field_name, "") or "").strip()
+            for field_name in ("name", "email", "location", "linkedin")
+        }
+    )
+
+
+def infer_candidate_profile(candidate_markdown: str) -> CandidateProfile:
+    """Conservatively prefill explicit identity fields from parsed resume text."""
+    name = ""
+    for raw_line in candidate_markdown.splitlines():
+        line = raw_line.strip().lstrip("#").strip()
+        if not line or "@" in line or "http" in line.lower() or "|" in line:
+            continue
+        words = line.split()
+        if 2 <= len(words) <= 5 and not any(character.isdigit() for character in line):
+            name = line
+            break
+    email_match = re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", candidate_markdown, re.IGNORECASE)
+    linkedin_match = re.search(r"https?://(?:www\.)?linkedin\.com/in/[^\s)>]+", candidate_markdown, re.IGNORECASE)
+    return CandidateProfile(
+        name=name,
+        email=email_match.group(0) if email_match else "",
+        linkedin=linkedin_match.group(0).rstrip(".,") if linkedin_match else "",
     )
 
 
@@ -156,6 +213,7 @@ def personal_workspace(root: Path = LOCAL_WORKSPACE_ROOT) -> Workspace:
             if isinstance(pdf_page_count, int)
             else None
         ),
+        candidate_profile=_candidate_profile_from_manifest(manifest.get("candidate_profile")),
     )
 
 
@@ -239,6 +297,14 @@ def initialize_personal_workspace(
     (root / "generated").mkdir(parents=True, exist_ok=True)
 
     existing = personal_workspace(root)
+    inferred_profile = infer_candidate_profile(parsed_candidate.markdown)
+    existing_profile = existing.candidate_profile
+    candidate_profile = CandidateProfile(
+        name=existing_profile.name or inferred_profile.name,
+        email=existing_profile.email or inferred_profile.email,
+        location=existing_profile.location,
+        linkedin=existing_profile.linkedin or inferred_profile.linkedin,
+    )
     original_name = f"original_resume{parsed_candidate.original_extension}"
     canonical_name = "candidate_source.md"
     _write_candidate_file_atomically(candidate_dir, original_name, resume_content)
@@ -273,6 +339,7 @@ def initialize_personal_workspace(
         "candidate_original_extension": parsed_candidate.original_extension,
         "candidate_extraction_method": parsed_candidate.extraction_method,
         "candidate_pdf_page_count": parsed_candidate.page_count,
+        "candidate_profile": candidate_profile.as_dict(),
         "configured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     manifest_temporary = root / f".{MANIFEST_NAME}.tmp"
@@ -282,6 +349,40 @@ def initialize_personal_workspace(
         obsolete_original = candidate_dir / f"original_resume{extension}"
         if obsolete_original.name != original_name and obsolete_original.is_file():
             obsolete_original.unlink()
+    return personal_workspace(root)
+
+
+def update_candidate_profile(
+    profile: CandidateProfile,
+    root: Path = LOCAL_WORKSPACE_ROOT,
+) -> Workspace:
+    """Persist confirmed candidate identity fields in the Git-ignored workspace."""
+    root = root.resolve()
+    manifest_path = root / MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise WorkspaceError("Upload a resume before saving cover-letter contact details.")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise WorkspaceError("The local workspace manifest could not be read.") from error
+    if not isinstance(manifest, dict):
+        raise WorkspaceError("The local workspace manifest is invalid.")
+    cleaned = CandidateProfile(
+        name=profile.name.strip(),
+        email=profile.email.strip(),
+        location=profile.location.strip(),
+        linkedin=profile.linkedin.strip(),
+    )
+    if not cleaned.name:
+        raise WorkspaceError("Confirm your name before generating a cover letter.")
+    if cleaned.email and not re.fullmatch(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", cleaned.email, re.IGNORECASE):
+        raise WorkspaceError("Enter a valid email address or leave the field blank.")
+    if cleaned.linkedin and not re.match(r"^https?://(?:www\.)?linkedin\.com/in/", cleaned.linkedin, re.IGNORECASE):
+        raise WorkspaceError("Enter a LinkedIn profile URL or leave the field blank.")
+    manifest["candidate_profile"] = cleaned.as_dict()
+    temporary_path = root / f".{MANIFEST_NAME}.tmp"
+    temporary_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary_path, manifest_path)
     return personal_workspace(root)
 
 

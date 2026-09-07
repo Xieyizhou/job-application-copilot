@@ -26,7 +26,7 @@ from dashboard_review_components import (
     visible_role_fit,
 )
 from dashboard_review_chrome import saved_job_context
-from dashboard_evidence_map import display_requirement
+from dashboard_evidence_map import concise_requirement, display_requirement
 from dashboard_review_styles import action_note_html, decision_field_html
 from dashboard_review_selector import (
     compact_review_table_row,
@@ -84,13 +84,27 @@ def sample_job(*, confidence: str = "high") -> dict[str, object]:
 
 
 class ReviewHierarchyTests(unittest.TestCase):
-
     def test_requirement_labels_use_sentence_case_without_lowering_acronyms(self) -> None:
-        self.assertEqual(display_requirement("Design production ML systems"), "design production ML systems")
+        self.assertEqual(
+            display_requirement("Design production ML systems"), "design production ML systems"
+        )
         self.assertEqual(display_requirement("Python"), "Python")
         self.assertEqual(display_requirement("PyTorch/JAX"), "PyTorch/JAX")
         self.assertEqual(display_requirement("GPU-based training"), "GPU-based training")
         self.assertEqual(display_requirement("SQL"), "SQL")
+        self.assertEqual(display_requirement("Cross Domain Knowledge"), "cross domain knowledge")
+        self.assertEqual(display_requirement("Full Stack Development"), "full stack development")
+
+    def test_long_requirement_labels_are_concise_without_rewriting_the_claim(self) -> None:
+        source = (
+            "Design and implement reliable machine learning systems that serve multiple "
+            "products while meeting strict latency availability security monitoring and "
+            "operational quality targets"
+        )
+        concise = concise_requirement(source)
+        self.assertTrue(concise.endswith("…"))
+        self.assertLessEqual(len(concise.removesuffix("…").split()), 18)
+
     def test_programmatic_review_navigation_syncs_the_visible_tab(self) -> None:
         state: dict[str, object] = {}
         job = {"path": Path("/jobs/example.md"), "label": "Example"}
@@ -153,7 +167,7 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertFalse(state["review_hide_hard_red_flags"])
 
     def test_low_confidence_hides_numeric_role_fit(self) -> None:
-        self.assertEqual(visible_role_fit(sample_job(confidence="low")), "Not reliable")
+        self.assertEqual(visible_role_fit(sample_job(confidence="low")), "—")
         self.assertEqual(visible_role_fit(sample_job(confidence="high")), "82/100")
 
     def test_default_decision_content_is_concise_and_grounded(self) -> None:
@@ -204,7 +218,7 @@ class ReviewHierarchyTests(unittest.TestCase):
         ]
         self.assertIn('"Role Fit"', fields)
         self.assertIn('"Eligibility"', fields)
-        self.assertIn('"Confidence"', fields)
+        self.assertIn('"Assessment confidence"', fields)
         self.assertIn('"JD Quality"', fields)
         self.assertNotIn('"Recommendation"', fields)
 
@@ -227,7 +241,7 @@ class ReviewHierarchyTests(unittest.TestCase):
             review_table_row(second),
             {
                 "Job": "Example · ML Engineer",
-                "Role Fit": "Not reliable",
+                "Role Fit": "—",
                 "Eligibility": "Passed",
                 "Confidence": "Low",
                 "JD Quality": "Complete",
@@ -237,7 +251,7 @@ class ReviewHierarchyTests(unittest.TestCase):
             compact_review_table_row(second),
             {
                 "Job": "Example · ML Engineer",
-                "Signals": "Not reliable · Pass · Low · Complete",
+                "Signals": "— · Pass · Low · Complete",
             },
         )
 
@@ -337,16 +351,20 @@ class ReviewHierarchyTests(unittest.TestCase):
         self.assertIn("render_review_job_table(", source)
         self.assertIn("Cover letter needs a complete job description", source)
         self.assertIn('"Go to Job description"', source)
-        self.assertNotIn("key_prefix=f\"cover_letter_", source)
+        self.assertNotIn('key_prefix=f"cover_letter_', source)
         self.assertIn('st.container(border=False, key="review_detail_panel")', source)
-        self.assertNotIn('st.container(height=420, border=False, key="review_detail_panel")', source)
+        self.assertNotIn(
+            'st.container(height=420, border=False, key="review_detail_panel")', source
+        )
         recovery_source = (PROJECT_ROOT / "src" / "dashboard_jd_recovery.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Open job page", recovery_source)
-        self.assertIn("Fetch page", recovery_source)
+        self.assertIn("Open original", recovery_source)
+        self.assertIn("Complete automatically", recovery_source)
         self.assertIn("Paste full JD", recovery_source)
-        self.assertIn("Search provider", recovery_source)
+        self.assertIn("Import from a blocked page", recovery_source)
+        self.assertNotIn('"Fetch page"', recovery_source)
+        self.assertNotIn('"Search provider"', recovery_source)
         self.assertNotIn('st.expander("Paste full JD"', recovery_source)
         self.assertNotIn("height:calc(100vh - 16.8rem)", style_source)
         self.assertIn('vertical_alignment="top"', source)

@@ -62,6 +62,34 @@ def confidence_level(value: Any) -> str:
     return str(value or "low").lower()
 
 
+def effective_role_fit(job: DashboardJob | dict[str, Any]) -> int | None:
+    """Return only the score that is eligible for numeric UI presentation."""
+    if job.get("analysis_available") is False or confidence_level(job.get("confidence")) not in {"medium", "high"}:
+        return None
+    score = job.get("score")
+    try:
+        return int(score) if score is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def decision_tone(label: str, value: str) -> str:
+    """Assign product signal colors independently of assessment confidence."""
+    if label in {"Confidence", "Assessment confidence"} or value == "—":
+        return "neutral"
+    if label == "Role Fit" and value.endswith("/100"):
+        try:
+            score = int(value.removesuffix("/100"))
+            return "success" if score >= 80 else "warning" if score >= 60 else "danger"
+        except ValueError:
+            return "neutral"
+    if any(word in value.lower() for word in ("failed", "low", "not reliable")):
+        return "danger"
+    if any(word in value.lower() for word in ("partial", "review", "medium", "needs", "missing", "snippet", "unreadable", "boilerplate")):
+        return "warning"
+    return "success"
+
+
 def eligibility_status(job: DashboardJob | dict[str, Any]) -> str:
     """Normalize a job's eligibility status."""
     eligibility = job.get("eligibility", {})

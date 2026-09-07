@@ -6,7 +6,13 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from job_page_fetch import JobPageFetchError, extract_job_page, fetch_job_page, fetch_public_ats_job
+from job_page_fetch import (
+    JobPageFetchError,
+    extract_job_page,
+    fetch_job_page,
+    fetch_public_ats_job,
+    public_ats_provider,
+)
 
 
 DESCRIPTION = """Responsibilities
@@ -72,6 +78,60 @@ class JobPageExtractionTests(unittest.TestCase):
         assert page is not None
         self.assertEqual(page.extractor, "lever_public_api")
         self.assertIn("Requirements", page.description)
+
+    @patch("job_page_fetch._fetch_public_json")
+    def test_ashby_public_api_adapter_matches_exact_job(self, fetch_json: Mock) -> None:
+        fetch_json.return_value = {
+            "jobs": [
+                {
+                    "id": "job-123",
+                    "title": "ML Platform Engineer",
+                    "jobUrl": "https://jobs.ashbyhq.com/acme/job-123",
+                    "descriptionPlain": "Responsibilities\nBuild ML systems.\nRequirements\nPython required.",
+                },
+                {
+                    "id": "other",
+                    "title": "Designer",
+                    "jobUrl": "https://jobs.ashbyhq.com/acme/other",
+                    "descriptionPlain": "Design products.",
+                },
+            ]
+        }
+        page = fetch_public_ats_job("https://jobs.ashbyhq.com/acme/job-123")
+        assert page is not None
+        self.assertEqual(page.extractor, "ashby_public_api")
+        self.assertEqual(page.title, "ML Platform Engineer")
+        self.assertIn("Python required", page.description)
+
+    @patch("job_page_fetch._fetch_public_json")
+    def test_smartrecruiters_public_api_adapter(self, fetch_json: Mock) -> None:
+        fetch_json.return_value = {
+            "name": "Data Engineer",
+            "company": {"name": "Example Analytics"},
+            "jobAd": {
+                "sections": {
+                    "jobDescription": {"title": "Responsibilities", "text": "Build pipelines."},
+                    "qualifications": {"title": "Qualifications", "text": "Python and SQL required."},
+                }
+            },
+        }
+        page = fetch_public_ats_job(
+            "https://jobs.smartrecruiters.com/ExampleAnalytics/743999999-data-engineer"
+        )
+        assert page is not None
+        self.assertEqual(page.extractor, "smartrecruiters_public_api")
+        self.assertEqual(page.company, "Example Analytics")
+        self.assertIn("Qualifications", page.description)
+
+    def test_public_ats_provider_recognizes_supported_canonical_urls(self) -> None:
+        self.assertEqual(public_ats_provider("https://boards.greenhouse.io/acme/jobs/1"), "Greenhouse")
+        self.assertEqual(public_ats_provider("https://jobs.lever.co/acme/1"), "Lever")
+        self.assertEqual(public_ats_provider("https://jobs.ashbyhq.com/acme/1"), "Ashby")
+        self.assertEqual(
+            public_ats_provider("https://jobs.smartrecruiters.com/acme/1-role"),
+            "SmartRecruiters",
+        )
+        self.assertIsNone(public_ats_provider("https://www.linkedin.com/jobs/view/1"))
 
     @patch("job_page_fetch._public_http_url", return_value=True)
     @patch("job_page_fetch.requests.get")

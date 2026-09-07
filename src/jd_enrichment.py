@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from fetch_history import canonicalize_job_url, read_markdown_field
+from fetch_history import canonicalize_job_url, read_markdown_field, sync_job_index_record
 from fetch_jobs import (
     JSearchNoFullDescriptionsError,
     JSearchNoResultsError,
@@ -335,8 +335,16 @@ def _atomic_write(path: Path, text: str) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
-def replace_saved_job_description(path: Path, description: str) -> dict[str, Any]:
-    """Validate and atomically save a complete JD supplied by the user."""
+def replace_saved_job_description(
+    path: Path,
+    description: str,
+    *,
+    description_source: str = "manual_full_jd",
+    enriched_by: str = "User verified paste",
+    extractor: str = "",
+    source_url: str = "",
+) -> dict[str, Any]:
+    """Validate and atomically save a complete JD supplied through a local source."""
     path = Path(path)
     original_text = path.read_text(encoding="utf-8")
     current_quality = classify_jd_quality(original_text)
@@ -352,10 +360,8 @@ def replace_saved_job_description(path: Path, description: str) -> dict[str, Any
     updated_text = _upsert_metadata_text(
         updated_text,
         {
-            "Description Source": "manual_full_jd",
+            "Description Source": description_source,
             "JD Fetch Status": "complete",
-            "JD Enriched By": "User verified paste",
-            "JD Enriched At": datetime.now().replace(microsecond=0).isoformat(sep=" "),
         },
     )
     updated_quality = classify_jd_quality(updated_text)
@@ -369,12 +375,79 @@ def replace_saved_job_description(path: Path, description: str) -> dict[str, Any
                 "for reliable scoring, so the saved JD was not changed."
             ),
         }
+    metadata = {
+        "Description Source": description_source,
+        "JD Fetch Status": "complete",
+        "JD Enriched By": enriched_by,
+        "JD Enriched At": datetime.now().replace(microsecond=0).isoformat(sep=" "),
+    }
+    if extractor:
+        metadata["JD Enrichment Extractor"] = extractor
+    if source_url:
+        metadata["JD Enrichment Source URL"] = source_url
+    updated_text = _upsert_metadata_text(updated_text, metadata)
     _atomic_write(path, updated_text)
+    sync_job_index_record(path)
     return {
         "status": "updated",
         "updated": True,
         "quality": updated_quality,
         "message": "Full JD verified and saved. Fit results can now be recalculated.",
+    }
+
+
+def replace_saved_job_description_from_candidate(
+    path: Path,
+    candidate: dict[str, Any],
+    *,
+    enriched_by: str,
+    match_score: float,
+) -> dict[str, Any]:
+    """Persist one already identity-verified full-JD candidate and promote its URL."""
+    path = Path(path)
+    original_text = path.read_text(encoding="utf-8")
+    original_url = read_markdown_field(original_text, "Job URL")
+    verified_url = str(candidate.get("job_url", "") or "").strip()
+    updated_text = _replace_description(original_text, candidate)
+    metadata = {
+        "Description Source": str(
+            candidate.get("description_source", "company_ats_public_api")
+        ),
+        "JD Fetch Status": "complete",
+        "JD Enriched By": enriched_by,
+        "JD Enriched At": datetime.now().replace(microsecond=0).isoformat(sep=" "),
+        "JD Enrichment Match": f"{match_score:.0%}",
+        "JD Enrichment Source Job ID": str(candidate.get("source_job_id", "")),
+        "JD Enrichment Source URL": verified_url,
+    }
+    if verified_url:
+        metadata["Job URL"] = verified_url
+        if original_url and canonicalize_job_url(original_url) != canonicalize_job_url(verified_url):
+            metadata["Discovery URL"] = original_url
+    provider = str(candidate.get("ats_provider", "") or "").strip()
+    token = str(candidate.get("ats_company_token", "") or "").strip()
+    if provider:
+        metadata["ATS Provider"] = provider
+    if token:
+        metadata["ATS Board"] = token
+    updated_text = _upsert_metadata_text(updated_text, metadata)
+    updated_quality = classify_jd_quality(updated_text)
+    if not updated_quality["reliable_scoring_ready"]:
+        return {
+            "status": "candidate_not_ready",
+            "updated": False,
+            "quality": updated_quality,
+            "message": "The matched posting was still incomplete, so the saved JD was not changed.",
+        }
+    _atomic_write(path, updated_text)
+    sync_job_index_record(path)
+    return {
+        "status": "updated",
+        "updated": True,
+        "quality": updated_quality,
+        "match_score": round(match_score, 3),
+        "source_url": verified_url,
+        "message": "Full JD matched to the employer posting, verified, and saved.",
     }
 
 
@@ -463,11 +536,13 @@ def enrich_saved_job_description_from_url(
             ),
         }
     _atomic_write(path, updated_text)
+    sync_job_index_record(path)
     return {
         "status": "updated",
         "updated": True,
         "quality": updated_quality,
         "extractor": fetched.extractor,
+        "source_url": fetched.source_url,
         "message": "Full JD fetched from the original posting, verified, and saved.",
     }
 
@@ -587,6 +662,13 @@ def enrich_saved_job_description(
 
     score, candidate, scores, _candidate_quality = ranked[0]
     updated_text = _replace_description(original_text, candidate)
+    verified_source_url = str(candidate.get("job_url", "")).strip()
+    original_job_url = str(target.get("job_url", "")).strip()
+    promoted_link_metadata: dict[str, str] = {}
+    if verified_source_url:
+        if original_job_url and original_job_url.lower() != "not provided":
+            promoted_link_metadata["Discovery URL"] = original_job_url
+        promoted_link_metadata["Job URL"] = verified_source_url
     updated_text = _upsert_metadata_text(
         updated_text,
         {
@@ -597,6 +679,7 @@ def enrich_saved_job_description(
             "JD Enrichment Match": f"{score:.0%}",
             "JD Enrichment Source Job ID": str(candidate.get("source_job_id", "")),
             "JD Enrichment Source URL": str(candidate.get("job_url", "")),
+            **promoted_link_metadata,
         },
     )
     updated_quality = classify_jd_quality(updated_text)
@@ -609,6 +692,7 @@ def enrich_saved_job_description(
         }
 
     _atomic_write(path, updated_text)
+    sync_job_index_record(path)
     return {
         "status": "updated",
         "updated": True,
@@ -616,6 +700,7 @@ def enrich_saved_job_description(
         "match_score": round(score, 3),
         "match_components": scores,
         "source_job_id": candidate.get("source_job_id", ""),
+        "source_url": verified_source_url,
         "message": "Full JD found, verified, and saved. Fit results can now be recalculated.",
     }
 

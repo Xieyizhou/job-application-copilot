@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status
+from dashboard_fit import build_fit_presentation, confidence_level, eligibility_status, effective_role_fit
 from scoring_types import DashboardJob, TrackerRow
 
 
@@ -97,7 +97,16 @@ def review_job_sort_key(job: DashboardJob, sort_by: str) -> tuple[Any, ...]:
         return (package_rank, score, newest)
     if sort_by == "Tracker status":
         return (tracker_rank, score, newest)
-    return (score, newest, recommendation_rank)
+    visible_score = effective_role_fit(job)
+    saved_text = str(job.get("first_seen_at") or job.get("created_at") or "")
+    first_saved: datetime | None
+    try:
+        first_saved = datetime.fromisoformat(saved_text.replace("Z", "+00:00"))
+        if first_saved.tzinfo is not None:
+            first_saved = first_saved.astimezone().replace(tzinfo=None)
+    except ValueError:
+        first_saved = parse_local_datetime(saved_text)
+    return (visible_score is not None, visible_score if visible_score is not None else -1, first_saved or datetime.min)
 
 
 def is_strong_match(job: DashboardJob) -> bool:
@@ -134,6 +143,14 @@ def review_fit_band_counts(jobs: list[DashboardJob]) -> dict[str, int]:
 
 def sorted_review_jobs(jobs: list[DashboardJob], sort_by: str) -> list[DashboardJob]:
     """Return Review Jobs sorted for inbox display."""
+    if sort_by == "Role Fit high to low":
+        # Stable identity is the final tie-breaker; unavailable scores stay last.
+        ordered = sorted(jobs, key=lambda job: str(job.get("path", "")))
+        return sorted(
+            ordered,
+            key=lambda job: review_job_sort_key(job, sort_by),
+            reverse=True,
+        )
     reverse = sort_by != "Company A-Z"
     return sorted(jobs, key=lambda job: review_job_sort_key(job, sort_by), reverse=reverse)
 

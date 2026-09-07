@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -54,6 +55,32 @@ class DashboardLauncherTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "imported")
+
+    def test_main_starts_and_stops_browser_companion_around_streamlit(self) -> None:
+        class Companion:
+            port = 8765
+            token = "test-token"
+
+            def __init__(self) -> None:
+                self.stopped = False
+
+            def stop(self) -> None:
+                self.stopped = True
+
+        companion = Companion()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            companion_dir = Path(temp_dir)
+            with (
+                patch.object(run_dashboard, "configure_arrow_memory_pool", return_value="system"),
+                patch.object(run_dashboard, "COMPANION_DIR", companion_dir),
+                patch("browser_companion.load_or_create_token", return_value="test-token"),
+                patch("browser_companion.start_browser_companion", return_value=companion),
+                patch("streamlit.web.cli.main", return_value=None),
+            ):
+                self.assertEqual(run_dashboard.main([]), 0)
+
+            self.assertTrue(companion.stopped)
+            self.assertFalse((companion_dir / "connection.json").exists())
 
 
 if __name__ == "__main__":
