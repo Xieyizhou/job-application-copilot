@@ -39,15 +39,22 @@ data, raw browser captures, and sensitive logs stay local.
 
 | Path | Required environment | Status | Last verified |
 | --- | --- | --- | --- |
-| Chrome unpacked companion | Clean macOS browser profile | Partial: load, live import, invalid token passed | 2026-09-07; offline/restart recovery pending |
-| Edge unpacked companion | Clean macOS browser profile | Blocked: browser not installed | 2026-09-07; confirmed by user |
+| Chrome unpacked companion | Clean macOS browser profile | Passed: load, live import, invalid token, offline recovery | 2026-09-07; user-operated independent Chrome, saved result verified locally |
+| Edge unpacked companion | Outside stable support scope | Not verified; experimental compatibility | 2026-09-07; scope narrowed by release owner |
 | Greenhouse public posting | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Capco Data analyst, public API extractor, 611 words |
 | Lever public posting | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Portcast Data Analyst, public API extractor, 1,049 words |
 | Ordinary-page fallback | Live representative posting; no application submitted | Passed on candidate | 2026-09-07, Unilever Data Analyst; JobPosting JSON-LD, 526 words; responsibilities, qualifications, and Power BI retained |
-| Invalid token and offline recovery | Chrome and Edge | Partial: Chrome invalid token rejected | 2026-09-07; remaining recovery and Edge checks pending |
+| Invalid token and offline recovery | Chrome on macOS | Passed | 2026-09-07; invalid-token rejection, offline error, same-token restart recovery |
 
 Credential-backed Adzuna, Jooble, and JSearch checks are experimental. Record only whether
 a minimal live search was performed and its date; never copy keys or sensitive logs here.
+
+## Browser scope decision
+
+On 2026-09-07 the release owner approved omitting Edge from formal acceptance because
+it is not installed in the available environment. Stable browser-import support therefore
+covers Chrome on macOS only. Edge code is retained as experimental, unverified compatibility;
+Safari extension import is outside scope. This is a support-scope change, not an Edge pass.
 
 ## Execution notes — 2026-09-07
 
@@ -82,7 +89,10 @@ a minimal live search was performed and its date; never copy keys or sensitive l
   / `complete` (660 words including metadata); the UI showed Scoring-ready and Role Fit
   4/100 against the fictional resume. A deliberately invalid token returned
   `Invalid companion token.`. Shutdown closed both the dashboard and companion ports
-  and removed connection metadata. Browser offline/restart verification is pending.
+  and removed connection metadata. The browser displayed the expected offline error, then succeeded with the unchanged
+  token after restart on runtime source `5c630c2`; both health endpoints returned 200.
+  An unsaved Portcast posting was rejected with “Save this job in JobCopilot first”;
+  independent inspection confirmed Capco remained complete and contained no Portcast text.
 - Candidate privacy audit passed (332 files). Historical pattern scans checked 905 blobs
   for common credential signatures/sensitive paths and 875 UTF-8 blobs with the repository's
   generic privacy rules, with no findings. These scans exclude binary visual inspection and
@@ -111,7 +121,7 @@ a minimal live search was performed and its date; never copy keys or sensitive l
 
 ## Release blockers
 
-- Any failed supported macOS, Python, Chrome, Edge, Greenhouse, or Lever acceptance row.
+- Any failed supported macOS, Python, Chrome, Greenhouse, or Lever acceptance row.
 - Unexplained structured-output or exported-document differences.
 - Data-format incompatibility, Personal/Demo isolation failure, or resume mutation.
 - Credential, Personal data, private label, unpublished weight, or sensitive report found

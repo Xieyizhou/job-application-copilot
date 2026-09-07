@@ -99,7 +99,8 @@ def _render_sources(ui: Any, sources: dict[str, bool], *, workspace: Any, demo_m
         return
     ui.write("Ready · listens only on 127.0.0.1 and writes only to the local workspace.")
     ui.caption(
-        "Install once in Chrome or Edge. On a saved job's original page, choose "
+        "Install once in Chrome (Edge compatibility is experimental and unverified). "
+        "On a saved job's original page, choose "
         "Import and verify this posting, then Open JobCopilot."
     )
     ui.code(str(COMPANION_EXTENSION_PATH), language=None)

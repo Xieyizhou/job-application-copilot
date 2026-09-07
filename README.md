@@ -64,8 +64,9 @@ supporting analysis.
 
 ## Quick start
 
-The stable desktop release supports Python 3.11 or 3.12 on macOS. Chrome and Edge are
-the supported browsers for the optional local import companion. Linux remains covered by
+The stable desktop release supports Python 3.11 or 3.12 on macOS. Chrome is the
+supported browser for the optional local import companion. Edge compatibility remains
+experimental and unverified; Safari extension import is outside this release's scope. Linux remains covered by
 automated tests, but this release does not claim Windows support.
 
 ```bash
@@ -93,7 +94,7 @@ provisional until a complete JD is verified.
 
 ### Import the job page already open in your browser
 
-For employer sites that block server-side fetching, Job Copilot includes a local Chrome/Edge
+For employer sites that block server-side fetching, Job Copilot includes a local Chrome
 companion in `browser_companion/`. Start the app with `python run_dashboard.py`, then open
 **Settings → Job sources** for the one-time **Load unpacked** path and local connection token.
 When a previously saved job page is open, click **Import and verify this posting**. The extension

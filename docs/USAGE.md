@@ -97,7 +97,8 @@ review the recovered company, role, URL, and full JD before using a score.
 
 ## Browser companion
 
-Chrome and Edge on macOS are supported for local page import. Follow
+Chrome on macOS is supported for local page import. Edge compatibility remains
+experimental and unverified; Safari extension import is outside this release's scope. Follow
 [`browser_companion/README.md`](../browser_companion/README.md) to load the unpacked
 extension. The extension only contacts `127.0.0.1:8765`; it does not submit applications.
 If the token is invalid, copy it again from **Settings → Job sources**. If Job Copilot is

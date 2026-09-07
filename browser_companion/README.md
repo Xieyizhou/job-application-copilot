@@ -2,10 +2,14 @@
 
 This unpacked Chrome/Edge extension imports the job posting already open in your browser into the local Personal workspace. It reads `JobPosting` JSON-LD first and falls back to the visible job-description container. The captured text is sent only to `127.0.0.1:8765`.
 
+For v1.0.0, native acceptance covers Chrome on macOS. Edge compatibility is experimental
+and has not been verified. A Safari extension is not included.
+
 ## Install locally
 
 1. Start JobCopilot with `python run_dashboard.py`.
-2. Open `chrome://extensions` or `edge://extensions` and enable **Developer mode**.
+2. Open `chrome://extensions` and enable **Developer mode**. For experimental Edge use,
+   the equivalent page is `edge://extensions`.
 3. Choose **Load unpacked** and select this `browser_companion/` directory.
 4. In JobCopilot, open **Settings → Job sources** and copy the local connection token.
 5. Open the extension once, paste the token, and save it.

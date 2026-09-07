@@ -10,7 +10,7 @@ All notable public changes are documented here.
   evidence-bundle export, and an application tracker.
 - Read-only fictional Demo workspace.
 - Public Greenhouse and Lever job-description recovery with safe ordinary-page fallback.
-- Local Chrome and Edge page-import companion.
+- Local Chrome page-import companion with experimental, unverified Edge compatibility.
 - Public MiniLM v21 validation contract and reproducible semantic checks.
 - PDF text extraction and OCR rendering through the permissively licensed PDFium backend.
 
@@ -32,6 +32,8 @@ All notable public changes are documented here.
 
 - The stable desktop acceptance target is macOS with Python 3.11 or 3.12; Windows is not
   supported in this release.
+- Browser-import acceptance covers Chrome on macOS. Edge is unverified and experimental;
+  Safari extension import is outside the release scope.
 - Credential-backed job-search services are experimental unless listed as verified in the
   final release acceptance report.
 - Private training data and unpublished model weights are not distributed, so the public
